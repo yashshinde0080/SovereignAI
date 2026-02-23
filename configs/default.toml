@@ -1,0 +1,40 @@
+# configs/default.toml
+[runtime]
+name = "SovereignAI Edge"
+version = "0.1.0"
+bind_address = "127.0.0.1"
+port = 8080
+max_ram_usage_percent = 75
+log_level = "info"
+
+[models]
+base_path = "./models/installed"
+cache_path = "./models/.cache"
+registry_db = "./models/registry.db"
+max_storage_gb = 50
+auto_cleanup = true
+
+[inference]
+default_mode = "auto"
+max_context_length = 4096
+default_temperature = 0.7
+default_top_p = 0.9
+
+[security]
+encrypt_models = false
+encryption_algorithm = "AES-256-GCM"
+audit_logging = true
+allow_remote_access = false
+
+[vectorstore]
+engine = "hnsw"
+index_path = "./vector_store"
+embedding_model = "all-MiniLM-L6-v2"
+chunk_size = 512
+chunk_overlap = 50
+
+[plugins]
+enabled = true
+plugin_dir = "./plugins"
+sandbox = true
+max_memory_mb = 512

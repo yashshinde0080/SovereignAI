@@ -1,0 +1,178 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useStore } from '@/store';
+import { api } from '@/lib/api';
+import { Cpu, HardDrive, MemoryStick, Zap, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
+
+export default function HomePage() {
+  const { systemStatus, setSystemStatus, hardware, setHardware } = useStore();
+  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [statusRes, hwRes, recRes] = await Promise.all([
+          api.getSystemStatus(),
+          api.getHardware(),
+          api.getRecommendations()
+        ]);
+        
+        setSystemStatus(statusRes);
+        setHardware(hwRes);
+        setRecommendations(recRes.recommendations || []);
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">Welcome to SovereignAI Edge</h1>
+        <p className="text-muted-foreground mt-2">
+          Portable, offline AI compute platform
+        </p>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">CPU</CardTitle>
+            <Cpu className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{hardware?.cpu_cores || 0} Cores</div>
+            <p className="text-xs text-muted-foreground">
+              {hardware?.has_avx2 ? 'AVX2 ✓' : ''} {hardware?.has_avx512 ? 'AVX512 ✓' : ''}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">RAM</CardTitle>
+            <MemoryStick className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{hardware?.ram_total_gb?.toFixed(1) || 0} GB</div>
+            <p className="text-xs text-muted-foreground">
+              {systemStatus?.ram_available_gb?.toFixed(1) || 0} GB available
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Storage</CardTitle>
+            <HardDrive className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{systemStatus?.disk_free_gb?.toFixed(0) || 0} GB</div>
+            <p className="text-xs text-muted-foreground">
+              {hardware?.disk_type || 'Unknown'} @ {hardware?.disk_speed_mb_s?.toFixed(0) || 0} MB/s
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Status</CardTitle>
+            <Zap className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {systemStatus?.model_loaded ? (
+                <Badge variant="default">Active</Badge>
+              ) : (
+                <Badge variant="secondary">Ready</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {systemStatus?.current_model || 'No model loaded'}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Get Started</CardTitle>
+            <CardDescription>
+              Start chatting with AI locally
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {systemStatus?.model_loaded ? (
+              <Link href="/chat">
+                <Button className="w-full">
+                  Continue Chat
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            ) : (
+              <Link href="/models">
+                <Button className="w-full">
+                  Load a Model
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recommended Models</CardTitle>
+            <CardDescription>
+              Based on your hardware
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {recommendations.slice(0, 3).map((rec, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between p-2 rounded-lg bg-muted/50"
+                >
+                  <div>
+                    <span className="font-medium">{rec.model}</span>
+                    <Badge variant="outline" className="ml-2">
+                      {rec.mode}
+                    </Badge>
+                  </div>
+                  <Badge
+                    variant={rec.confidence === 'high' ? 'default' : 'secondary'}
+                  >
+                    {rec.confidence}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

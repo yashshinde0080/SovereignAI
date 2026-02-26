@@ -1,0 +1,15 @@
+# Logging Configuration
+
+[logging]
+level = "INFO"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[logging.file]
+enabled = true
+path = "./workspace/logs/sovereign.log"
+max_size_mb = 10
+backup_count = 5
+
+[logging.console]
+enabled = true
+colorize = true

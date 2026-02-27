@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
 from app.api.router import api_router
-from app.websocket.metrics import metrics_router
+from app.websocket.metrics import router as metrics_router
 from app.database.connection import init_database, close_database
 from app.core.hardware_detector import HardwareDetector
 from app.services.model_manager import ModelManager

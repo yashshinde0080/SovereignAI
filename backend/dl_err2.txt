@@ -1,0 +1,7 @@
+
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]
+Fetching 9 files: 100%|##########| 9/9 [00:00<00:00, 265.12it/s]
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x00000242D7B07DC0>
+
+[microsoft/bitnet-b1.58-2B-4T] Download repository complete!

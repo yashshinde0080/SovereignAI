@@ -17,6 +17,8 @@ class HardwareProfile(BaseModel):
 
 
 class SystemStatus(BaseModel):
+    model_config = {"protected_namespaces": ()}
+    
     model_loaded: bool
     current_model: Optional[str]
     current_mode: Optional[str]

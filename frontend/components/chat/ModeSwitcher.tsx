@@ -34,7 +34,7 @@ export function ModeSwitcher() {
       const result = await api.switchMode(mode);
       setSystemStatus({
         ...systemStatus!,
-        current_mode: result.mode
+        current_mode: (result as any).mode
       });
       toast({
         title: 'Mode switched',

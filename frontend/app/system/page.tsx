@@ -67,13 +67,13 @@ export default function SystemPage() {
           title="CPU Usage"
           value={metrics?.cpu_percent || 0}
           unit="%"
-          status={metrics?.cpu_percent > 80 ? 'critical' : metrics?.cpu_percent > 50 ? 'warning' : 'normal'}
+          status={(metrics?.cpu_percent ?? 0) > 80 ? 'critical' : (metrics?.cpu_percent ?? 0) > 50 ? 'warning' : 'normal'}
         />
         <MetricCard
           title="RAM Usage"
           value={metrics?.ram_percent || 0}
           unit="%"
-          status={metrics?.ram_percent > 80 ? 'critical' : metrics?.ram_percent > 60 ? 'warning' : 'normal'}
+          status={(metrics?.ram_percent ?? 0) > 80 ? 'critical' : (metrics?.ram_percent ?? 0) > 60 ? 'warning' : 'normal'}
         />
         <MetricCard
           title="Disk Read"

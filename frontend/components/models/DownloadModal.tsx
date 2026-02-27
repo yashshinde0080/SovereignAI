@@ -33,20 +33,13 @@ const popularModels = [
   { id: 'llama3:8b', name: 'Llama 3 8B' },
   { id: 'llama3:70b', name: 'Llama 3 70B' },
   { id: 'mistral:7b', name: 'Mistral 7B' },
-  { id: 'phi-2', name: 'Phi-2' },
+  { id: 'microsoft/bitnet-b1.58-2B-4T', name: 'BitNet 1.58B (Microsoft)' },
+  { id: 'tdh111/bitnet-b1.58-2B-4T-GGUF', name: 'BitNet 1.58B (GGUF repo)' },
   { id: 'tinyllama:1b', name: 'TinyLlama 1B' },
-];
-
-const quantOptions = [
-  { id: 'Q4_K_M', name: 'Q4_K_M (Recommended)' },
-  { id: 'Q4_K_S', name: 'Q4_K_S (Smaller)' },
-  { id: 'Q5_K_M', name: 'Q5_K_M (Better quality)' },
-  { id: 'Q8_0', name: 'Q8_0 (Best quality)' },
 ];
 
 export function DownloadModal({ open, onClose, onDownload, downloadStatus }: DownloadModalProps) {
   const [model, setModel] = useState('');
-  const [quant, setQuant] = useState('Q4_K_M');
   const [downloading, setDownloading] = useState(false);
 
   const handleDownload = async () => {
@@ -54,13 +47,15 @@ export function DownloadModal({ open, onClose, onDownload, downloadStatus }: Dow
 
     setDownloading(true);
     try {
-      await onDownload(model, quant);
+      // Empty string quantization natively triggers 
+      // full repository downloads or best-file selections backend
+      await onDownload(model, '');
     } finally {
       setDownloading(false);
     }
   };
 
-  const isDownloading = downloadStatus?.status === 'downloading';
+  const isOngoing = downloadStatus?.status === 'downloading' || downloadStatus?.status === 'verifying' || downloadStatus?.status === 'encrypting';
   const progress = downloadStatus?.progress || 0;
 
   return (
@@ -69,7 +64,8 @@ export function DownloadModal({ open, onClose, onDownload, downloadStatus }: Dow
         <DialogHeader>
           <DialogTitle>Download Model</DialogTitle>
           <DialogDescription>
-            Download a model from HuggingFace
+            Download an entire model repository or a single GGUF file from HuggingFace.
+            Full repositories will automatically be downloaded into a dedicated sub-folder.
           </DialogDescription>
         </DialogHeader>
 
@@ -99,26 +95,10 @@ export function DownloadModal({ open, onClose, onDownload, downloadStatus }: Dow
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>Quantization</Label>
-            <Select value={quant} onValueChange={setQuant}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {quantOptions.map((q) => (
-                  <SelectItem key={q.id} value={q.id}>
-                    {q.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {isDownloading && (
+          {isOngoing && (
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Downloading...</span>
+                <span className="capitalize">{downloadStatus?.status || 'Downloading'}...</span>
                 <span>{progress.toFixed(1)}%</span>
               </div>
               <Progress value={progress} />
@@ -133,9 +113,9 @@ export function DownloadModal({ open, onClose, onDownload, downloadStatus }: Dow
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleDownload} disabled={!model || downloading || isDownloading}>
+          <Button onClick={handleDownload} disabled={!model || downloading || isOngoing}>
             <Download className="h-4 w-4 mr-2" />
-            {isDownloading ? 'Downloading...' : 'Download'}
+            {isOngoing ? 'Processing...' : 'Download'}
           </Button>
         </DialogFooter>
       </DialogContent>

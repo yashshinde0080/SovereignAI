@@ -21,7 +21,10 @@ class Tokenizer:
     def _load_vocab(self):
         """Load vocabulary from model or separate file"""
         # Try to find vocab file
-        vocab_path = self.model_path.parent / "tokenizer.json"
+        if self.model_path.is_dir():
+             vocab_path = self.model_path / "tokenizer.json"
+        else:
+             vocab_path = self.model_path.parent / "tokenizer.json"
         
         if vocab_path.exists():
             with open(vocab_path) as f:

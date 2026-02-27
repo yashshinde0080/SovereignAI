@@ -22,13 +22,7 @@ async def list_models(request: Request):
     return ModelList(models=models)
 
 
-@router.get("/{model_name}", response_model=ModelInfo)
-async def get_model(request: Request, model_name: str):
-    """Get model details"""
-    model = await request.app.state.model_manager.get_model(model_name)
-    if not model:
-        raise HTTPException(status_code=404, detail="Model not found")
-    return ModelInfo(**model)
+
 
 
 @router.post("/pull")
@@ -58,7 +52,7 @@ async def pull_model(
     return {"status": "downloading", "model": pull_request.model}
 
 
-@router.get("/pull/status/{model_name}")
+@router.get("/pull/status/{model_name:path}")
 async def pull_status(request: Request, model_name: str):
     """Get download status"""
     status = request.app.state.model_manager.get_download_status(model_name)
@@ -121,7 +115,16 @@ async def unload_model(request: Request):
     return {"status": "unloaded"}
 
 
-@router.delete("/{model_name}")
+@router.get("/{model_name:path}", response_model=ModelInfo)
+async def get_model(request: Request, model_name: str):
+    """Get model details"""
+    model = await request.app.state.model_manager.get_model(model_name)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return ModelInfo(**model)
+
+
+@router.delete("/{model_name:path}")
 async def delete_model(request: Request, model_name: str):
     """Delete a model"""
     model_manager = request.app.state.model_manager

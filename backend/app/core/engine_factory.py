@@ -23,7 +23,22 @@ class EngineFactory:
         """Create appropriate engine"""
         
         model_path = Path(model_path)
-        model_size = model_path.stat().st_size if model_path.exists() else 0
+        
+        # If directory, find the model file
+        if model_path.is_dir():
+             # Try to find GGUF first
+             gguf_files = list(model_path.glob("*.gguf")) + list(model_path.glob("*.gguf.enc"))
+             if gguf_files:
+                 model_path = gguf_files[0]
+             else:
+                 # Try to find safetensors
+                 st_files = list(model_path.glob("*.safetensors")) + list(model_path.glob("*.safetensors.enc"))
+                 if st_files:
+                     model_path = st_files[0]
+                 else:
+                     raise ValueError(f"No suitable model file found in directory: {model_path}")
+        
+        model_size = model_path.stat().st_size if model_path.exists() and model_path.is_file() else 0
         
         # Determine mode
         if mode == "auto":

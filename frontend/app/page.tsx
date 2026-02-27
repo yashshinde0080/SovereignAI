@@ -23,9 +23,9 @@ export default function HomePage() {
           api.getRecommendations()
         ]);
         
-        setSystemStatus(statusRes);
-        setHardware(hwRes);
-        setRecommendations(recRes.recommendations || []);
+        setSystemStatus(statusRes as any);
+        setHardware(hwRes as any);
+        setRecommendations((recRes as any).recommendations || []);
       } catch (error) {
         console.error('Failed to fetch data:', error);
       } finally {

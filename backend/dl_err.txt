@@ -1,0 +1,49 @@
+
+Fetching 9 files:   0%|          | 0/9 [00:00<?, ?it/s]
+Fetching 9 files: 100%|##########| 9/9 [00:00<00:00, 251.12it/s]
+Traceback (most recent call last):
+  File "D:\SovereignAI\backend\app\services\model_manager.py", line 126, in download_model
+    await self.encryption.encrypt_model(model_path)
+  File "D:\SovereignAI\backend\app\security\encryption.py", line 55, in encrypt_model
+    with open(model_path, "rb") as f_in:
+PermissionError: [Errno 13] Permission denied: 'D:\\SovereignAI\\models\\installed\\microsoft-bitnet-b1.58-2B-4T'
+
+[microsoft/bitnet-b1.58-2B-4T] Download repository complete!
+Traceback (most recent call last):
+  File "D:\SovereignAI\backend\test_dl_fail.py", line 12, in <module>
+    asyncio.run(test())
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "D:\SovereignAI\backend\test_dl_fail.py", line 10, in test
+    raise Exception(st["error"])
+Exception: [Errno 13] Permission denied: 'D:\\SovereignAI\\models\\installed\\microsoft-bitnet-b1.58-2B-4T'
+Unclosed client session
+client_session: <aiohttp.client.ClientSession object at 0x000002A254847DC0>
+Unclosed connector
+connections: ['[(<aiohttp.client_proto.ResponseHandler object at 0x000002A255143B80>, 2022.703)]']
+connector: <aiohttp.connector.TCPConnector object at 0x000002A2562E1B40>
+Fatal error on SSL transport
+protocol: <asyncio.sslproto.SSLProtocol object at 0x000002A2547EAAA0>
+transport: <_ProactorSocketTransport fd=540 read=<_OverlappedFuture cancelled>>
+Traceback (most recent call last):
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\sslproto.py", line 690, in _process_write_backlog
+    self._transport.write(chunk)
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\proactor_events.py", line 365, in write
+    self._loop_writing(data=bytes(data))
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\proactor_events.py", line 401, in _loop_writing
+    self._write_fut = self._loop._proactor.send(self._sock, data)
+AttributeError: 'NoneType' object has no attribute 'send'
+Exception ignored in: <function _SSLProtocolTransport.__del__ at 0x000002A253B0B250>
+Traceback (most recent call last):
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\sslproto.py", line 321, in __del__
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\sslproto.py", line 316, in close
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\sslproto.py", line 599, in _start_shutdown
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\sslproto.py", line 604, in _write_appdata
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\sslproto.py", line 712, in _process_write_backlog
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\sslproto.py", line 726, in _fatal_error
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\proactor_events.py", line 152, in _force_close
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\base_events.py", line 753, in call_soon
+  File "C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\asyncio\base_events.py", line 515, in _check_closed
+RuntimeError: Event loop is closed

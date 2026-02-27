@@ -74,7 +74,7 @@ export function useModels() {
       // Poll for status
       const pollStatus = async () => {
         try {
-          const status = await api.getPullStatus(model);
+          const status = await api.getPullStatus(model) as any;
           setDownloadStatus(status);
           
           if (status.status === 'downloading' || status.status === 'verifying' || status.status === 'encrypting') {

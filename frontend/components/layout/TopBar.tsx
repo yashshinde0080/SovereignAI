@@ -38,7 +38,7 @@ export function TopBar() {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2 text-sm">
           <Cpu className="h-4 w-4 text-muted-foreground" />
-          <span className={metrics?.cpu_percent > 80 ? 'text-red-500' : ''}>
+          <span className={(metrics?.cpu_percent ?? 0) > 80 ? 'text-red-500' : ''}>
             {metrics?.cpu_percent?.toFixed(0) || 0}%
           </span>
         </div>
@@ -47,7 +47,7 @@ export function TopBar() {
 
         <div className="flex items-center gap-2 text-sm">
           <MemoryStick className="h-4 w-4 text-muted-foreground" />
-          <span className={metrics?.ram_percent > 80 ? 'text-red-500' : ''}>
+          <span className={(metrics?.ram_percent ?? 0) > 80 ? 'text-red-500' : ''}>
             {metrics?.ram_used_gb?.toFixed(1) || 0} GB
           </span>
         </div>

@@ -44,7 +44,7 @@ export default function BenchmarkPage() {
     setResult(null);
 
     try {
-      const res = await api.runBenchmark(iterations, maxTokens);
+      const res = (await api.runBenchmark(iterations, maxTokens)) as BenchmarkResult;
       setResult(res);
     } catch (err: any) {
       setError(err.message || 'Benchmark failed');

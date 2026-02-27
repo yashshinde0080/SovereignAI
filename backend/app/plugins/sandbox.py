@@ -1,6 +1,9 @@
 """Plugin Sandbox"""
 import asyncio
-import resource
+try:
+    import resource
+except ImportError:
+    resource = None
 from typing import Any, Dict
 from concurrent.futures import ThreadPoolExecutor
 import threading
@@ -40,6 +43,8 @@ class PluginSandbox:
     
     def _set_limits(self):
         """Set resource limits for plugin execution"""
+        if resource is None:
+            return
         try:
             # Memory limit
             soft, hard = resource.getrlimit(resource.RLIMIT_AS)

@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "brainstorming": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "75fd9cf3d1b10927b5090a52d185d469940ba8e72a88565620e36ff37014738f"
+    },
+    "huggingface-hub": {
+      "source": "gary149/huggingface-hub-skill",
+      "sourceType": "github",
+      "computedHash": "2c462490b9ebe0e9587717d2ccec6e344d2db5c233237245b8acb211ea94514d"
+    }
+  }
+}

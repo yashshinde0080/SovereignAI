@@ -23,6 +23,11 @@ async def lifespan(app: FastAPI):
     # Initialize database
     await init_database()
     
+    # Initialize vector store
+    from app.services.vector_store import VectorStore
+    app.state.vector_store = VectorStore(settings.workspace_dir / "vectors")
+    
+    
     # Detect hardware
     hardware = HardwareDetector()
     app.state.hardware_profile = hardware.detect()

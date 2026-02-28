@@ -40,11 +40,10 @@ class Tokenizer:
     
     def encode(self, text: str) -> List[int]:
         """Encode text to token IDs"""
-        # Simplified tokenization - real impl uses sentencepiece/tiktoken
         tokens = []
         
-        # Simple word-level tokenization
-        words = re.findall(r'\w+|[^\w\s]', text.lower())
+        # Simple word-level tokenization preserving spaces
+        words = re.findall(r'\w+|[^\w]', text)
         
         for word in words:
             if word in self.vocab:
@@ -65,18 +64,17 @@ class Tokenizer:
             if tid in self.reverse_vocab:
                 token = self.reverse_vocab[tid]
                 if token.startswith("token_"):
-                    # Try to convert back to char
                     try:
                         char_code = int(token.split("_")[1])
                         tokens.append(chr(char_code))
                     except:
                         tokens.append(token)
                 else:
-                    tokens.append(token)
+                    tokens.append(" " + token)
             else:
                 tokens.append(f"[{tid}]")
         
-        return " ".join(tokens)
+        return "".join(tokens).strip()
     
     def get_vocab_size(self) -> int:
         """Get vocabulary size"""

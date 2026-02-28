@@ -66,7 +66,7 @@ class LayerScheduler:
             
             # Load layer
             layer.state = LayerState.LOADING
-            layer.buffer = await loader.load_layer(layer.offset, layer.size)
+            layer.buffer = await loader.load_layer_async(layer_id)
             layer.state = LayerState.LOADED
             layer.last_used = time.time()
             self.loaded_layers.append(layer_id)

@@ -21,18 +21,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Play, Trash2, Loader2 } from 'lucide-react';
+import { Play, Square, Trash2, Loader2 } from 'lucide-react';
 import { Model } from '@/types';
 
 interface ModelTableProps {
   models: Model[];
   currentModel?: string | null;
   onLoad: (model: string) => Promise<void>;
+  onUnload: () => Promise<void>;
   onDelete: (model: string) => Promise<void>;
   loading: boolean;
 }
 
-export function ModelTable({ models, currentModel, onLoad, onDelete, loading }: ModelTableProps) {
+export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, loading }: ModelTableProps) {
   if (models.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -83,18 +84,33 @@ export function ModelTable({ models, currentModel, onLoad, onDelete, loading }: 
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant={isLoaded ? 'secondary' : 'default'}
-                    onClick={() => onLoad(model.id)}
-                    disabled={loading || isLoaded}
-                  >
-                    {loading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Play className="h-4 w-4" />
-                    )}
-                  </Button>
+                  {isLoaded ? (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => onUnload()}
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Square className="h-4 w-4" fill="currentColor" />
+                      )}
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      onClick={() => onLoad(model.id)}
+                      disabled={loading || !!currentModel} // disable if another model is loaded
+                    >
+                      {loading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
                   
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

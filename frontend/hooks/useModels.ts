@@ -50,6 +50,27 @@ export function useModels() {
     }
   }, [setSystemStatus, toast]);
 
+  const unloadModel = useCallback(async () => {
+    setLoading(true);
+    try {
+      await api.unloadModel();
+      const status = await api.getSystemStatus();
+      setSystemStatus(status as any);
+      toast({
+        title: 'Model unloaded',
+        description: 'System is ready',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Failed to unload model',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [setSystemStatus, toast]);
+
   const deleteModel = useCallback(async (model: string) => {
     try {
       await api.deleteModel(model);
@@ -114,6 +135,7 @@ export function useModels() {
     loading,
     refresh,
     loadModel,
+    unloadModel,
     deleteModel,
     downloadModel,
     downloadStatus,

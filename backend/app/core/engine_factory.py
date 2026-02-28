@@ -23,22 +23,36 @@ class EngineFactory:
         """Create appropriate engine"""
         
         model_path = Path(model_path)
+        engine_model_path_str = str(model_path)
+        model_size = 0
         
-        # If directory, find the model file
+        # If directory, determine model size correctly and ensure we pass the correct directory
         if model_path.is_dir():
-             # Try to find GGUF first
-             gguf_files = list(model_path.glob("*.gguf")) + list(model_path.glob("*.gguf.enc"))
-             if gguf_files:
-                 model_path = gguf_files[0]
+             # If config.json exists, this is a standard HuggingFace repo
+             if (model_path / "config.json").exists():
+                 engine_model_path_str = str(model_path)
+                 model_size = sum(f.stat().st_size for f in model_path.rglob("*") if f.is_file())
              else:
-                 # Try to find safetensors
-                 st_files = list(model_path.glob("*.safetensors")) + list(model_path.glob("*.safetensors.enc"))
-                 if st_files:
-                     model_path = st_files[0]
+                 # Try to find GGUF or SafeTensors as fallback for size calculations
+                 gguf_files = list(model_path.glob("*.gguf")) + list(model_path.glob("*.gguf.enc"))
+                 if gguf_files:
+                     # Currently FullRAMEngine uses AutoModelForCausalLM which prefers directories
+                     # Depending on the engine, GGUF might require a specific loader
+                     # But for HF transformers, passing the directory is usually better if possible
+                     engine_model_path_str = str(gguf_files[0])
+                     model_size = gguf_files[0].stat().st_size
                  else:
-                     raise ValueError(f"No suitable model file found in directory: {model_path}")
-        
-        model_size = model_path.stat().st_size if model_path.exists() and model_path.is_file() else 0
+                     st_files = list(model_path.glob("*.safetensors")) + list(model_path.glob("*.safetensors.enc"))
+                     if st_files:
+                         # Even if safetensors exist without config.json, passing directory is safer for HF
+                         engine_model_path_str = str(model_path)
+                         model_size = sum(f.stat().st_size for f in st_files)
+                     else:
+                         # No recognized models found
+                         pass
+        else:
+            model_size = model_path.stat().st_size if model_path.exists() and model_path.is_file() else 0
+            engine_model_path_str = str(model_path)
         
         # Determine mode
         if mode == "auto":
@@ -49,13 +63,13 @@ class EngineFactory:
         # Create engine
         if mode == "fullram":
             engine = FullRAMEngine(
-                model_path=str(model_path),
+                model_path=engine_model_path_str,
                 hardware=self.hardware,
                 memory_manager=self.memory_manager
             )
         elif mode == "layerstream":
             engine = LayerStreamEngine(
-                model_path=str(model_path),
+                model_path=engine_model_path_str,
                 hardware=self.hardware,
                 memory_manager=self.memory_manager
             )

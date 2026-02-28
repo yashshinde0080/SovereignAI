@@ -25,8 +25,11 @@ class LayerStreamEngine(BaseEngine):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
     async def load(self):
-        """Initialize engine with disk offloading (Layer Streaming)"""
+        """Initialize engine with disk offloading (Layer Streaming via Accelerate)"""
         start_time = time.time()
+        
+        from accelerate import init_empty_weights, load_checkpoint_and_dispatch
+        from transformers import AutoConfig
         
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_path, 
@@ -37,35 +40,22 @@ class LayerStreamEngine(BaseEngine):
         offload_dir = Path("offload_cache")
         offload_dir.mkdir(exist_ok=True)
         
-        # Constrain memory to force layer-by-layer offloading
-        # CPU limits for offloading
-        max_memory = {}
-        if self.device == "cuda":
-            # Small VRAM to force loading one layer at a time
-            max_memory[0] = "512MB"
-            # Constrain RAM too if needed
-            max_memory["cpu"] = "1GB"
-        else:
-            max_memory["cpu"] = "512MB"
-        
+        # Dispatch with offloading directly
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
-            device_map="sequential",
-            max_memory=max_memory,
+            device_map="auto",
             offload_folder=str(offload_dir),
-            offload_state_dict=True,
-            torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
             trust_remote_code=True,
-            local_files_only=True,
-            low_cpu_mem_usage=True
+            local_files_only=True
         )
+        self.model.eval()
         
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             
         self.loaded = True
         self.stats["load_time"] = time.time() - start_time
-        print(f"Loaded {self.model_path} in LayerStream mode on {self.device} in {self.stats['load_time']:.1f}s")
+        print(f"Loaded {self.model_path} in LayerStream (Accelerate) mode in {self.stats['load_time']:.1f}s")
     
     async def unload(self):
         """Cleanup engine"""

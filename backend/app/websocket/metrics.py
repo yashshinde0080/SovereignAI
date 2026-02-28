@@ -18,15 +18,26 @@ async def metrics_websocket(websocket: WebSocket):
     clients.add(websocket)
     
     try:
+        # Initialize baseline for calculations
+        psutil.cpu_percent(interval=None)
+        prev_disk_io = psutil.disk_io_counters()
+        
         while True:
+            await asyncio.sleep(1)  # Update every second
+            
             # Gather metrics
             memory = psutil.virtual_memory()
-            cpu = psutil.cpu_percent(interval=0.1)
+            cpu = psutil.cpu_percent(interval=None)
             
             try:
                 disk_io = psutil.disk_io_counters()
-                disk_read = disk_io.read_bytes / (1024**2) if disk_io else 0
-                disk_write = disk_io.write_bytes / (1024**2) if disk_io else 0
+                if disk_io and prev_disk_io:
+                    disk_read = (disk_io.read_bytes - prev_disk_io.read_bytes) / (1024**2)
+                    disk_write = (disk_io.write_bytes - prev_disk_io.write_bytes) / (1024**2)
+                else:
+                    disk_read = 0
+                    disk_write = 0
+                prev_disk_io = disk_io
             except:
                 disk_read = 0
                 disk_write = 0
@@ -50,7 +61,6 @@ async def metrics_websocket(websocket: WebSocket):
             }
             
             await websocket.send_json(metrics)
-            await asyncio.sleep(1)  # Update every second
             
     except WebSocketDisconnect:
         clients.remove(websocket)

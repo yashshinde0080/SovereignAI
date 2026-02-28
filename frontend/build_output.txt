@@ -2,269 +2,32 @@
 > frotend@0.1.0 build
 > next build
 
-ΓÜá Specified "rewrites" will not automatically work with "output: export". See more info here: https://nextjs.org/docs/messages/export-no-custom-routes
-Γû▓ Next.js 16.1.6 (Turbopack)
+⚠ Specified "rewrites" will not automatically work with "output: export". See more info here: https://nextjs.org/docs/messages/export-no-custom-routes
+▲ Next.js 16.1.6 (Turbopack)
 
   Creating an optimized production build ...
-ΓÜá Specified "rewrites" will not automatically work with "output: export". See more info here: https://nextjs.org/docs/messages/export-no-custom-routes
-Turbopack build encountered 1 warnings:
-./tailwind.config.js:75:13
-Module not found: Can't resolve 'tailwindcss-animate'
-  73 |     },
-  74 |   },
-> 75 |   plugins: [require("tailwindcss-animate")],
-     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  76 | };
+⚠ Specified "rewrites" will not automatically work with "output: export". See more info here: https://nextjs.org/docs/messages/export-no-custom-routes
+✓ Compiled successfully in 8.4s
+  Running TypeScript ...
+  Collecting page data using 3 workers ...
+  Generating static pages using 3 workers (0/10) ...
+  Generating static pages using 3 workers (2/10)
+  Generating static pages using 3 workers (4/10)
+  Generating static pages using 3 workers (7/10)
+✓ Generating static pages using 3 workers (10/10) in 551.3ms
+  Finalizing page optimization ...
+⚠ rewrites, redirects, and headers are not applied when exporting your application, detected (rewrites). See more info here: https://nextjs.org/docs/messages/export-no-custom-routes
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /benchmark
+├ ○ /chat
+├ ○ /documents
+├ ○ /models
+├ ○ /plugins
+└ ○ /system
 
 
+○  (Static)  prerendered as static content
 
-https://nextjs.org/docs/messages/module-not-found
-
-
-
-> Build error occurred
-Error: Turbopack build failed with 6 errors:
-./components/models/ModelTable.tsx:13:1
-Module not found: Can't resolve '@/components/ui/alert-dialog'
-  11 |   TableRow,
-  12 | } from '@/components/ui/table';
-> 13 | import {
-     | ^^^^^^^^
-> 14 |   AlertDialog,
-     | ^^^^^^^^^^^^^^
-> 15 |   AlertDialogAction,
-     | ^^^^^^^^^^^^^^
-> 16 |   AlertDialogCancel,
-     | ^^^^^^^^^^^^^^
-> 17 |   AlertDialogContent,
-     | ^^^^^^^^^^^^^^
-> 18 |   AlertDialogDescription,
-     | ^^^^^^^^^^^^^^
-> 19 |   AlertDialogFooter,
-     | ^^^^^^^^^^^^^^
-> 20 |   AlertDialogHeader,
-     | ^^^^^^^^^^^^^^
-> 21 |   AlertDialogTitle,
-     | ^^^^^^^^^^^^^^
-> 22 |   AlertDialogTrigger,
-     | ^^^^^^^^^^^^^^
-> 23 | } from '@/components/ui/alert-dialog';
-     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  24 | import { Play, Trash2, Loader2 } from 'lucide-react';
-  25 | import { Model } from '@/types';
-  26 |
-
-Import map: aliased to relative './components/ui/alert-dialog' inside of [project]/
-
-
-Import traces:
-  Client Component Browser:
-    ./components/models/ModelTable.tsx [Client Component Browser]
-    ./app/models/page.tsx [Client Component Browser]
-    ./app/models/page.tsx [Server Component]
-
-  Client Component SSR:
-    ./components/models/ModelTable.tsx [Client Component SSR]
-    ./app/models/page.tsx [Client Component SSR]
-    ./app/models/page.tsx [Server Component]
-
-https://nextjs.org/docs/messages/module-not-found
-
-
-./components/models/DownloadModal.tsx:4:1
-Module not found: Can't resolve '@/components/ui/dialog'
-   2 |
-   3 | import { useState } from 'react';
->  4 | import {
-     | ^^^^^^^^
->  5 |   Dialog,
-     | ^^^^^^^^^
->  6 |   DialogContent,
-     | ^^^^^^^^^
->  7 |   DialogDescription,
-     | ^^^^^^^^^
->  8 |   DialogFooter,
-     | ^^^^^^^^^
->  9 |   DialogHeader,
-     | ^^^^^^^^^
-> 10 |   DialogTitle,
-     | ^^^^^^^^^
-> 11 | } from '@/components/ui/dialog';
-     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  12 | import { Button } from '@/components/ui/button';
-  13 | import { Input } from '@/components/ui/input';
-  14 | import { Label } from '@/components/ui/label';
-
-Import map: aliased to relative './components/ui/dialog' inside of [project]/
-
-
-Import traces:
-  Client Component Browser:
-    ./components/models/DownloadModal.tsx [Client Component Browser]
-    ./app/models/page.tsx [Client Component Browser]
-    ./app/models/page.tsx [Server Component]
-
-  Client Component SSR:
-    ./components/models/DownloadModal.tsx [Client Component SSR]
-    ./app/models/page.tsx [Client Component SSR]
-    ./app/models/page.tsx [Server Component]
-
-https://nextjs.org/docs/messages/module-not-found
-
-
-./components/chat/ModeSwitcher.tsx:5:1
-Module not found: Can't resolve '@/components/ui/dropdown-menu'
-   3 | import { useState } from 'react';
-   4 | import { Button } from '@/components/ui/button';
->  5 | import {
-     | ^^^^^^^^
->  6 |   DropdownMenu,
-     | ^^^^^^^^^^^^^^^
->  7 |   DropdownMenuContent,
-     | ^^^^^^^^^^^^^^^
->  8 |   DropdownMenuItem,
-     | ^^^^^^^^^^^^^^^
->  9 |   DropdownMenuTrigger,
-     | ^^^^^^^^^^^^^^^
-> 10 | } from '@/components/ui/dropdown-menu';
-     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  11 | import { useStore } from '@/store';
-  12 | import { api } from '@/lib/api';
-  13 | import { ChevronDown, Cpu, Layers, Sparkles } from 'lucide-react';
-
-Import map: aliased to relative './components/ui/dropdown-menu' inside of [project]/
-
-
-Import traces:
-  Client Component Browser:
-    ./components/chat/ModeSwitcher.tsx [Client Component Browser]
-    ./app/chat/page.tsx [Client Component Browser]
-    ./app/chat/page.tsx [Server Component]
-
-  Client Component SSR:
-    ./components/chat/ModeSwitcher.tsx [Client Component SSR]
-    ./app/chat/page.tsx [Client Component SSR]
-    ./app/chat/page.tsx [Server Component]
-
-https://nextjs.org/docs/messages/module-not-found
-
-
-./components/models/DownloadModal.tsx:15:1
-Module not found: Can't resolve '@/components/ui/select'
-  13 | import { Input } from '@/components/ui/input';
-  14 | import { Label } from '@/components/ui/label';
-> 15 | import {
-     | ^^^^^^^^
-> 16 |   Select,
-     | ^^^^^^^^^
-> 17 |   SelectContent,
-     | ^^^^^^^^^
-> 18 |   SelectItem,
-     | ^^^^^^^^^
-> 19 |   SelectTrigger,
-     | ^^^^^^^^^
-> 20 |   SelectValue,
-     | ^^^^^^^^^
-> 21 | } from '@/components/ui/select';
-     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  22 | import { Progress } from '@/components/ui/progress';
-  23 | import { Download } from 'lucide-react';
-  24 |
-
-Import map: aliased to relative './components/ui/select' inside of [project]/
-
-
-Import traces:
-  Client Component Browser:
-    ./components/models/DownloadModal.tsx [Client Component Browser]
-    ./app/models/page.tsx [Client Component Browser]
-    ./app/models/page.tsx [Server Component]
-
-  Client Component SSR:
-    ./components/models/DownloadModal.tsx [Client Component SSR]
-    ./app/models/page.tsx [Client Component SSR]
-    ./app/models/page.tsx [Server Component]
-
-https://nextjs.org/docs/messages/module-not-found
-
-
-./components/system/ResourceChart.tsx:3:1
-Module not found: Can't resolve 'recharts'
-   1 | 'use client';
-   2 |
->  3 | import {
-     | ^^^^^^^^
->  4 |   LineChart,
-     | ^^^^^^^^^^^^
->  5 |   Line,
-     | ^^^^^^^^^^^^
->  6 |   XAxis,
-     | ^^^^^^^^^^^^
->  7 |   YAxis,
-     | ^^^^^^^^^^^^
->  8 |   CartesianGrid,
-     | ^^^^^^^^^^^^
->  9 |   Tooltip,
-     | ^^^^^^^^^^^^
-> 10 |   Legend,
-     | ^^^^^^^^^^^^
-> 11 |   ResponsiveContainer,
-     | ^^^^^^^^^^^^
-> 12 | } from 'recharts';
-     | ^^^^^^^^^^^^^^^^^^^
-  13 |
-  14 | interface ResourceChartProps {
-  15 |   data: Array<{
-
-
-
-Import traces:
-  Client Component Browser:
-    ./components/system/ResourceChart.tsx [Client Component Browser]
-    ./app/system/page.tsx [Client Component Browser]
-    ./app/system/page.tsx [Server Component]
-
-  Client Component SSR:
-    ./components/system/ResourceChart.tsx [Client Component SSR]
-    ./app/system/page.tsx [Client Component SSR]
-    ./app/system/page.tsx [Server Component]
-
-https://nextjs.org/docs/messages/module-not-found
-
-
-./store/index.ts:1:1
-Module not found: Can't resolve 'zustand'
-> 1 | import { create } from 'zustand';
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  2 |
-  3 | interface SystemStatus {
-  4 |   model_loaded: boolean;
-
-
-
-Import traces:
-  Client Component Browser:
-    ./store/index.ts [Client Component Browser]
-    ./app/chat/page.tsx [Client Component Browser]
-    ./app/chat/page.tsx [Server Component]
-
-  Client Component SSR:
-    ./store/index.ts [Client Component SSR]
-    ./app/chat/page.tsx [Client Component SSR]
-    ./app/chat/page.tsx [Server Component]
-
-https://nextjs.org/docs/messages/module-not-found
-
-
-    at <unknown> (./components/models/ModelTable.tsx:13:1)
-    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
-    at <unknown> (./components/models/DownloadModal.tsx:4:1)
-    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
-    at <unknown> (./components/chat/ModeSwitcher.tsx:5:1)
-    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
-    at <unknown> (./components/models/DownloadModal.tsx:15:1)
-    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
-    at <unknown> (./components/system/ResourceChart.tsx:3:1)
-    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
-    at <unknown> (./store/index.ts:1:1)
-    at <unknown> (https://nextjs.org/docs/messages/module-not-found)

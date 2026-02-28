@@ -61,16 +61,19 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Chat Window */}
-      <Card className="flex-1 flex flex-col overflow-hidden">
+      {/* Chat Space */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-background rounded-3xl border border-border shadow-sm mb-4">
         <ChatWindow messages={messages} isLoading={isLoading} />
         <div ref={messagesEndRef} />
         
-        {/* Input */}
-        <div className="border-t p-4">
+        {/* Input Area */}
+        <div className="p-4 mx-auto w-full max-w-4xl bg-gradient-to-t from-background via-background to-transparent pt-6">
           <PromptInput onSend={sendMessage} disabled={isLoading} />
+          <div className="text-center mt-3 text-xs text-muted-foreground font-medium">
+            AI can make mistakes. Verify important information.
+          </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }

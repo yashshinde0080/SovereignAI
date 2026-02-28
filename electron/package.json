@@ -2,6 +2,8 @@
   "name": "sovereign-ai-desktop",
   "version": "1.0.0",
   "description": "SovereignAI Edge Desktop Application",
+  "author": { "name": "SovereignAI", "email": "contact@sovereignai.local" },
+  "homepage": "https://github.com/sovereignai/edge",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

@@ -29,8 +29,25 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
             detail="No model loaded. Use /v1/models/load first."
         )
     
-    # Build prompt from messages
-    prompt = build_prompt(chat_request.messages)
+    # Build prompt from messages using tokenizer's template if possible
+    # Fallback to string concatenation if not available
+    tokenizer = getattr(app.state.active_engine, "tokenizer", None)
+    
+    messages_dicts = [{"role": msg.role, "content": msg.content} for msg in chat_request.messages]
+    
+    prompt = ""
+    if tokenizer and hasattr(tokenizer, "apply_chat_template"):
+        try:
+            prompt = tokenizer.apply_chat_template(
+                messages_dicts, 
+                tokenize=False, 
+                add_generation_prompt=True
+            )
+        except Exception as e:
+            # Fallback
+            prompt = build_prompt(chat_request.messages)
+    else:
+        prompt = build_prompt(chat_request.messages)
     
     if chat_request.stream:
         return StreamingResponse(
@@ -91,18 +108,18 @@ async def stream_response(
 
 
 def build_prompt(messages: list[Message]) -> str:
-    """Build prompt from messages"""
+    """Build prompt from messages (fallback)"""
     prompt_parts = []
     
     for msg in messages:
         if msg.role == "system":
-            prompt_parts.append(f"<|system|>\n{msg.content}</s>")
+            prompt_parts.append(f"System: {msg.content}")
         elif msg.role == "user":
-            prompt_parts.append(f"<|user|>\n{msg.content}</s>")
+            prompt_parts.append(f"User: {msg.content}")
         elif msg.role == "assistant":
-            prompt_parts.append(f"<|assistant|>\n{msg.content}</s>")
+            prompt_parts.append(f"Assistant: {msg.content}")
     
-    prompt_parts.append("<|assistant|>\n")
+    prompt_parts.append("Assistant: ")
     return "\n".join(prompt_parts)
 
 

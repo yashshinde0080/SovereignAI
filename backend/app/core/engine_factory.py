@@ -6,6 +6,7 @@ from app.core.memory_manager import MemoryManager
 from app.engines.base import BaseEngine
 from app.engines.fullram.executor import FullRAMEngine
 from app.engines.layerstream.executor import LayerStreamEngine
+from app.engines.manualstream.executor import ManualStreamEngine
 
 
 class EngineFactory:
@@ -69,6 +70,12 @@ class EngineFactory:
             )
         elif mode == "layerstream":
             engine = LayerStreamEngine(
+                model_path=engine_model_path_str,
+                hardware=self.hardware,
+                memory_manager=self.memory_manager
+            )
+        elif mode == "manualstream":
+            engine = ManualStreamEngine(
                 model_path=engine_model_path_str,
                 hardware=self.hardware,
                 memory_manager=self.memory_manager

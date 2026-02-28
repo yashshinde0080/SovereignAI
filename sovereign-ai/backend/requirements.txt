@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pydantic
+typer
+rich
+prompt_toolkit
+httpx
+psutil
+websockets

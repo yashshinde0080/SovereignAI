@@ -4,57 +4,79 @@ import time
 from typing import Dict, Any, AsyncGenerator, Optional
 import numpy as np
 
-from app.engines.base import BaseEngine
-from app.engines.fullram.loader import GGUFLoader
-from app.engines.fullram.kv_cache import KVCache
-from app.engines.shared.tokenizer import Tokenizer
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+from threading import Thread
+import psutil
 
+from app.engines.base import BaseEngine
 
 class FullRAMEngine(BaseEngine):
-    """Full RAM inference engine - loads entire model into memory"""
+    """Full RAM inference engine - loads entire model into memory using HuggingFace Transformers"""
     
     def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any):
         super().__init__(model_path, hardware, memory_manager)
         self.mode = "fullram"
-        self.loader: Optional[GGUFLoader] = None
-        self.tokenizer: Optional[Tokenizer] = None
-        self.kv_cache: Optional[KVCache] = None
+        self.loader = None
+        self.tokenizer = None
+        self.model = None
         self.model_config = {}
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
     
     async def load(self):
         """Load model into RAM"""
-        # Load model file
-        self.loader = GGUFLoader(self.model_path)
-        self.loader.load()
+        start_time = time.time()
         
-        # Get model config
-        self.model_config = self.loader.get_metadata()
-        
-        # Initialize tokenizer
-        self.tokenizer = Tokenizer(self.model_path)
-        
-        # Initialize KV cache
-        # These would come from model config
-        self.kv_cache = KVCache(
-            num_layers=32,
-            num_heads=32,
-            head_dim=128,
-            max_seq_len=4096
-        )
-        
-        self.loaded = True
-        self.stats["load_time"] = time.time()
+        # Load Hugging Face tokenizer and model
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                self.model_path, 
+                trust_remote_code=True,
+                local_files_only=True
+            )
+            
+            # Find optimal settings for GPU vs CPU
+            model_kwargs = {
+                "trust_remote_code": True,
+                "local_files_only": True,
+                "low_cpu_mem_usage": True
+            }
+            
+            if self.device == "cuda":
+                model_kwargs["device_map"] = "auto"
+                model_kwargs["torch_dtype"] = torch.float16
+            else:
+                model_kwargs["device_map"] = "cpu"
+                model_kwargs["torch_dtype"] = torch.float32
+                
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_path,
+                **model_kwargs
+            )
+            
+            if not self.tokenizer.pad_token:
+                self.tokenizer.pad_token = self.tokenizer.eos_token
+                
+            self.loaded = True
+            self.stats["load_time"] = time.time() - start_time
+            print(f"Loaded {self.model_path} in Full RAM mode on {self.device} in {self.stats['load_time']:.1f}s")
+        except Exception as e:
+            self.loaded = False
+            raise RuntimeError(f"Failed to load model: {e}")
     
     async def unload(self):
         """Unload model from RAM"""
-        if self.loader:
-            self.loader.unload()
-            self.loader = None
+        if self.model:
+            del self.model
+            self.model = None
         
-        if self.kv_cache:
-            self.kv_cache.clear()
-            self.kv_cache = None
-        
+        if self.tokenizer:
+            del self.tokenizer
+            self.tokenizer = None
+            
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            
         self.loaded = False
     
     async def generate(
@@ -71,29 +93,29 @@ class FullRAMEngine(BaseEngine):
         start_time = time.perf_counter()
         
         # Tokenize
-        input_ids = self.tokenizer.encode(prompt)
-        prompt_tokens = len(input_ids)
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+        prompt_tokens = inputs.input_ids.shape[1]
         
-        # Generate tokens
-        generated_tokens = []
+        # Run generation
+        generation_kwargs = dict(
+            **inputs,
+            max_new_tokens=max_tokens,
+            temperature=temperature if temperature > 0 else 1.0,
+            do_sample=temperature > 0,
+            top_p=top_p,
+            pad_token_id=self.tokenizer.eos_token_id
+        )
         
-        for _ in range(max_tokens):
-            # Forward pass (simplified)
-            next_token = await self._forward_pass(input_ids + generated_tokens)
-            
-            # Sample
-            sampled = self._sample(next_token, temperature, top_p)
-            
-            if sampled == self.tokenizer.eos_token_id:
-                break
-            
-            generated_tokens.append(sampled)
+        def _generate():
+            with torch.no_grad():
+                return self.model.generate(**generation_kwargs)
+                
+        output_ids = await asyncio.to_thread(_generate)
+        output_ids = output_ids[0][prompt_tokens:]
         
-        # Decode
-        output_text = self.tokenizer.decode(generated_tokens)
-        
+        output_text = self.tokenizer.decode(output_ids, skip_special_tokens=True)
+        completion_tokens = len(output_ids)
         elapsed = time.perf_counter() - start_time
-        completion_tokens = len(generated_tokens)
         
         return {
             "text": output_text,
@@ -115,83 +137,42 @@ class FullRAMEngine(BaseEngine):
         """Generate with streaming"""
         if not self.loaded:
             raise RuntimeError("Model not loaded")
+            
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
         
-        # Tokenize
-        input_ids = self.tokenizer.encode(prompt)
-        generated_tokens = []
+        streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
         
-        for i in range(max_tokens):
-            # Forward pass
-            next_token = await self._forward_pass(input_ids + generated_tokens)
-            
-            # Sample
-            sampled = self._sample(next_token, temperature, top_p)
-            
-            if sampled == self.tokenizer.eos_token_id:
-                yield {
-                    "token": "",
-                    "finish_reason": "stop"
-                }
-                break
-            
-            generated_tokens.append(sampled)
-            token_text = self.tokenizer.decode([sampled])
-            
+        generation_kwargs = dict(
+            **inputs,
+            streamer=streamer,
+            max_new_tokens=max_tokens,
+            temperature=temperature if temperature > 0 else 1.0,
+            do_sample=temperature > 0,
+            top_p=top_p,
+            pad_token_id=self.tokenizer.eos_token_id
+        )
+        
+        thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
+        thread.start()
+        
+        for new_text in streamer:
             yield {
-                "token": token_text,
+                "token": new_text,
                 "finish_reason": None
             }
+            # Give back event loop control
+            await asyncio.sleep(0)
             
-            # Small delay to simulate real inference
-            await asyncio.sleep(0.01)
-    
-    async def _forward_pass(self, tokens: list) -> np.ndarray:
-        """
-        Forward pass through model.
-        This is a placeholder - real implementation would use llama.cpp bindings.
-        """
-        # Simulated logits
-        vocab_size = 32000
-        return np.random.randn(vocab_size).astype(np.float32)
-    
-    def _sample(
-        self,
-        logits: np.ndarray,
-        temperature: float,
-        top_p: float
-    ) -> int:
-        """Sample next token from logits"""
-        if temperature == 0:
-            return int(np.argmax(logits))
-        
-        # Apply temperature
-        logits = logits / temperature
-        
-        # Softmax
-        exp_logits = np.exp(logits - np.max(logits))
-        probs = exp_logits / np.sum(exp_logits)
-        
-        # Top-p sampling
-        sorted_indices = np.argsort(probs)[::-1]
-        cumsum = np.cumsum(probs[sorted_indices])
-        
-        cutoff_idx = np.searchsorted(cumsum, top_p)
-        top_indices = sorted_indices[:cutoff_idx + 1]
-        
-        # Renormalize
-        top_probs = probs[top_indices]
-        top_probs = top_probs / np.sum(top_probs)
-        
-        # Sample
-        return int(np.random.choice(top_indices, p=top_probs))
+        yield {
+            "token": "",
+            "finish_reason": "stop"
+        }
     
     def get_memory_usage(self) -> Dict[str, Any]:
         """Get memory usage"""
-        import psutil
         process = psutil.Process()
-        
         return {
             "ram_used_gb": process.memory_info().rss / (1024**3),
             "peak_ram_gb": process.memory_info().peak_wset / (1024**3) if hasattr(process.memory_info(), 'peak_wset') else 0,
-            "kv_cache_mb": self.kv_cache.get_memory_usage() / (1024**2) if self.kv_cache else 0
+            "kv_cache_mb": 0  # Managed by HF internally
         }

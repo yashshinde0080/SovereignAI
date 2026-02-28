@@ -10,7 +10,7 @@ import { useStore } from '@/store';
 import { Plus, RefreshCw } from 'lucide-react';
 
 export default function ModelsPage() {
-  const { models, loading, refresh, loadModel, deleteModel, downloadModel, downloadStatus } = useModels();
+  const { models, loading, refresh, loadModel, unloadModel, deleteModel, downloadModel, downloadStatus } = useModels();
   const { systemStatus } = useStore();
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
@@ -51,6 +51,7 @@ export default function ModelsPage() {
             models={models}
             currentModel={systemStatus?.current_model}
             onLoad={loadModel}
+            onUnload={unloadModel}
             onDelete={deleteModel}
             loading={loading}
           />

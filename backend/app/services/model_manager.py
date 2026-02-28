@@ -120,15 +120,7 @@ class ModelManager:
                 progress_callback=update_progress
             )
             
-            # Encrypt if enabled
-            if self.encryption:
-                self.download_status[model_name]["status"] = "encrypting"
-                if model_path.is_file():
-                    await self.encryption.encrypt_model(model_path)
-                else:
-                    for f in model_path.rglob("*"):
-                        if f.is_file() and f.name != "metadata.json":
-                            await self.encryption.encrypt_model(f)
+            # Skip encryption to allow direct loading via HuggingFace Hub mechanics
             
             # Get specific file info for metadata
             file_info = info.get_file_by_quant(quant) or info.get_best_file()

@@ -14,6 +14,7 @@ from app.schemas.chat import (
 from app.core.engine_factory import EngineFactory
 
 
+
 router = APIRouter()
 
 
@@ -35,6 +36,64 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     
     messages_dicts = [{"role": msg.role, "content": msg.content} for msg in chat_request.messages]
     
+    # RAG Integration
+    rag_metadata_out = None
+    if chat_request.use_rag and getattr(app.state, "vector_store", None):
+        try:
+            vector_store = app.state.vector_store
+            # Find the last user message
+            last_user_idx = -1
+            for i in range(len(messages_dicts) - 1, -1, -1):
+                if messages_dicts[i]["role"] == "user":
+                    last_user_idx = i
+                    break
+            
+            if last_user_idx != -1:
+                query_text = messages_dicts[last_user_idx]["content"]
+                
+                # Query Condensation: combine last 3 messages for context if available
+                if last_user_idx >= 2:
+                    history_context = "\n".join([f"{m['role']}: {m['content']}" for m in messages_dicts[-3:]])
+                    condensed_query = f"{history_context}\nuser: {query_text}"
+                else:
+                    condensed_query = query_text
+
+                # Get RAG context
+                rag_context = vector_store.build_context(
+                    query_text=condensed_query,
+                    top_k=5,
+                    max_tokens=2048,
+                    score_threshold=0.0  # Removed hardcoded 0.3 threshold
+                )
+                
+                if rag_context and rag_context.results:
+                    # Extract citations
+                    citations = []
+                    for r in rag_context.results:
+                        citations.append({
+                            "document_id": r.document_id,
+                            "filename": r.metadata.get("filename", "Unknown"),
+                            "score": r.score
+                        })
+                    rag_metadata_out = citations
+                    
+                    # Modify the prompt with RAG context isolated as System directive
+                    augmented_content = (
+                        "Use the following retrieved context to answer the user's question.\n"
+                        "If the answer is not contained in the context, use your existing knowledge.\n"
+                        "Context:\n---------------------\n"
+                        f"{rag_context.context_text}\n"
+                        "---------------------\n"
+                    )
+                    
+                    if messages_dicts[0]["role"] == "system":
+                        messages_dicts[0]["content"] += "\n\n" + augmented_content
+                    else:
+                        messages_dicts.insert(0, {"role": "system", "content": augmented_content})
+        except Exception as e:
+            # If RAG fails, continue with original message
+            print(f"RAG error: {e}")
+            
     prompt = ""
     if tokenizer and hasattr(tokenizer, "apply_chat_template"):
         try:
@@ -45,13 +104,13 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
             )
         except Exception as e:
             # Fallback
-            prompt = build_prompt(chat_request.messages)
+            prompt = build_prompt(messages_dicts)
     else:
-        prompt = build_prompt(chat_request.messages)
+        prompt = build_prompt(messages_dicts)
     
     if chat_request.stream:
         return StreamingResponse(
-            stream_response(app.state.active_engine, prompt, chat_request),
+            stream_response(app.state.active_engine, prompt, chat_request, rag_metadata_out),
             media_type="text/event-stream"
         )
     
@@ -85,7 +144,8 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
 async def stream_response(
     engine, 
     prompt: str, 
-    request: ChatRequest
+    request: ChatRequest,
+    rag_metadata: list = None
 ) -> AsyncGenerator[str, None]:
     """Stream tokens"""
     async for chunk in engine.generate_stream(
@@ -103,21 +163,35 @@ async def stream_response(
             }]
         )
         yield f"data: {json.dumps(data.model_dump())}\n\n"
+        
+    if rag_metadata:
+        meta_chunk = StreamChunk(
+            id=f"chunk-meta",
+            choices=[{
+                "index": 0,
+                "delta": {"rag_metadata": rag_metadata},
+                "finish_reason": None
+            }]
+        )
+        yield f"data: {json.dumps(meta_chunk.model_dump())}\n\n"
     
     yield "data: [DONE]\n\n"
 
 
-def build_prompt(messages: list[Message]) -> str:
+def build_prompt(messages: list) -> str:
     """Build prompt from messages (fallback)"""
     prompt_parts = []
     
     for msg in messages:
-        if msg.role == "system":
-            prompt_parts.append(f"System: {msg.content}")
-        elif msg.role == "user":
-            prompt_parts.append(f"User: {msg.content}")
-        elif msg.role == "assistant":
-            prompt_parts.append(f"Assistant: {msg.content}")
+        role = msg["role"] if isinstance(msg, dict) else msg.role
+        content = msg["content"] if isinstance(msg, dict) else msg.content
+        
+        if role == "system":
+            prompt_parts.append(f"System: {content}")
+        elif role == "user":
+            prompt_parts.append(f"User: {content}")
+        elif role == "assistant":
+            prompt_parts.append(f"Assistant: {content}")
     
     prompt_parts.append("Assistant: ")
     return "\n".join(prompt_parts)

@@ -21,6 +21,7 @@ export function useChat() {
         body: JSON.stringify({
           messages: [...messages, userMessage],
           stream: true,
+          use_rag: true,
         }),
       });
 
@@ -30,6 +31,8 @@ export function useChat() {
       if (!reader) throw new Error('No response body');
 
       let assistantContent = '';
+      let buffer = '';
+      const decoder = new TextDecoder();
 
       // Add placeholder message
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
@@ -38,29 +41,59 @@ export function useChat() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const text = new TextDecoder().decode(value);
-        const lines = text.split('\n');
+        buffer += decoder.decode(value, { stream: true });
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
+        while (buffer.includes('\n\n')) {
+          const splitIndex = buffer.indexOf('\n\n');
+          const chunkStr = buffer.slice(0, splitIndex);
+          buffer = buffer.slice(splitIndex + 2);
+
+          if (chunkStr.startsWith('data: ')) {
+            const data = chunkStr.slice(6).trim();
             if (data === '[DONE]') continue;
 
             try {
               const chunk = JSON.parse(data);
-              const token = chunk.choices?.[0]?.delta?.content || '';
-              assistantContent += token;
+              
+              // Handle Stream Metadata (Sources)
+              if (chunk.choices?.[0]?.delta?.rag_metadata) {
+                const sources = chunk.choices[0].delta.rag_metadata;
+                if (sources && sources.length > 0) {
+                  const seen = new Set();
+                  const uniqueSources = sources.filter((s: any) => {
+                    if (seen.has(s.filename)) return false;
+                    seen.add(s.filename);
+                    return true;
+                  });
+                  assistantContent += '\n\n**Sources Used:**\n' + uniqueSources.map((s: any) => `- ${s.filename}`).join('\n');
+                  
+                  setMessages((prev) => {
+                    const newMessages = [...prev];
+                    newMessages[newMessages.length - 1] = {
+                      role: 'assistant',
+                      content: assistantContent,
+                    };
+                    return newMessages;
+                  });
+                }
+                continue;
+              }
 
-              setMessages((prev) => {
-                const newMessages = [...prev];
-                newMessages[newMessages.length - 1] = {
-                  role: 'assistant',
-                  content: assistantContent,
-                };
-                return newMessages;
-              });
+              const token = chunk.choices?.[0]?.delta?.content || '';
+              if (token) {
+                assistantContent += token;
+
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = {
+                    role: 'assistant',
+                    content: assistantContent,
+                  };
+                  return newMessages;
+                });
+              }
             } catch (e) {
-              // Ignore parse errors
+              console.error('JSON parse error:', e, data);
             }
           }
         }

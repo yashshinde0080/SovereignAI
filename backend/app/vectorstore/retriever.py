@@ -145,13 +145,17 @@ class Retriever:
                 # Check if we can fit a partial chunk
                 remaining_tokens = max_tokens - total_tokens
                 if remaining_tokens > 50:  # Worth including partial
+                    doc_name = result.metadata.get("filename", result.document_id)
                     truncated = result.content[:remaining_tokens * 4]
-                    context_parts.append(truncated)
+                    formatted_chunk = f"[Source: {doc_name}]\n{truncated}"
+                    context_parts.append(formatted_chunk)
                     total_tokens += remaining_tokens
                     filtered_results.append(result)
                 break
 
-            context_parts.append(result.content)
+            doc_name = result.metadata.get("filename", result.document_id)
+            formatted_chunk = f"[Source: {doc_name}]\n{result.content}"
+            context_parts.append(formatted_chunk)
             total_tokens += chunk_tokens
             filtered_results.append(result)
 

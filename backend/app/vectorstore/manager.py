@@ -210,7 +210,8 @@ class VectorStoreManager:
 
     def build_context(self, query_text: str,
                       top_k: int = 5,
-                      max_tokens: int = 2048) -> RAGContext:
+                      max_tokens: int = 2048,
+                      score_threshold: float = 0.0) -> RAGContext:
         """
         Build RAG context for prompt construction.
         """
@@ -219,7 +220,8 @@ class VectorStoreManager:
 
         query = SearchQuery(
             query_text=query_text,
-            top_k=top_k
+            top_k=top_k,
+            score_threshold=score_threshold
         )
         return self.retriever.build_rag_context(query, max_tokens)
 

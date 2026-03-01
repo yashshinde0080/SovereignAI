@@ -5,14 +5,14 @@ The mindmap details the vast scale and modular architecture of SovereignAI Edge.
 
 ## 2. Detailed Mindmap Visual Structure
 ```text
-========================================================================
+========================================================================+
                           [ SovereignAI Edge ]
                           (Core Platform Hub)
 ========================================================================
        |                         |                          |
-+------v------+            +-----v-----+              +-----v------+
-| UI Interfaces |            | Backend API |              | Core Logic |
-+------+------+            +-----+-----+              +------+-------+
++------v--------+            +-----v--------+              +-----v--------+
+| UI Interfaces |            | Backend API  |              | Core Logic   |
++------+--------+            +-----v--------+              +-----v--------+
        |                         |                           |
        +--> React Web App        +--> FastAPI App            +--> Llama.cpp Bindings
        |    - React Context      |    - Models Router        |    (FullRAM Execution)

@@ -1,0 +1,27 @@
+[database]
+path = "d:/SovereignAI/workspace/sovereign.db"
+journal_mode = "WAL"
+busy_timeout = 5000
+cache_size = -64000
+max_sessions_stored = 1000
+auto_vacuum = true
+
+[vectorstore]
+index_path = "d:/SovereignAI/workspace/vector_index"
+index_file = "index.faiss"
+metadata_db = "metadata.db"
+embedding_model = "all-MiniLM-L6-v2"
+embedding_dimension = 384
+chunk_size = 512
+chunk_overlap = 64
+max_chunks_per_document = 10000
+nprobe = 10
+top_k_default = 5
+use_gpu = false
+index_type = "IVFFlat"
+nlist = 100
+normalize_embeddings = true
+
+[security]
+encrypt_vectors = false
+audit_all_queries = true

@@ -8,7 +8,6 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.api.router import api_router
 from app.websocket.metrics import router as metrics_router
-from app.database.connection import init_database, close_database
 from app.core.hardware_detector import HardwareDetector
 from app.services.model_manager import ModelManager
 from app.plugins.manager import PluginManager
@@ -21,11 +20,18 @@ async def lifespan(app: FastAPI):
     print(f"Starting {settings.app_name} v{settings.app_version}")
     
     # Initialize database
-    await init_database()
+    from app.database.manager import DatabaseManager
+    from pathlib import Path
+    config_path = str(Path(__file__).parent / "config" / "storage.toml")
+    app.state.db = DatabaseManager(config_path=config_path)
+    app.state.db.initialize()
     
     # Initialize vector store
-    from app.services.vector_store import VectorStore
-    app.state.vector_store = VectorStore(settings.workspace_dir / "vectors")
+    from app.vectorstore.manager import VectorStoreManager
+    from pathlib import Path
+    config_path = str(Path(__file__).parent / "config" / "storage.toml")
+    app.state.vector_store = VectorStoreManager(config_path=config_path)
+    app.state.vector_store.initialize()
     
     
     # Detect hardware
@@ -52,7 +58,10 @@ async def lifespan(app: FastAPI):
     print("Shutting down...")
     if app.state.active_engine:
         await app.state.active_engine.unload()
-    await close_database()
+    if hasattr(app.state, 'db'):
+        app.state.db.shutdown()
+    if hasattr(app.state, 'vector_store'):
+        app.state.vector_store.shutdown()
 
 
 app = FastAPI(

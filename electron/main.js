@@ -8,7 +8,7 @@ let mainWindow;
 let backendProcess;
 let tray;
 
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = !app.isPackaged;
 const BACKEND_PORT = 8000;
 const FRONTEND_PORT = 3000;
 
@@ -88,8 +88,8 @@ async function startBackend() {
     });
 
     backendProcess.on('error', (error) => {
-      console.error('Failed to start backend:', error);
-      reject(error);
+      console.error('Failed to start backend (it might already be running):', error);
+      resolve(); // Do not reject, so the app still opens
     });
 
     backendProcess.on('close', (code) => {

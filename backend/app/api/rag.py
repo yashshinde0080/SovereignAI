@@ -90,15 +90,27 @@ async def query_documents(request: Request, query: QueryRequest):
     if request.app.state.active_engine and query.generate_response:
         context = "\n\n".join([r["text"] for r in results])
         
-        prompt = f"""Based on the following context, answer the question.
-
-Context:
-{context}
-
-Question: {query.query}
-
-Answer:"""
+        prompt = (
+            f"Context information is provided below:\n"
+            f"---------------------\n"
+            f"{context}\n"
+            f"---------------------\n"
+            f"Given the context information, answer the following query. "
+            f"If the context does not contain the answer, answer based on your existing knowledge.\n"
+            f"Query: {query.query}"
+        )
         
+        tokenizer = getattr(request.app.state.active_engine, "tokenizer", None)
+        if tokenizer and hasattr(tokenizer, "apply_chat_template"):
+            try:
+                prompt = tokenizer.apply_chat_template(
+                    [{"role": "user", "content": prompt}], 
+                    tokenize=False, 
+                    add_generation_prompt=True
+                )
+            except Exception:
+                pass
+                
         response = await request.app.state.active_engine.generate(
             prompt=prompt,
             max_tokens=query.max_tokens

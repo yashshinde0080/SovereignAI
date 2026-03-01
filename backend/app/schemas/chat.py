@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.7, ge=0, le=2)
     top_p: float = Field(default=0.9, ge=0, le=1)
     stream: bool = False
+    use_rag: bool = False
 
 
 class Choice(BaseModel):

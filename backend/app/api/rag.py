@@ -9,7 +9,7 @@ from app.schemas.rag import (
     QueryResponse,
     DocumentList
 )
-from app.services.vector_store import VectorStore
+from app.vectorstore.manager import VectorStoreManager
 
 
 router = APIRouter()
@@ -21,7 +21,7 @@ async def upload_document(
     file: UploadFile = File(...)
 ):
     """Upload document for RAG"""
-    vector_store: VectorStore = request.app.state.vector_store
+    vector_store: VectorStoreManager = request.app.state.vector_store
     
     # Save file
     content = await file.read()
@@ -49,8 +49,9 @@ async def upload_document(
             )
         
         # Add to vector store
-        doc_id = await vector_store.add_document(
+        doc_id = vector_store.ingest_text(
             text=text,
+            filename=file.filename,
             metadata={"filename": file.filename}
         )
         
@@ -67,13 +68,23 @@ async def upload_document(
 @router.post("/query", response_model=QueryResponse)
 async def query_documents(request: Request, query: QueryRequest):
     """Query documents"""
-    vector_store: VectorStore = request.app.state.vector_store
+    vector_store: VectorStoreManager = request.app.state.vector_store
     
     # Search similar chunks
-    results = await vector_store.search(
-        query=query.query,
+    search_results = vector_store.search(
+        query_text=query.query,
         top_k=query.top_k
     )
+
+    results = [
+        {
+            "text": r.content,
+            "score": r.score,
+            "metadata": r.metadata,
+            "document_id": r.document_id
+        }
+        for r in search_results
+    ]
     
     # If model is loaded, generate response
     if request.app.state.active_engine and query.generate_response:
@@ -109,16 +120,20 @@ Answer:"""
 @router.get("/documents", response_model=DocumentList)
 async def list_documents(request: Request):
     """List indexed documents"""
-    vector_store: VectorStore = request.app.state.vector_store
-    documents = await vector_store.list_documents()
+    vector_store: VectorStoreManager = request.app.state.vector_store
+    documents = vector_store.list_documents()
     return DocumentList(documents=documents)
 
 
 @router.delete("/documents/{doc_id}")
 async def delete_document(request: Request, doc_id: str):
     """Delete document from index"""
-    vector_store: VectorStore = request.app.state.vector_store
-    success = await vector_store.delete_document(doc_id)
+    vector_store: VectorStoreManager = request.app.state.vector_store
+    try:
+        vector_store.delete_document(doc_id)
+        success = True
+    except Exception:
+        success = False
     
     if not success:
         raise HTTPException(status_code=404, detail="Document not found")

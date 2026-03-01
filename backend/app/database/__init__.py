@@ -1,1 +1,1 @@
-"""Database Package"""
+from .manager import DatabaseManager

@@ -1,0 +1,185 @@
+                                                                               
+ Usage: python -m cli.main [OPTIONS] COMMAND [ARGS]...                         
+                                                                               
+ SovereignAI Edge - Portable Offline AI Platform                               
+                                                                               
++--------------------- Traceback (most recent call last) ---------------------+
+| C:\Users\yash                                                               |
+| shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\ru |
+| npy.py:196 in _run_module_as_main                                           |
+|                                                                             |
+|   193     main_globals = sys.modules["__main__"].__dict__                   |
+|   194     if alter_argv:                                                    |
+|   195         sys.argv[0] = mod_spec.origin                                 |
+| > 196     return _run_code(code, main_globals, None,                        |
+|   197                      "__main__", mod_spec)                            |
+|   198                                                                       |
+|   199 def run_module(mod_name, init_globals=None,                           |
+|                                                                             |
+| +-------------------------------- locals ---------------------------------+ |
+| |   alter_argv = True                                                     | |
+| |         code = <code object <module> at 0x000002030DB1B260, file        | |
+| |                "D:\SovereignAI\backend\app\cli\main.py", line 1>        | |
+| | main_globals = {                                                        | |
+| |                    '__name__': '__main__',                              | |
+| |                    '__doc__': 'SovereignAI CLI Entry Point',            | |
+| |                    '__package__': 'cli',                                | |
+| |                    '__loader__':                                        | |
+| |                <_frozen_importlib_external.SourceFileLoader object at   | |
+| |                0x000002030D70BD00>,                                     | |
+| |                    '__spec__': ModuleSpec(name='cli.main',              | |
+| |                loader=<_frozen_importlib_external.SourceFileLoader      | |
+| |                object at 0x000002030D70BD00>,                           | |
+| |                origin='D:\\SovereignAI\\backend\\app\\cli\\main.py'),   | |
+| |                    '__annotations__': {},                               | |
+| |                    '__builtins__': <module 'builtins' (built-in)>,      | |
+| |                    '__file__':                                          | |
+| |                'D:\\SovereignAI\\backend\\app\\cli\\main.py',           | |
+| |                    '__cached__':                                        | |
+| |                'D:\\SovereignAI\\backend\\app\\cli\\__pycache__\\main.à | |
+| |                    'typer': <module 'typer' from                        | |
+| |                'D:\\SovereignAI\\backend\\.venv\\lib\\site-packages\\tà | |
+| |                    ... +18                                              | |
+| |                }                                                        | |
+| |     mod_name = 'cli.main'                                               | |
+| |     mod_spec = ModuleSpec(name='cli.main',                              | |
+| |                loader=<_frozen_importlib_external.SourceFileLoader      | |
+| |                object at 0x000002030D70BD00>,                           | |
+| |                origin='D:\\SovereignAI\\backend\\app\\cli\\main.py')    | |
+| +-------------------------------------------------------------------------+ |
+|                                                                             |
+| C:\Users\yash                                                               |
+| shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\ru |
+| npy.py:86 in _run_code                                                      |
+|                                                                             |
+|    83                        __loader__ = loader,                           |
+|    84                        __package__ = pkg_name,                        |
+|    85                        __spec__ = mod_spec)                           |
+| >  86     exec(code, run_globals)                                           |
+|    87     return run_globals                                                |
+|    88                                                                       |
+|    89 def _run_module_code(code, init_globals=None,                         |
+|                                                                             |
+| +-------------------------------- locals ---------------------------------+ |
+| |       cached = 'D:\\SovereignAI\\backend\\app\\cli\\__pycache__\\main.à | |
+| |         code = <code object <module> at 0x000002030DB1B260, file        | |
+| |                "D:\SovereignAI\backend\app\cli\main.py", line 1>        | |
+| |        fname = 'D:\\SovereignAI\\backend\\app\\cli\\main.py'            | |
+| | init_globals = None                                                     | |
+| |       loader = <_frozen_importlib_external.SourceFileLoader object at   | |
+| |                0x000002030D70BD00>                                      | |
+| |     mod_name = '__main__'                                               | |
+| |     mod_spec = ModuleSpec(name='cli.main',                              | |
+| |                loader=<_frozen_importlib_external.SourceFileLoader      | |
+| |                object at 0x000002030D70BD00>,                           | |
+| |                origin='D:\\SovereignAI\\backend\\app\\cli\\main.py')    | |
+| |     pkg_name = 'cli'                                                    | |
+| |  run_globals = {                                                        | |
+| |                    '__name__': '__main__',                              | |
+| |                    '__doc__': 'SovereignAI CLI Entry Point',            | |
+| |                    '__package__': 'cli',                                | |
+| |                    '__loader__':                                        | |
+| |                <_frozen_importlib_external.SourceFileLoader object at   | |
+| |                0x000002030D70BD00>,                                     | |
+| |                    '__spec__': ModuleSpec(name='cli.main',              | |
+| |                loader=<_frozen_importlib_external.SourceFileLoader      | |
+| |                object at 0x000002030D70BD00>,                           | |
+| |                origin='D:\\SovereignAI\\backend\\app\\cli\\main.py'),   | |
+| |                    '__annotations__': {},                               | |
+| |                    '__builtins__': <module 'builtins' (built-in)>,      | |
+| |                    '__file__':                                          | |
+| |                'D:\\SovereignAI\\backend\\app\\cli\\main.py',           | |
+| |                    '__cached__':                                        | |
+| |                'D:\\SovereignAI\\backend\\app\\cli\\__pycache__\\main.à | |
+| |                    'typer': <module 'typer' from                        | |
+| |                'D:\\SovereignAI\\backend\\.venv\\lib\\site-packages\\tà | |
+| |                    ... +18                                              | |
+| |                }                                                        | |
+| |  script_name = None                                                     | |
+| +-------------------------------------------------------------------------+ |
+|                                                                             |
+| D:\SovereignAI\backend\app\cli\main.py:394 in <module>                      |
+|                                                                             |
+|   391                                                                       |
+|   392                                                                       |
+|   393 if __name__ == "__main__":                                            |
+| > 394     app()                                                             |
+|   395                                                                       |
+|                                                                             |
+| +-------------------------------- locals ---------------------------------+ |
+| |  API_BASE = 'http://127.0.0.1:8000/v1'                                  | |
+| |       app = <typer.main.Typer object at 0x0000020310AA7610>             | |
+| |   asyncio = <module 'asyncio' from 'C:\\Users\\yash                     | |
+| |             shinde\\AppData\\Roaming\\uv\\python\\cpython-3.10.19-windà | |
+| | benchmark = <function benchmark at 0x0000020310AB6A70>                  | |
+| |  callback = <function callback at 0x0000020310AB6710>                   | |
+| |   Console = <class 'rich.console.Console'>                              | |
+| |   console = <console width=79 None>                                     | |
+| |     httpx = <module 'httpx' from                                        | |
+| |             'D:\\SovereignAI\\backend\\.venv\\lib\\site-packages\\httpà | |
+| |      list = <function list at 0x0000020310AB68C0>                       | |
+| |  list_cmd = <module 'cli.commands.list_cmd' from                        | |
+| |             'D:\\SovereignAI\\backend\\app\\cli\\commands\\list_cmd.pyà | |
+| |     Panel = <class 'rich.panel.Panel'>                                  | |
+| |      pull = <function pull at 0x0000020310AB6950>                       | |
+| |    remove = <function remove at 0x0000020310AB6B00>                     | |
+| |       run = <function run at 0x0000020310AB69E0>                        | |
+| |     serve = <function serve at 0x0000020310AB6B90>                      | |
+| |    system = <function system at 0x0000020310AB65F0>                     | |
+| |     Table = <class 'rich.table.Table'>                                  | |
+| |     typer = <module 'typer' from                                        | |
+| |             'D:\\SovereignAI\\backend\\.venv\\lib\\site-packages\\typeà | |
+| |   version = <function version at 0x0000020310AB6830>                    | |
+| +-------------------------------------------------------------------------+ |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\typer\main.py:328 in         |
+| __call__                                                                    |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\typer\main.py:311 in         |
+| __call__                                                                    |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:1485 in        |
+| __call__                                                                    |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\typer\core.py:778 in main    |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\typer\core.py:215 in _main   |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:1216 in        |
+| make_context                                                                |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:1829 in        |
+| parse_args                                                                  |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:1227 in        |
+| parse_args                                                                  |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:2578 in        |
+| handle_parse_result                                                         |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:3313 in        |
+| process_value                                                               |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:2448 in        |
+| process_value                                                               |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\decorators.py:539 in   |
+| show_help                                                                   |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:750 in         |
+| get_help                                                                    |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\click\core.py:1094 in        |
+| get_help                                                                    |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\typer\core.py:791 in         |
+| format_help                                                                 |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\typer\rich_utils.py:604 in   |
+| rich_format_help                                                            |
+|                                                                             |
+| D:\SovereignAI\backend\.venv\lib\site-packages\typer\rich_utils.py:369 in   |
+| _print_options_panel                                                        |
++-----------------------------------------------------------------------------+
+TypeError: Parameter.make_metavar() missing 1 required positional argument: 
+'ctx'

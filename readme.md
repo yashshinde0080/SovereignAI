@@ -32,6 +32,8 @@ Run AI models locally without internet connection. Dual execution engines for op
 chmod +x launch.sh
 ./launch.sh
 
+$env:PYTHONPATH="app"; uv run python -m cli.main --help
+
 
 ----
 ----

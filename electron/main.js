@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const { createMenu } = require('./menu');
@@ -29,13 +29,16 @@ function createWindow() {
   });
 
   // Load URL based on environment
-  if (isDev) {
+  const useDevServer = process.env.USE_DEV_SERVER === 'true';
+  if (isDev && useDevServer) {
     mainWindow.loadURL(`http://localhost:${FRONTEND_PORT}`);
     mainWindow.webContents.openDevTools();
   } else {
-    // Load from built frontend
-    const frontendPath = path.join(process.resourcesPath, 'frontend', 'index.html');
-    mainWindow.loadFile(frontendPath);
+    // Load from built frontend via custom protocol
+    mainWindow.loadURL('app://-/');
+    if (isDev) {
+      mainWindow.webContents.openDevTools();
+    }
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -62,7 +65,14 @@ async function startBackend() {
       ? path.join(__dirname, '..', 'backend')
       : path.join(process.resourcesPath, 'backend');
 
-    const pythonPath = process.platform === 'win32' ? 'python' : 'python3';
+    // Determine python path. Use virtual env if it exists, otherwise use system python.
+    const platform = process.platform;
+    const venvPythonPath = platform === 'win32'
+      ? path.join(backendPath, '.venv', 'Scripts', 'python.exe')
+      : path.join(backendPath, '.venv', 'bin', 'python');
+      
+    const fs = require('fs');
+    const pythonPath = fs.existsSync(venvPythonPath) ? venvPythonPath : (platform === 'win32' ? 'python' : 'python3');
 
     console.log('Starting backend from:', backendPath);
 
@@ -138,11 +148,52 @@ ipcMain.handle('restart-backend', async () => {
   return { success: true };
 });
 
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } }
+]);
+
 // App lifecycle
 app.whenReady().then(async () => {
   try {
     console.log('Starting SovereignAI Edge...');
     
+    // Register custom protocol for Next.js static export
+    protocol.handle('app', (request) => {
+      const urlPath = new URL(request.url).pathname;
+      const decodedPath = decodeURI(urlPath);
+      const basePath = isDev 
+        ? path.join(__dirname, '..', 'frontend', 'out') 
+        : path.join(process.resourcesPath, 'frontend');
+      
+      let filePath = path.join(basePath, decodedPath);
+      const fs = require('fs');
+      
+      try {
+        if (decodedPath === '/' || decodedPath === '') {
+          filePath = path.join(basePath, 'index.html');
+        } else if (fs.existsSync(filePath)) {
+          if (fs.statSync(filePath).isDirectory()) {
+            const indexPath = path.join(filePath, 'index.html');
+            if (fs.existsSync(indexPath)) {
+              filePath = indexPath;
+            }
+          }
+        } else {
+          if (fs.existsSync(path.join(filePath, 'index.html'))) {
+            filePath = path.join(filePath, 'index.html');
+          } else if (fs.existsSync(filePath + '.html')) {
+            filePath = filePath + '.html';
+          } else {
+            filePath = path.join(basePath, 'index.html');
+          }
+        }
+      } catch (err) {
+        filePath = path.join(basePath, 'index.html');
+      }
+      const { pathToFileURL } = require('url');
+      return net.fetch(pathToFileURL(filePath).href);
+    });
+
     // Start backend first
     await startBackend();
     console.log('Backend started');

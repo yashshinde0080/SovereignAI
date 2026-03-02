@@ -45,3 +45,46 @@
 **Gap 15**: Current solutions demonstrate significant performance improvements in controlled experimental settings but fail to address the practical challenges of deployment scalability, fault tolerance, and maintenance requirements in commercial applications (Hongchao Du et al., 2025)(Yitao Hu et al., 2025).
 
 These gaps represent critical areas requiring further research and development to achieve practical, scalable, and efficient LLM inference solutions for memory-constrained environments.
+
+---
+
+**Research Gaps in Memory-Constrained LLM Inference Systems**
+
+**1. Lack of Unified Dual-Mode Execution Frameworks**
+Current research focuses on single-mode approaches rather than adaptive dual-mode systems that can dynamically switch between full-RAM and layer-streaming execution . Existing solutions like FlexInfer implement offloading strategies but do not provide seamless transitions between different execution modes based on available memory resources . ActiveFlow addresses DRAM-flash swapping but lacks the capability to operate in both full-memory and streaming modes within a single framework .
+
+**2. Limited Offline Environment Optimization**
+Most current approaches assume network connectivity for distributed computing or cloud offloading . Research lacks comprehensive frameworks specifically designed for fully offline environments where models must operate independently without external computational resources . The trade-offs between local storage I/O and inference performance in completely disconnected scenarios remain underexplored .
+
+**3. Insufficient Layer-Streaming Architecture Development**
+While papers address weight offloading and memory management, none specifically implement true layer-streaming inference where transformer layers are sequentially loaded from storage during execution . Current solutions focus on weight-level or tensor-level management rather than architectural-level streaming approaches .
+
+**4. Incomplete Trade-off Analysis Frameworks**
+Existing research provides limited comprehensive analysis of the four-way trade-offs between memory usage, disk I/O bandwidth, inference latency, and system throughput . Most studies optimize for one or two metrics without providing systematic frameworks for balancing all four performance dimensions .
+
+**5. Lack of Adaptive Memory Threshold Management**
+Current approaches use static memory allocation strategies rather than dynamic adaptation based on model requirements and hardware constraints . Research gaps exist in developing intelligent switching mechanisms that can determine optimal execution modes in real-time .
+
+**6. Limited Portable System Integration**
+While edge deployment is addressed, comprehensive integration with portable computing platforms and their specific constraints (battery life, thermal management, storage limitations) remains underdeveloped . Most solutions target server-class edge devices rather than truly portable systems .
+
+**References:**
+ H. Du, S. Wu, A. Kharlamova, N. Guan, and C. J. Xue, "FlexInfer: Breaking Memory Constraint via Flexible and Efficient Offloading for On-Device LLM Inference," EuroMLSys, 2025.
+
+ F. Jia et al., "Scaling Up On-Device LLMs via Active-Weight Swapping Between DRAM and Flash," arXiv.org, 2025.
+
+ K. Alizadeh-Vahid et al., "LLM in a flash: Efficient Large Language Model Inference with Limited Memory," Annual Meeting of the Association for Computational Linguistics, 2023.
+
+ M. Sung et al., "Memory- and Latency-Constrained Inference of Large Language Models via Adaptive Split Computing," arXiv.org, 2025.
+
+ M. Sun et al., "LIME:Accelerating Collaborative Lossless LLM Inference on Memory-Constrained Edge Devices," arXiv.org, 2025.
+
+ P. Ray and M. P. Pradhan, "LLMEdge: A Novel Framework for Localized LLM Inferencing at Resource Constrained Edge," 2024 International Conference on IoT Based Control Networks and Intelligent Systems (ICICNIS), 2024.
+
+ T. P. Chander, "Optimizing Memory Efficiency in Large Language Models: Adaptive Compression Techniques," International Journal for Research in Applied Science and Engineering Technology, 2025.
+
+ Y. Hu et al., "TightLLM: Maximizing Throughput for LLM Inference via Adaptive Offloading Policy," IEEE transactions on computers, 2025.
+
+ H. Lee et al., "PAISE: PIM-Accelerated Inference Scheduling Engine for Transformer-based LLM," International Symposium on High-Performance Computer Architecture, 2025.
+
+ W. Xu et al., "SLIM: A Heterogeneous Accelerator for Edge Inference of Sparse Large Language Model via Adaptive Thresholding," ACM Transactions on Embedded Computing Systems, 2025.

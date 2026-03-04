@@ -160,6 +160,53 @@ Procedure Decode_Loop(first_token, max_tokens, executor):
 
 ---
 
+## 3. Mathematical Framework: Metrics & Constraints
+
+To objectively evaluate engine performance, we utilize the following mathematical models to predict memory footprint and latency.
+
+### 3.1 VRAM Occupancy ($V_{vram}$)
+
+Let:
+- $S_{model}$ = Total size of model weights in bytes (e.g., 14GB for a 7B FP16 model).
+- $N_{layers}$ = Number of transformer layers.
+- $L_{ctx}$ = Current context length (tokens).
+- $D_{hidden}$ = Hidden dimension size.
+- $B_{p}$ = Bytes per parameter (2 for FP16/BF16, 4 for FP32).
+
+#### FullRAM VRAM:
+$$V_{full} \approx S_{model} + (2 \times L_{ctx} \times N_{layers} \times D_{hidden} \times B_{p})$$
+*Constraint: $V_{full} < GPU_{total\_vram}$*
+
+#### LayerStream VRAM:
+$$V_{layer} \approx \frac{S_{model}}{N_{layers}} + \text{Padding\_Buffers}$$
+*Note: KV Cache in LayerStream is offloaded to System RAM, keeping VRAM footprint nearly constant regardless of context length.*
+
+### 3.2 System RAM Occupancy ($V_{ram}$)
+
+#### FullRAM RAM:
+$$V_{ram} \approx \text{OS Overhead} \text{ (Weights are already in VRAM)}$$
+
+#### LayerStream RAM:
+$$V_{ram} \approx S_{model} + (2 \times L_{ctx} \times N_{layers} \times D_{hidden} \times B_{p})$$
+*The entire weights and the total KV Cache reside in system memory to minimize Disk I/O.*
+
+### 3.3 Inference Latency ($T_{inference}$)
+
+Total time for one token generation step:
+
+#### FullRAM Latency:
+$$T_{full} = T_{compute} \approx \frac{FLOPs_{per\_token}}{TFLOPS_{gpu}}$$
+
+#### LayerStream Latency:
+$$T_{layer} = \sum_{i=1}^{N_{layers}} (T_{move\_i} + T_{compute\_i})$$
+Since weights are moved from RAM to VRAM:
+$$T_{move} \approx \frac{S_{model}}{BW_{pcie}}$$
+*Where $BW_{pcie}$ is the PCIe bandwidth (e.g., 15.75 GB/s for Gen3 x16).*
+
+**Conclusion**: LayerStream is constrained by **Memory Bandwidth (RAM to VRAM)**, while FullRAM is constrained by **Compute Power (TFLOPS)**.
+
+---
+
 ## Performance Summary: The Algorithmic Bottleneck
 
 The fundamental difference between these two algorithms dictates their hardware dependencies:
@@ -167,4 +214,4 @@ The fundamental difference between these two algorithms dictates their hardware 
 1. **FullRAM** executes Phase 2 and 3 entirely within VRAM. The GPU performs thousands of mathematical operations per second without ever waiting.
 2. **LayerStream** inserts an `I/O Wait` (Loading weights from disk to RAM, and moving them from RAM to VRAM) inside the core *For* loop of **both** Phase 2 and Phase 3. 
 
-If a model has 32 layers, and the user requests 100 tokens, the LayerStream Algorithm must perform **3,200 separate file reads** from the disk drive during Phase 3. This transforms the inference bottleneck from *Math Compute Speed* (GPU TFLOPS) into *Storage I/O Speed* (SSD Read MB/s).
+If a model has 32 layers, and the user requests 100 tokens, the LayerStream Algorithm must perform **3,200 separate file reads** from the disk drive during Phase 3 (if not cached). This transforms the inference bottleneck from *Math Compute Speed* (GPU TFLOPS) into *Storage I/O Speed* (SSD Read MB/s).

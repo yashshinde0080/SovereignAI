@@ -164,13 +164,45 @@ Inference strictly bypasses HuggingFace's `generate()` method, instead building 
 | Feature | FullRAM (`FullRAMEngine`) | LayerStream (`LayerStreamEngine`) |
 | :--- | :--- | :--- |
 | **Primary Goal** | Maximum Inference Speed | Absolute Memory Efficiency (Run huge models on low RAM) |
-| **Generation Speed** | Extremely High (All params in memory) | Slow to Moderate (Bottlenecked by Disk read/write speeds) |
-| **Memory Footprint** | Massive (Size of model + K/V bounds) | Minimal (Size of maximum single layer + running K/V Cache) |
+| **Generation Speed** | Extremely High (All params in memory) | Moderate (Bottlenecked by PCIe/Memory Bandwidth) |
+| **Memory Footprint** | Massive (Size of model + K/V bounds) | Minimal (Size of maximum single layer + RAM overhead) |
 | **Pre-Processing** | None (Direct loading) | High (Requires one-time disk chunking via `WeightSplitter`) |
-| **Mechanism** | Standard `transformers` generation | Custom decoupling, manual KV state, independent `Sampler` |
+| **Mechanism** | Standard `transformers` generation | Custom decoupling, CPU KV state, independent `Sampler` |
+| **Inference Math** | $TPS = \frac{TFLOPS}{FLOPs_{per\_token}}$ | $TPS \approx \frac{BW_{pcie}}{ModelSize}$ |
 | **Best Hardware** | Multi-GPU setups, High RAM systems | Consumer GPUs, Laptops, Low VRAM systems |
 
-### 4. Code Extensibility
+---
+
+## 4. Theoretical Performance Models
+
+To optimize deployment, the following mathematical relationships should be used to estimate hardware requirements.
+
+### 4.1 Memory Bound Estimations
+
+1. **VRAM Savings Factor ($F_{vram}$)**:
+   $$F_{vram} = \frac{V_{full}}{V_{layer}} \approx \frac{S_{model}}{\frac{S_{model}}{N_{layers}}} = N_{layers}$$
+   *Interpretation:* On a model with 32 layers, LayerStream can effectively reduce VRAM requirements by $\approx 30\text{x}$.
+
+2. **KV Cache Overhead**:
+   As context length ($L_{ctx}$) grows, the KV Cache size increases linearly.
+   $$\Delta KV \approx 4 \times L_{ctx} \times N_{layers} \times D_{hidden} \times (\text{Precision\_Bytes})$$
+   In LayerStream, this growth is absorbed by System RAM ($V_{ram}$), preventing VRAM-based execution failure.
+
+### 4.2 Throughput Limits
+
+The generation throughput (Tokens Per Second) is bounded by different architectural bottlenecks:
+
+* **FullRAM (Compute Bound):**
+  $$TPS_{full} = \frac{TFLOPS_{gpu}}{2 \times S_{model}}$$
+* **LayerStream (I/O & Bandwidth Bound):**
+  $$TPS_{layer} = \frac{BW_{pcie}}{S_{model}}$$
+
+*Example:* A 14GB model (7B) on a PCIe Gen3 x16 (16GB/s) slot:
+$$TPS_{layer} \approx \frac{16\text{GB/s}}{14\text{GB}} \approx 1.14 \text{ tokens/sec}$$
+
+---
+
+## 5. Code Extensibility
 
 To extend these engines, developers must implement the `BaseEngine` interface. 
 - Ensure that `load()`, `unload()`, `generate()`, and `generate_stream()` are appropriately overridden.

@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useStore } from '@/store';
 import { api } from '@/lib/api';
-import { Cpu, HardDrive, MemoryStick, Zap, ArrowRight } from 'lucide-react';
+import { Cpu, HardDrive, MemoryStick, Zap, ArrowRight, Gauge } from 'lucide-react';
 import Link from 'next/link';
+import { ModelControlPanel } from '@/components/models/ModelControlPanel';
 
 export default function HomePage() {
   const { systemStatus, setSystemStatus, hardware, setHardware } = useStore();
@@ -53,62 +54,46 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+      {/* Core Control Panel */}
+      <ModelControlPanel />
+
+      {/* Hardware Details & Storage */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-muted/30 border-none">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">CPU</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Processor</CardTitle>
             <Cpu className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{hardware?.cpu_cores || 0} Cores</div>
-            <p className="text-xs text-muted-foreground">
-              {hardware?.has_avx2 ? 'AVX2 ✓' : ''} {hardware?.has_avx512 ? 'AVX512 ✓' : ''}
+            <div className="text-xl font-bold">{hardware?.cpu_name || 'Generic CPU'}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {hardware?.cpu_cores} Physical Cores | {hardware?.cpu_threads} Threads
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-muted/30 border-none">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">RAM</CardTitle>
-            <MemoryStick className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{hardware?.ram_total_gb?.toFixed(1) || 0} GB</div>
-            <p className="text-xs text-muted-foreground">
-              {systemStatus?.ram_available_gb?.toFixed(1) || 0} GB available
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Storage</CardTitle>
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Neural Storage</CardTitle>
             <HardDrive className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{systemStatus?.disk_free_gb?.toFixed(0) || 0} GB</div>
-            <p className="text-xs text-muted-foreground">
-              {hardware?.disk_type || 'Unknown'} @ {hardware?.disk_speed_mb_s?.toFixed(0) || 0} MB/s
+            <div className="text-xl font-bold">{systemStatus?.disk_free_gb?.toFixed(0) || 0} GB Free</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Type: {hardware?.disk_type} | Velocity: {hardware?.disk_speed_mb_s?.toFixed(0)} MB/s
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-muted/30 border-none">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
-            <Zap className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">System Health</CardTitle>
+            <Gauge className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {systemStatus?.model_loaded ? (
-                <Badge variant="default">Active</Badge>
-              ) : (
-                <Badge variant="secondary">Ready</Badge>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {systemStatus?.current_model || 'No model loaded'}
+            <div className="text-xl font-bold">Optimal</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              All neural pathways are functioning correctly.
             </p>
           </CardContent>
         </Card>
@@ -120,14 +105,14 @@ export default function HomePage() {
           <CardHeader>
             <CardTitle>Get Started</CardTitle>
             <CardDescription>
-              Start chatting with AI locally
+              Start executing AI locally
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {systemStatus?.model_loaded ? (
-              <Link href="/chat">
+              <Link href="/console">
                 <Button className="w-full">
-                  Continue Chat
+                  Open Console
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>

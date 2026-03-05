@@ -30,25 +30,13 @@ class BaseEngine(ABC):
         pass
     
     @abstractmethod
-    async def generate(
-        self,
-        prompt: str,
-        max_tokens: int = 512,
-        temperature: float = 0.7,
-        top_p: float = 0.9
-    ) -> Dict[str, Any]:
-        """Generate completion"""
+    async def generate(self, input_data: Any, **kwargs) -> Dict[str, Any]:
+        """Generate completion or prediction"""
         pass
     
     @abstractmethod
-    async def generate_stream(
-        self,
-        prompt: str,
-        max_tokens: int = 512,
-        temperature: float = 0.7,
-        top_p: float = 0.9
-    ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Generate completion with streaming"""
+    async def generate_stream(self, input_data: Any, **kwargs) -> AsyncGenerator[Dict[str, Any], None]:
+        """Generate completion with streaming (if generative)"""
         pass
     
     @abstractmethod

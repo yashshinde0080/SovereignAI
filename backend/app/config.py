@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     
     # Paths
     base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent)
-    models_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "models")
+    models_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent / "models")
     workspace_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace")
     plugins_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "plugins")
     database_path: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "database" / "sovereign.db")

@@ -21,8 +21,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Play, Square, Trash2, Loader2 } from 'lucide-react';
+import { Play, Square, Trash2, Loader2, MessageSquare } from 'lucide-react';
+import Link from 'next/link';
 import { Model } from '@/types';
+
 
 interface ModelTableProps {
   models: Model[];
@@ -67,9 +69,9 @@ export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, l
                 <Badge variant="outline">{model.quant}</Badge>
               </TableCell>
               <TableCell>
-                <div className="flex gap-1">
-                  {model.modes_supported?.map((mode) => (
-                    <Badge key={mode} variant="secondary" className="text-xs">
+                <div className="flex gap-1 flex-wrap">
+                  {(Array.isArray(model.modes_supported) ? model.modes_supported : [model.modes_supported || 'auto']).map((mode, idx) => (
+                    <Badge key={`${mode}-${idx}`} variant="secondary" className="text-xs">
                       {mode}
                     </Badge>
                   ))}
@@ -85,24 +87,34 @@ export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, l
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
                   {isLoaded ? (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => onUnload()}
-                      disabled={loading}
-                    >
-                      {loading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Square className="h-4 w-4" fill="currentColor" />
-                      )}
-                    </Button>
+                    <div className="flex gap-2">
+                       <Link href="/console">
+                         <Button size="sm" variant="outline" className="gap-2 bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary">
+                            <MessageSquare className="h-4 w-4" />
+                            Console
+                         </Button>
+                       </Link>
+                       <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => onUnload()}
+                        disabled={loading}
+                        title="Unload Model"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Square className="h-4 w-4" fill="currentColor" />
+                        )}
+                      </Button>
+                    </div>
                   ) : (
                     <Button
                       size="sm"
                       variant="default"
                       onClick={() => onLoad(model.id)}
                       disabled={loading || !!currentModel} // disable if another model is loaded
+                      title="Load Model"
                     >
                       {loading ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -111,6 +123,7 @@ export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, l
                       )}
                     </Button>
                   )}
+
                   
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

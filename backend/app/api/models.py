@@ -115,6 +115,33 @@ async def unload_model(request: Request):
     return {"status": "unloaded"}
 
 
+@router.get("/current")
+async def get_current_model(request: Request):
+    """Get metadata about currently loaded model for dynamic task UI routing"""
+    app = request.app
+    if not app.state.active_engine:
+        return {"loaded": False}
+        
+    engine = app.state.active_engine
+    
+    # Try fetching task_metadata
+    task_info = getattr(engine, "task_metadata", {})
+    if not task_info:
+        # Fallback
+        from app.core.task_resolver import TaskResolver
+        task_info = TaskResolver.resolve(engine.model_path)
+        
+    return {
+        "loaded": True,
+        "model": app.state.active_model,
+        "mode": app.state.active_mode,
+        "task_type": task_info.get("task_type", "unknown"),
+        "input_modality": task_info.get("input_modality", "text"),
+        "is_generative": task_info.get("is_generative", False),
+        "ram_usage": getattr(engine, "get_memory_usage", lambda: {})()
+    }
+
+
 @router.get("/{model_name:path}", response_model=ModelInfo)
 async def get_model(request: Request, model_name: str):
     """Get model details"""

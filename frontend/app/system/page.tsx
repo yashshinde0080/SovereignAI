@@ -8,10 +8,31 @@ import { ResourceChart } from '@/components/system/ResourceChart';
 import { useMetrics } from '@/hooks/useMetrics';
 import { useStore } from '@/store';
 import { Cpu, MemoryStick, HardDrive, Gpu, Activity } from 'lucide-react';
+import { api } from '@/lib/api';
+
 
 export default function SystemPage() {
-  const { hardware, systemStatus } = useStore();
+  const { hardware, setHardware, systemStatus, setSystemStatus } = useStore();
   const { metrics, history, connected } = useMetrics();
+
+  useEffect(() => {
+    const fetchSystemData = async () => {
+      console.log('Fetching system data...');
+      try {
+        const [hw, status] = await Promise.all([
+          api.getHardware(),
+          api.getSystemStatus()
+        ]);
+        console.log('Hardware:', hw);
+        console.log('Status:', status);
+        setHardware(hw as any);
+        setSystemStatus(status as any);
+      } catch (e) {
+        console.error('Failed to fetch system data:', e);
+      }
+    };
+    fetchSystemData();
+  }, [setHardware, setSystemStatus]);
 
   return (
     <div className="space-y-6">
@@ -62,12 +83,18 @@ export default function SystemPage() {
       </div>
 
       {/* Live Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <MetricCard
           title="CPU Usage"
           value={metrics?.cpu_percent || 0}
           unit="%"
           status={(metrics?.cpu_percent ?? 0) > 80 ? 'critical' : (metrics?.cpu_percent ?? 0) > 50 ? 'warning' : 'normal'}
+        />
+        <MetricCard
+          title="GPU Usage"
+          value={metrics?.gpu_percent || 0}
+          unit="%"
+          status={(metrics?.gpu_percent ?? 0) > 80 ? 'critical' : (metrics?.gpu_percent ?? 0) > 50 ? 'warning' : 'normal'}
         />
         <MetricCard
           title="RAM Usage"

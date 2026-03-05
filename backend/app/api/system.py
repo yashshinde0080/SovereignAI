@@ -28,13 +28,21 @@ async def get_status(request: Request):
     disk = psutil.disk_usage(str(app.state.model_manager.models_dir))
     
     engine_stats = {}
+    task_type = None
+    is_generative = False
+    
     if app.state.active_engine:
         engine_stats = app.state.active_engine.get_stats()
+        task_metadata = getattr(app.state.active_engine, "task_metadata", {})
+        task_type = task_metadata.get("task_type")
+        is_generative = task_metadata.get("is_generative", False)
     
     return SystemStatus(
         model_loaded=app.state.active_model is not None,
         current_model=app.state.active_model,
         current_mode=app.state.active_mode,
+        task_type=task_type,
+        is_generative=is_generative,
         ram_total_gb=round(memory.total / (1024**3), 2),
         ram_used_gb=round(memory.used / (1024**3), 2),
         ram_available_gb=round(memory.available / (1024**3), 2),

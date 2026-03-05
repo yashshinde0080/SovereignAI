@@ -10,7 +10,7 @@ export function useModels() {
   const [models, setModels] = useState<Model[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState<any>(null);
-  const { setSystemStatus } = useStore();
+  const { setSystemStatus, setCurrentModel, setTaskType, setIsGenerative, setExecutionMode } = useStore();
   const { toast } = useToast();
 
   const refresh = useCallback(async () => {
@@ -35,9 +35,18 @@ export function useModels() {
       const result = await api.loadModel(model);
       const status = await api.getSystemStatus();
       setSystemStatus(status as any);
+      
+      const current = await api.getCurrentModel() as any;
+      if (current.loaded) {
+        setCurrentModel(current.model);
+        setTaskType(current.task_type);
+        setExecutionMode(current.mode);
+        setIsGenerative(current.is_generative);
+      }
+      
       toast({
         title: 'Model loaded',
-        description: `${model} is now ready`,
+        description: `${model} is ready for ${current.task_type?.replace(/_/g, ' ')}`,
       });
     } catch (error: any) {
       toast({
@@ -48,7 +57,7 @@ export function useModels() {
     } finally {
       setLoading(false);
     }
-  }, [setSystemStatus, toast]);
+  }, [setSystemStatus, setCurrentModel, setTaskType, setIsGenerative, setExecutionMode, toast]);
 
   const unloadModel = useCallback(async () => {
     setLoading(true);
@@ -56,6 +65,10 @@ export function useModels() {
       await api.unloadModel();
       const status = await api.getSystemStatus();
       setSystemStatus(status as any);
+      setCurrentModel('');
+      setTaskType('');
+      setIsGenerative(false);
+      
       toast({
         title: 'Model unloaded',
         description: 'System is ready',
@@ -130,6 +143,29 @@ export function useModels() {
     }
   }, [refresh, toast]);
 
+  const switchMode = useCallback(async (mode: string) => {
+    setLoading(true);
+    try {
+      await api.switchMode(mode);
+      const current = await api.getCurrentModel() as any;
+      if (current.loaded) {
+        setExecutionMode(current.mode);
+      }
+      toast({
+        title: 'Mode switched',
+        description: `Now using ${mode} mode`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Failed to switch mode',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [setExecutionMode, toast]);
+
   return {
     models,
     loading,
@@ -139,5 +175,6 @@ export function useModels() {
     deleteModel,
     downloadModel,
     downloadStatus,
+    switchMode,
   };
 }

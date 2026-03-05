@@ -116,7 +116,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     
     # Non-streaming response
     response = await app.state.active_engine.generate(
-        prompt=prompt,
+        input_data=prompt,
         max_tokens=chat_request.max_tokens,
         temperature=chat_request.temperature,
         top_p=chat_request.top_p
@@ -129,7 +129,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
             "index": 0,
             "message": {
                 "role": "assistant",
-                "content": response["text"]
+                "content": response.get("output", "") if "output" in response else response.get("text", "")
             },
             "finish_reason": response.get("finish_reason", "stop")
         }],
@@ -140,6 +140,26 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
         }
     )
 
+@router.post("/execute")
+async def execute_task(request: Request):
+    """Universal Execution Endpoint returning structured JSON as required"""
+    app = request.app
+    if not app.state.active_engine:
+        raise HTTPException(status_code=400, detail="No model loaded.")
+        
+    engine = app.state.active_engine
+    body = await request.json()
+    
+    # Delegate to Engine's unified generate implementation directly
+    try:
+        # Check task type compatibility to fail early?
+        # That's handled inside the engine.
+        result = await engine.generate(input_data=body, **body.get("generation_kwargs", {}))
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 
 async def stream_response(
     engine, 
@@ -149,7 +169,7 @@ async def stream_response(
 ) -> AsyncGenerator[str, None]:
     """Stream tokens"""
     async for chunk in engine.generate_stream(
-        prompt=prompt,
+        input_data=prompt,
         max_tokens=request.max_tokens,
         temperature=request.temperature,
         top_p=request.top_p

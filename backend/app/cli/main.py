@@ -2,51 +2,12 @@
 """SovereignAI CLI Entry Point"""
 import typer
 from rich.console import Console
-
-from cli.commands import run, pull, list_cmd, remove, benchmark, system
-
-app = typer.Typer(
-    name="sovereign",
-    help="SovereignAI Edge - Portable Offline AI Platform",
-    add_completion=False
-)
-
-console = Console()
-
-# Register commands
-app.add_typer(run.app, name="run")
-app.command(name="pull")(pull.pull)
-app.command(name="list")(list_cmd.list_models)
-app.command(name="remove")(remove.remove)
-app.command(name="benchmark")(benchmark.benchmark)
-app.command(name="system")(system.system_info)
-
-
-@app.callback()
-def callback():
-    """
-    SovereignAI Edge - Portable Offline AI Platform
-    
-    Run AI models locally without internet connection.
-    """
-    pass
-
-
-@app.command()
-def version():
-    """Show version information"""
-    from cli import __version__
-    console.print(f"[bold blue]SovereignAI Edge[/bold blue] v{__version__}")
-
-
-#!/usr/bin/env python3
-"""SovereignAI CLI Entry Point"""
-import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 import httpx
 import asyncio
+import os
+import sys
 
 app = typer.Typer(
     name="sovereign",
@@ -55,7 +16,7 @@ app = typer.Typer(
 )
 
 console = Console()
-API_BASE = "http://127.0.0.1:8000/v1"
+API_BASE = "http://localhost:8000/v1"
 
 
 @app.command()
@@ -103,8 +64,8 @@ def system():
     asyncio.run(_get_system())
 
 
-@app.command()
-def list():
+@app.command(name="list")
+def list_models():
     """List installed models"""
     async def _list():
         async with httpx.AsyncClient() as client:
@@ -217,7 +178,8 @@ def run(
                 )
                 
                 if response.status_code != 200:
-                    error = response.json().get("detail", "Unknown error")
+                    error_data = response.json()
+                    error = error_data.get("detail", "Unknown error")
                     console.print(f"[red]Error: {error}[/red]")
                     return
                 
@@ -373,12 +335,11 @@ def remove(
 
 @app.command()
 def serve(
-    host: str = typer.Option("127.0.0.1", "--host", "-h"),
+    host: str = typer.Option("0.0.0.0", "--host", "-h"),
     port: int = typer.Option(8000, "--port", "-p")
 ):
     """Start the API server"""
     import subprocess
-    import sys
     
     console.print(f"[bold]Starting server at {host}:{port}[/bold]")
     
@@ -387,7 +348,7 @@ def serve(
         "app.main:app",
         "--host", host,
         "--port", str(port)
-    ], cwd="backend")
+    ])
 
 
 if __name__ == "__main__":

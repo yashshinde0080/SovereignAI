@@ -114,6 +114,6 @@ coverage/
 # Mac/Linux temporary files
 *~
 
-/models
+/backend/models
 
 /backend/offload_cache

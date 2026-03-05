@@ -196,10 +196,6 @@
 │       │   └── 📝 SKILL.md
 │       └── 📁 web-design-guidelines
 │           └── 📝 SKILL.md
-├── 📁 .github
-│   └── 📁 instructions
-│       ├── 📝 kluster-code-verify.instructions.md
-│       └── 📝 snyk_rules.instructions.md
 ├── 📁 Info_docs
 │   ├── 📝 Gaps.md
 │   ├── 📝 algorithms.md

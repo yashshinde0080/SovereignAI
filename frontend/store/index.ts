@@ -4,6 +4,8 @@ interface SystemStatus {
   model_loaded: boolean;
   current_model: string | null;
   current_mode: string | null;
+  task_type: string | null;
+  is_generative: boolean;
   ram_total_gb: number;
   ram_used_gb: number;
   ram_available_gb: number;
@@ -34,15 +36,35 @@ interface Store {
   hardware: Hardware | null;
   setHardware: (hw: Hardware) => void;
 
+  // New Universal Task State
+  currentModel: string;
+  taskType: string;
+  executionMode: "fullram" | "layerstream" | "auto";
+  inputSchema: Record<string, any>;
+  isGenerative: boolean;
+  
+  setCurrentModel: (model: string) => void;
+  setTaskType: (task: string) => void;
+  setExecutionMode: (mode: "fullram" | "layerstream" | "auto") => void;
+  setIsGenerative: (isGen: boolean) => void;
+
   // Metrics
   metrics: {
     cpu_percent: number;
+    gpu_percent: number;
+    gpu_vram_used: number;
     ram_percent: number;
     ram_used_gb: number;
     disk_read_mb: number;
     disk_write_mb: number;
   } | null;
   setMetrics: (metrics: any) => void;
+  
+  connected: boolean;
+  setConnected: (connected: boolean) => void;
+  
+  history: Array<{time: string, cpu: number, ram: number}>;
+  setHistory: (history: any) => void;
 }
 
 export const useStore = create<Store>((set) => ({
@@ -51,7 +73,26 @@ export const useStore = create<Store>((set) => ({
 
   hardware: null,
   setHardware: (hw) => set({ hardware: hw }),
+  
+  currentModel: "",
+  taskType: "",
+  executionMode: "auto",
+  inputSchema: {},
+  isGenerative: false,
+  
+  setCurrentModel: (model) => set({ currentModel: model }),
+  setTaskType: (task) => set({ taskType: task }),
+  setExecutionMode: (mode) => set({ executionMode: mode }),
+  setIsGenerative: (isGen: boolean) => set({ isGenerative: isGen }),
 
   metrics: null,
   setMetrics: (metrics) => set({ metrics }),
+  
+  connected: false,
+  setConnected: (connected) => set({ connected }),
+  
+  history: [],
+  setHistory: (history) => set((state) => ({ 
+    history: typeof history === 'function' ? history(state.history) : history 
+  })),
 }));

@@ -19,12 +19,22 @@ class WeightSplitter:
         """
         print(f"Loading full model '{self.model_id}' to CPU for splitting...")
         # Load full model to CPU
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id,
-            device_map="cpu",
-            torch_dtype=dtype,
-            low_cpu_mem_usage=True
-        )
+        kwargs = {
+            "device_map": "cpu",
+            "torch_dtype": dtype,
+            "low_cpu_mem_usage": True,
+            "trust_remote_code": True,
+            "ignore_mismatched_sizes": True
+        }
+
+        
+        if str(self.model_id).endswith(".gguf") or str(self.model_id).endswith(".gguf.enc"):
+            import os
+            model_dir = os.path.dirname(self.model_id)
+            kwargs["gguf_file"] = os.path.basename(self.model_id)
+            model = AutoModelForCausalLM.from_pretrained(model_dir, **kwargs)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(self.model_id, **kwargs)
         
         components = ModelIntrospector.detect_model_components(model)
         

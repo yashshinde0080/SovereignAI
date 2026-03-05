@@ -22,6 +22,8 @@ class SystemStatus(BaseModel):
     model_loaded: bool
     current_model: Optional[str]
     current_mode: Optional[str]
+    task_type: Optional[str] = None
+    is_generative: bool = False
     ram_total_gb: float
     ram_used_gb: float
     ram_available_gb: float

@@ -77,11 +77,22 @@ class ApiClient {
     return this.request(`/v1/models/${model}`, { method: 'DELETE' });
   }
 
-  // Chat
+  async getCurrentModel() {
+    return this.request('/v1/models/current');
+  }
+
+  // Chat / Execute
   async chat(messages: any[], stream: boolean = false) {
     return this.request('/v1/chat/completions', {
       method: 'POST',
       body: JSON.stringify({ messages, stream }),
+    });
+  }
+
+  async executeTask(data: any) {
+    return this.request('/v1/chat/execute', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 

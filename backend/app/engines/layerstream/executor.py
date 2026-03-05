@@ -44,9 +44,21 @@ class LayerStreamEngine(BaseEngine):
             await asyncio.to_thread(splitter.split_and_save, torch.float16)
 
         try:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True, local_files_only=True)
+            tok_kwargs = {
+                "trust_remote_code": True,
+                "local_files_only": True
+            }
+            if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
+                tok_kwargs["gguf_file"] = os.path.basename(self.model_path)
+                tok_dir = os.path.dirname(self.model_path)
+            else:
+                tok_dir = self.model_path
+            
+            self.tokenizer = AutoTokenizer.from_pretrained(tok_dir, **tok_kwargs)
         except Exception:
-            self.tokenizer = AutoTokenizer.from_pretrained(self.model_path, trust_remote_code=True)
+            # Fallback
+            tok_kwargs.pop("local_files_only", None)
+            self.tokenizer = AutoTokenizer.from_pretrained(tok_dir, **tok_kwargs)
             
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -83,18 +95,19 @@ class LayerStreamEngine(BaseEngine):
             
         self.loaded = False
 
-    async def generate(
-        self,
-        prompt: str,
-        max_tokens: int = 512,
-        temperature: float = 0.7,
-        top_p: float = 0.9
-    ) -> Dict[str, Any]:
+    async def generate(self, input_data: Any, **kwargs) -> Dict[str, Any]:
         """Runs the two-phase computation engine independently maintaining context bounds"""
         if not self.loaded:
             raise RuntimeError("Engine not loaded")
             
         start_time = time.perf_counter()
+        
+        # Extract inputs
+        prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+        max_tokens = kwargs.get("max_tokens", 512)
+        temperature = kwargs.get("temperature", 0.7)
+        top_p = kwargs.get("top_p", 0.9)
+        
         # Protect against async unloading race conditions
         tokenizer = self.tokenizer
         executor = self.layer_executor
@@ -141,26 +154,33 @@ class LayerStreamEngine(BaseEngine):
         stats["tokens_per_second"] = completion_tokens / elapsed if elapsed > 0 else 0
         self.stats.update(stats)
         
+        # Resolve task dynamically for metadata
+        from app.core.task_resolver import TaskResolver
+        task_info = TaskResolver.resolve(self.model_path)
+        
         return {
-            "text": output_text,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-            "time_seconds": elapsed,
-            "tokens_per_second": stats["tokens_per_second"],
-            "finish_reason": "stop"
+            "model_name": self.model_path.split("/")[-1] if "/" in self.model_path else self.model_path.split("\\")[-1],
+            "task_type": task_info.get("task_type", "causal_lm"),
+            "mode": self.mode,
+            "input": "provided inputs", 
+            "output": output_text,
+            "confidence": "1.0000",
+            "metadata": {
+                "ram_usage": f"{stats['peak_ram_mb'] / 1024:.2f}GB",
+                "latency": f"{elapsed:.3f}s",
+                "tokens_generated": str(completion_tokens)
+            }
         }
 
-    async def generate_stream(
-        self,
-        prompt: str,
-        max_tokens: int = 512,
-        temperature: float = 0.7,
-        top_p: float = 0.9
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    async def generate_stream(self, input_data: Any, **kwargs) -> AsyncGenerator[Dict[str, Any], None]:
         """Provides async telemetry while unspooling context cleanly"""
         if not self.loaded:
             raise RuntimeError("Engine not loaded")
+            
+        prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+        max_tokens = kwargs.get("max_tokens", 512)
+        temperature = kwargs.get("temperature", 0.7)
+        top_p = kwargs.get("top_p", 0.9)
             
         tokenizer = self.tokenizer
         executor = self.layer_executor

@@ -11,12 +11,17 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
+interface ResourceChartData {
+  time: string;
+  cpu: number;
+  gpu?: number;
+  ram: number;
+  diskRead?: number;
+  diskWrite?: number;
+}
+
 interface ResourceChartProps {
-  data: Array<{
-    time: string;
-    cpu: number;
-    ram: number;
-  }>;
+  data: ResourceChartData[];
 }
 
 export function ResourceChart({ data }: ResourceChartProps) {
@@ -58,6 +63,16 @@ export function ResourceChart({ data }: ResourceChartProps) {
           strokeWidth={2}
           dot={false}
           name="CPU"
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="gpu"
+          stroke="#0ea5e9"
+          strokeWidth={2}
+          dot={false}
+          name="GPU"
+          isAnimationActive={false}
         />
         <Line
           type="monotone"
@@ -66,6 +81,25 @@ export function ResourceChart({ data }: ResourceChartProps) {
           strokeWidth={2}
           dot={false}
           name="RAM"
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="diskRead"
+          stroke="#f59e0b"
+          strokeWidth={2}
+          dot={false}
+          name="Disk Read"
+          isAnimationActive={false}
+        />
+        <Line
+          type="monotone"
+          dataKey="diskWrite"
+          stroke="#ef4444"
+          strokeWidth={2}
+          dot={false}
+          name="Disk Write"
+          isAnimationActive={false}
         />
       </LineChart>
     </ResponsiveContainer>

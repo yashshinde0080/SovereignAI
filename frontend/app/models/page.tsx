@@ -11,7 +11,7 @@ import { Plus, RefreshCw } from 'lucide-react';
 
 export default function ModelsPage() {
   const { models, loading, refresh, loadModel, unloadModel, deleteModel, downloadModel, downloadStatus } = useModels();
-  const { systemStatus } = useStore();
+  const { systemStatus, currentModel } = useStore();
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function ModelsPage() {
         <CardContent>
           <ModelTable
             models={models}
-            currentModel={systemStatus?.current_model}
+            currentModel={currentModel}
             onLoad={loadModel}
             onUnload={unloadModel}
             onDelete={deleteModel}

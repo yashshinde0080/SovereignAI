@@ -16,7 +16,7 @@ import {
 
 const navItems = [
   { href: '/', icon: Home, label: 'Home' },
-  { href: '/chat', icon: MessageSquare, label: 'Chat' },
+  { href: '/console', icon: MessageSquare, label: 'Console' },
   { href: '/models', icon: Box, label: 'Models' },
   { href: '/documents', icon: FileText, label: 'Documents' },
   { href: '/benchmark', icon: Gauge, label: 'Benchmark' },

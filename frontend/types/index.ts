@@ -31,6 +31,8 @@ export interface SystemStatus {
   model_loaded: boolean;
   current_model: string | null;
   current_mode: string | null;
+  task_type: string | null;
+  is_generative: boolean;
   ram_total_gb: number;
   ram_used_gb: number;
   ram_available_gb: number;
@@ -55,12 +57,16 @@ export interface Hardware {
 
 export interface Metrics {
   cpu_percent: number;
+  gpu_percent: number;
+  gpu_vram_used: number;
   ram_percent: number;
   ram_used_gb: number;
   disk_read_mb: number;
   disk_write_mb: number;
   model_loaded: string | null;
   mode: string | null;
+  task_type: string | null;
+  is_generative: boolean;
   engine_stats: Record<string, any>;
 }
 

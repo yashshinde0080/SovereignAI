@@ -61,7 +61,7 @@ export function FAQAccordionBlock() {
             Frequently Asked Questions
           </h2>
           <p className="mx-auto max-w-2xl text-base text-muted-foreground md:text-lg">
-            Have a question? We've got answers. If you don't find what you're
+            Have a question? We&apos;ve got answers. If you don&apos;t find what you&apos;re
             looking for, feel free to contact us.
           </p>
         </motion.div>
@@ -138,7 +138,7 @@ export function FAQAccordionBlock() {
               Still have questions?
             </h3>
             <p className="mb-6 text-sm text-muted-foreground md:text-base">
-              Our team is here to help. Get in touch and we'll respond as soon
+              Our team is here to help. Get in touch and we&apos;ll respond as soon
               as possible.
             </p>
             <div className="flex flex-col justify-center gap-3 sm:flex-row">

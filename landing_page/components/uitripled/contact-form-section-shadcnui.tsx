@@ -1,24 +1,23 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { motion, type Variants } from "framer-motion";
-import { Mail, MessageSquare, Phone, Send } from "lucide-react";
+import { Mail, MessageSquare, Send, Hexagon, Activity, ShieldCheck, Cpu, Zap, Globe } from "lucide-react";
 import { useState } from "react";
 
 const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
-    transition: { staggerChildren: 0.14, delayChildren: 0.2 },
+    transition: { staggerChildren: 0.1, delayChildren: 0.1 },
   },
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 10 },
   visible: {
     opacity: 1,
     y: 0,
@@ -26,26 +25,15 @@ const itemVariants: Variants = {
   },
 };
 
-const iconVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.8 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: { duration: 0.35, ease: "easeOut" },
-  },
-};
-
 export function ContactFormSection() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
-    phone: "",
     message: "",
   });
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    console.log("Form submitted:", formData);
   };
 
   const handleChange = (
@@ -58,227 +46,203 @@ export function ContactFormSection() {
   };
 
   return (
-    <section className="relative overflow-hidden bg-background px-6 py-24 sm:px-8 md:py-28">
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute left-1/2 top-6 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-foreground/[0.035] blur-[140px]" />
-        <div className="absolute bottom-0 right-0 h-[360px] w-[360px] rounded-full bg-primary/[0.03] blur-[130px]" />
-      </div>
+    <section className="relative w-full flex flex-col p-0 h-full">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="mb-6 relative z-10"
+      >
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold uppercase tracking-[0.2em] mb-6 shadow-[0_0_15px_rgba(16,185,129,0.15)]">
+          <Hexagon className="w-3.5 h-3.5 fill-emerald-500/20" /> SECURE CHANNEL
+        </div>
+        <h2 className="text-4xl lg:text-5xl font-black tracking-[-0.04em] text-white mb-4 leading-[0.9]">
+          Initialize <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-emerald-600">Node Sync.</span>
+        </h2>
+        <p className="text-zinc-400 text-sm font-medium leading-[1.6]">
+          Establish a direct cryptographic link to our core team. Expect response within standard operational parameters (24h).
+        </p>
+      </motion.div>
 
-      <div className="mx-auto flex max-w-6xl flex-col items-center gap-12 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-80px" }}
-          transition={{ duration: 0.5 }}
-          className="space-y-4"
-        >
-          <span className="text-xs uppercase tracking-[0.25em] text-foreground/60">
-            Contact
-          </span>
-          <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
-            Let’s build something exceptional together
-          </h2>
-          <p className="max-w-2xl text-foreground/70">
-            Share your project details and our team will reach out within one
-            business day. We’re here to collaborate and craft meaningful
-            experiences.
-          </p>
+      {/* Mini Fibonacci Grid Overlay Data */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ delay: 0.2 }}
+        className="grid grid-cols-3 grid-rows-2 gap-3 mb-8 w-full relative z-10"
+      >
+        {/* Block 02 */}
+        <div className="col-span-2 row-span-2 flex flex-col justify-between p-5 rounded-3xl bg-zinc-950 border border-white/5 border-l-emerald-500/50 shadow-2xl group hover:border-emerald-500/30 transition-all overflow-hidden relative">
+           <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/5 to-transparent pointer-events-none" />
+           <div className="flex items-center justify-between text-zinc-400 mb-4 relative z-10">
+             <div className="flex items-center gap-2">
+               <div className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+               </div>
+               <span className="text-[10px] font-mono uppercase tracking-widest font-bold">Network Status</span>
+             </div>
+             <span className="text-zinc-700 font-mono text-[10px] font-bold">02</span>
+           </div>
+           <div className="relative z-10">
+             <span className="text-white font-black text-3xl flex items-center gap-2 mb-1">
+                 Optimal <Activity className="w-6 h-6 text-emerald-500/50" />
+             </span>
+             <p className="text-zinc-500 text-xs font-medium mt-1">Decentralized nodes functioning securely via encrypted channels.</p>
+           </div>
+        </div>
+
+        {/* Block 01 - A */}
+        <div className="col-span-1 row-span-1 flex flex-col justify-center p-4 rounded-3xl bg-zinc-950 border border-white/5 border-t-indigo-500/50 shadow-xl group hover:border-indigo-500/30 transition-all relative overflow-hidden">
+           <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/5 to-transparent pointer-events-none" />
+           <div className="flex items-center justify-between text-zinc-400 mb-1 relative z-10">
+             <div className="flex items-center gap-1">
+               <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+               <span className="text-[9px] font-mono uppercase tracking-widest font-bold hidden sm:inline">Encrypt</span>
+             </div>
+             <span className="text-zinc-700 font-mono text-[9px] font-bold">01</span>
+           </div>
+           <span className="text-white font-bold text-sm sm:text-base relative z-10">Active TLS</span>
+        </div>
+
+        {/* Block 01 - B */}
+        <div className="col-span-1 row-span-1 flex flex-col justify-center p-4 rounded-3xl bg-zinc-950 border border-white/5 border-b-rose-500/50 shadow-xl group hover:border-rose-500/30 transition-all relative overflow-hidden">
+           <div className="absolute inset-0 bg-gradient-to-t from-rose-500/5 to-transparent pointer-events-none" />
+           <div className="flex items-center justify-between text-zinc-400 mb-1 relative z-10">
+             <div className="flex items-center gap-1">
+               <Cpu className="w-3.5 h-3.5 text-rose-500" />
+               <span className="text-[9px] font-mono uppercase tracking-widest font-bold hidden sm:inline">Load</span>
+             </div>
+             <span className="text-zinc-700 font-mono text-[9px] font-bold">01</span>
+           </div>
+           <span className="text-white font-bold text-sm sm:text-base relative z-10">24.5% Avg</span>
+        </div>
+      </motion.div>
+
+      <motion.form
+        onSubmit={handleSubmit}
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        className="flex flex-col gap-4 relative z-10"
+      >
+        <motion.div variants={itemVariants} className="space-y-1.5">
+          <Label htmlFor="name" className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500 ml-1">
+            Operator Name
+          </Label>
+          <Input
+            id="name"
+            name="name"
+            placeholder="System Agent"
+            value={formData.name}
+            onChange={handleChange}
+            className="h-12 rounded-2xl border-white/5 bg-zinc-900/50 text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500/50 transition-all font-mono text-sm px-4 shadow-inner"
+            required
+          />
         </motion.div>
 
-        <Card className="group relative w-full max-w-4xl overflow-hidden rounded-2xl border border-border/40 bg-background/60 p-0 backdrop-blur transition-all hover:border-border/60 hover:shadow-lg">
-          <div className="absolute inset-0 bg-gradient-to-br from-foreground/[0.04] via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+        <motion.div variants={itemVariants} className="space-y-1.5">
+          <Label htmlFor="email" className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500 ml-1">
+            Return Address
+          </Label>
+          <div className="relative">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              placeholder="agent@network.com"
+              value={formData.email}
+              onChange={handleChange}
+              className="h-12 pl-12 rounded-2xl border-white/5 bg-zinc-900/50 text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500/50 transition-all font-mono text-sm shadow-inner"
+              required
+            />
+          </div>
+        </motion.div>
 
-          <motion.form
-            onSubmit={handleSubmit}
-            variants={containerVariants}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-60px" }}
-            className="relative grid gap-10 px-6 py-8 md:grid-cols-2 md:px-10 md:py-12"
-            aria-label="Contact form"
+        <motion.div variants={itemVariants} className="space-y-1.5">
+          <Label htmlFor="message" className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500 ml-1">
+            Encrypted Payload
+          </Label>
+          <div className="relative">
+            <MessageSquare className="absolute left-4 top-4 w-4 h-4 text-zinc-500" />
+            <Textarea
+              id="message"
+              name="message"
+              placeholder="State your operational parameters and required deployment architecture..."
+              value={formData.message}
+              onChange={handleChange}
+              className="min-h-[100px] pl-12 pt-3 rounded-2xl border-white/5 bg-zinc-900/50 text-white placeholder:text-zinc-600 focus-visible:ring-1 focus-visible:ring-emerald-500/30 focus-visible:border-emerald-500/50 transition-all font-mono text-sm resize-none shadow-inner"
+              required
+            />
+          </div>
+        </motion.div>
+
+        <motion.div variants={itemVariants} className="pt-2">
+          <Button
+            type="submit"
+            className="w-full h-12 rounded-2xl bg-white text-black font-extrabold text-sm uppercase tracking-widest hover:bg-zinc-200 hover:scale-[1.02] transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.1)] group flex items-center justify-center gap-3"
           >
-            <motion.div
-              variants={itemVariants}
-              className="space-y-8 text-left text-foreground/70"
-            >
-              <motion.div
-                variants={iconVariants}
-                className="inline-flex items-center gap-2 rounded-full border border-border/40 bg-background/50 px-4 py-1.5 text-xs uppercase tracking-[0.2em] text-foreground/70 backdrop-blur"
-                aria-hidden="true"
-              >
-                <span className="h-2 w-2 rounded-full bg-primary/80" />
-                Response within 24 hours
-              </motion.div>
+            Transmit Payload
+            <Send className="w-4 h-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+          </Button>
+        </motion.div>
+      </motion.form>
 
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold tracking-tight text-foreground">
-                  Tell us about your project
-                </h3>
-                <p className="text-sm text-foreground/70">
-                  We’ll schedule a discovery call to understand your goals,
-                  timeline, and success metrics. Prefer email? Reach us at{" "}
-                  <a
-                    href="mailto:hello@example.com"
-                    className="text-foreground underline decoration-border/70 underline-offset-4 transition-colors hover:text-primary"
-                  >
-                    hello@example.com
-                  </a>
-                  .
-                </p>
-              </div>
+      {/* Bottom Mini-Fibonacci Action grid to fill empty space dynamically */}
+      <motion.div 
+        initial={{ opacity: 0, y: 10 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ delay: 0.3 }}
+        className="grid grid-cols-2 grid-rows-2 gap-3 mt-6 w-full relative z-10 flex-1 min-h-[200px]"
+      >
+        {/* Contact Info Block / Data Hub */}
+        <div className="col-span-1 row-span-2 flex flex-col justify-between p-5 rounded-3xl bg-emerald-500 border border-emerald-400 text-emerald-950 shadow-xl group hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] transition-all relative overflow-hidden">
+           <div className="flex items-center justify-between relative z-10 w-full mb-4">
+             <div className="w-8 h-8 flex items-center justify-center bg-black/10 rounded-xl group-hover:scale-110 transition-transform">
+               <Globe className="w-4 h-4 text-black" />
+             </div>
+             <span className="text-emerald-700 font-mono text-[9px] font-bold tracking-wider">03</span>
+           </div>
+           <div className="relative z-10 mt-auto">
+             <span className="font-black text-2xl lg:text-3xl tracking-tighter block leading-none">Global</span>
+             <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-800 mt-1 block">Edge Network</span>
+           </div>
+           <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-white/20 blur-[40px] rounded-full group-hover:scale-150 transition-transform duration-700 pointer-events-none" />
+        </div>
 
-              <div className="grid gap-4 text-sm text-foreground/70">
-                <div className="flex items-start gap-3 rounded-xl border border-border/40 bg-background/40 p-3">
-                  <Mail
-                    className="mt-0.5 h-4 w-4 text-foreground/60"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Email</p>
-                    <p>hello@example.com</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3 rounded-xl border border-border/40 bg-background/40 p-3">
-                  <Phone
-                    className="mt-0.5 h-4 w-4 text-foreground/60"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Phone</p>
-                    <p>+1 (555) 123-4567</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
+        {/* Priority SLA Block */}
+        <div className="col-span-1 row-span-1 flex flex-col justify-between p-4 rounded-3xl bg-indigo-600 border border-indigo-500 text-white shadow-xl group hover:shadow-[0_0_30px_rgba(79,70,229,0.4)] transition-all relative overflow-hidden">
+           <div className="flex items-center justify-between relative z-10 w-full mb-1">
+             <Zap className="w-4 h-4 text-indigo-200 group-hover:text-white transition-colors" />
+             <span className="text-indigo-300 font-mono text-[9px] font-bold tracking-wider">04</span>
+           </div>
+           <div className="relative z-10 w-full text-right mt-auto">
+             <span className="font-black text-xl lg:text-2xl tracking-tighter block leading-none">99.99%</span>
+             <span className="text-[9px] font-bold uppercase tracking-widest text-indigo-300">Uptime SLA</span>
+           </div>
+           <div className="absolute bottom-0 left-0 w-full opacity-20 pointer-events-none group-hover:opacity-40 transition-opacity">
+               <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="w-full h-12">
+                 <path d="M0,30 Q25,0 50,30 T100,30 L100,50 L0,50 Z" fill="white" />
+               </svg>
+           </div>
+        </div>
 
-            <motion.div variants={itemVariants} className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="name"
-                    className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground/60"
-                  >
-                    Full Name
-                  </Label>
-                  <Input
-                    id="name"
-                    name="name"
-                    type="text"
-                    placeholder="Alex Johnson"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="rounded-xl border border-border/40 bg-background/40 text-sm text-foreground transition-all focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-primary/30"
-                    aria-required="true"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="email"
-                    className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground/60"
-                  >
-                    Email
-                  </Label>
-                  <div className="relative">
-                    <Mail
-                      className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/50"
-                      aria-hidden="true"
-                    />
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      placeholder="alex@studio.com"
-                      value={formData.email}
-                      onChange={handleChange}
-                      className="rounded-xl border border-border/40 bg-background/40 pl-10 text-sm text-foreground transition-all focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-primary/30"
-                      autoComplete="email"
-                      aria-required="true"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="phone"
-                  className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground/60"
-                >
-                  Phone Number
-                </Label>
-                <div className="relative">
-                  <Phone
-                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground/50"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    placeholder="+1 (555) 123-4567"
-                    value={formData.phone}
-                    onChange={handleChange}
-                    className="rounded-xl border border-border/40 bg-background/40 pl-10 text-sm text-foreground transition-all focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-primary/30"
-                    autoComplete="tel"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label
-                  htmlFor="message"
-                  className="text-xs font-semibold uppercase tracking-[0.2em] text-foreground/60"
-                >
-                  Message
-                </Label>
-                <div className="relative">
-                  <MessageSquare
-                    className="absolute left-3 top-3 h-4 w-4 text-foreground/50"
-                    aria-hidden="true"
-                  />
-                  <Textarea
-                    id="message"
-                    name="message"
-                    placeholder="Tell us about your vision, timeline, and deliverables."
-                    value={formData.message}
-                    onChange={handleChange}
-                    className="min-h-[140px] rounded-xl border border-border/40 bg-background/40 pl-10 text-sm text-foreground transition-all focus-visible:border-border/60 focus-visible:ring-2 focus-visible:ring-primary/30"
-                    aria-required="true"
-                    required
-                  />
-                </div>
-              </div>
-
-              <motion.div variants={itemVariants}>
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg"
-                >
-                  Send Message
-                  <Send
-                    className="h-4 w-4 transition-transform group-hover:translate-x-1"
-                    aria-hidden="true"
-                  />
-                </Button>
-              </motion.div>
-
-              <p className="text-xs text-foreground/60">
-                By submitting this form you agree to our{" "}
-                <a
-                  href="#"
-                  className="text-foreground underline decoration-border/70 underline-offset-4 transition-colors hover:text-primary"
-                >
-                  privacy policy
-                </a>
-                .
-              </p>
-            </motion.div>
-          </motion.form>
-        </Card>
-      </div>
+        {/* Tier-1 Hardware block */}
+        <div className="col-span-1 row-span-1 flex flex-col justify-between p-4 rounded-3xl bg-zinc-950 border border-white/5 shadow-xl group hover:bg-zinc-900 transition-all cursor-pointer relative overflow-hidden">
+           <div className="flex items-center justify-between relative z-10 w-full mb-1">
+             <Cpu className="w-4 h-4 text-zinc-500 group-hover:text-emerald-500 transition-colors" />
+             <span className="text-zinc-700 font-mono text-[9px] font-bold tracking-wider">05</span>
+           </div>
+           <div className="relative z-10 w-full text-right mt-auto">
+             <span className="font-black text-xl lg:text-2xl tracking-tighter block leading-none text-zinc-300 group-hover:text-white">Tier-1</span>
+             <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500 group-hover:text-zinc-400 mt-1 block">Hardware</span>
+           </div>
+        </div>
+      </motion.div>
     </section>
   );
 }

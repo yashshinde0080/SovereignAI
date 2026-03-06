@@ -4,14 +4,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { ArrowRight, CheckCircle2, Play, Sparkles, Zap } from "lucide-react";
 import { useState } from "react";
 
 const benefits = [
-  "No credit card required",
-  "Cancel anytime",
-  "Free 14-day trial",
+  "No operational friction",
+  "Scale autonomously",
+  "Zero-trust environment",
 ];
 
 export function CTAHeroBlock() {
@@ -19,69 +20,68 @@ export function CTAHeroBlock() {
   const [isVideoHovered, setIsVideoHovered] = useState(false);
 
   return (
-    <section className="relative w-full overflow-hidden bg-gradient-to-b from-primary/5 via-background to-background px-4 py-16 md:py-24 lg:py-32">
+    <section className="relative w-full h-full flex flex-col justify-center overflow-hidden bg-transparent px-4 py-8 lg:py-12">
       {/* Animated background elements */}
-      <div className="absolute inset-0 -z-10 overflow-hidden">
+      <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none">
         <motion.div
           animate={{
             scale: [1, 1.2, 1],
             rotate: [0, 180, 360],
-            opacity: [0.3, 0.5, 0.3],
+            opacity: [0.1, 0.2, 0.1],
           }}
           transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-          className="absolute -right-1/4 -top-1/4 h-96 w-96 rounded-full bg-primary/10 blur-3xl md:h-[600px] md:w-[600px]"
+          className="absolute -right-1/4 -top-1/4 h-96 w-96 rounded-full bg-emerald-500/10 blur-3xl md:h-[600px] md:w-[600px]"
         />
         <motion.div
           animate={{
             scale: [1.2, 1, 1.2],
             rotate: [360, 180, 0],
-            opacity: [0.3, 0.5, 0.3],
+            opacity: [0.1, 0.2, 0.1],
           }}
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute -bottom-1/4 -left-1/4 h-96 w-96 rounded-full bg-primary/10 blur-3xl md:h-[600px] md:w-[600px]"
+          className="absolute -bottom-1/4 -left-1/4 h-96 w-96 rounded-full bg-indigo-500/10 blur-3xl md:h-[600px] md:w-[600px]"
         />
       </div>
 
-      <div className="mx-auto max-w-7xl">
-        <div className="grid gap-8 lg:grid-cols-2 lg:gap-12">
+      <div className="mx-auto max-w-7xl h-full flex items-center">
+        <div className="grid gap-8 lg:grid-cols-2 lg:gap-12 items-center w-full">
           {/* Left side - Content */}
           <motion.div
             initial={{ opacity: 0, x: -50 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8, ease: [0.6, 0.05, 0.01, 0.9] }}
-            className="flex flex-col justify-center"
+            className="flex flex-col justify-center h-full"
           >
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <Badge className="mb-4 md:mb-6" variant="secondary">
-                <Sparkles className="mr-1 h-3 w-3" />
-                Limited Time Offer
+              <Badge className="mb-4 md:mb-6 font-mono border-emerald-500/20 bg-emerald-500/10 text-emerald-400 backdrop-blur-sm px-4 py-1.5 uppercase tracking-[0.2em] text-[10px]" variant="outline">
+                <Sparkles className="mr-2 h-3.5 w-3.5 text-emerald-400" />
+                Network Upgrade
               </Badge>
             </motion.div>
 
             <motion.h1
-              className="mb-4 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-4xl font-bold tracking-tight text-transparent md:mb-6 md:text-5xl lg:text-6xl"
+              className="mb-4 bg-clip-text text-4xl font-black tracking-tighter text-white md:mb-6 md:text-5xl lg:text-6xl"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              Transform Your Business{" "}
-              <span className="bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-                Today
+              Transform Your Architecture{" "}
+              <span className="bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
+                Today.
               </span>
             </motion.h1>
 
             <motion.p
-              className="mb-6 text-base text-muted-foreground md:mb-8 md:text-lg lg:text-xl"
+              className="mb-6 text-base text-zinc-400 md:mb-8 md:text-lg lg:text-xl font-medium"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              Join thousands of companies using our platform to streamline their
-              workflow, boost productivity, and achieve remarkable results.
+              Join thousands of autonomous nodes routing on our sovereign infrastructure to boost latency, secure logic, and outpace hardware cycles.
             </motion.p>
 
             {/* Email signup form */}
@@ -94,13 +94,14 @@ export function CTAHeroBlock() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Input
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder="Allocate a node endpoint..."
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="h-12 flex-1 text-base md:h-14"
+                  className="h-12 flex-1 text-base md:h-14 bg-zinc-900/50 border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-emerald-500 focus-visible:ring-1"
                 />
-                <Button size="lg" className="group h-12 md:h-14">
-                  Get Started
+                <Button size="lg" className="group h-12 md:h-14 bg-emerald-500 text-black font-bold hover:bg-emerald-400 transition-colors">
+                  <Zap className="mr-2 h-4 w-4" />
+                  Spin Instance
                   <motion.div
                     className="ml-2"
                     animate={{ x: [0, 5, 0] }}
@@ -127,8 +128,8 @@ export function CTAHeroBlock() {
                   transition={{ delay: 0.7 + index * 0.1 }}
                   className="flex items-center gap-2"
                 >
-                  <CheckCircle2 className="h-5 w-5 text-primary" />
-                  <span className="text-sm text-muted-foreground md:text-base">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  <span className="text-sm font-medium text-zinc-400 md:text-base">
                     {benefit}
                   </span>
                 </motion.div>
@@ -140,28 +141,31 @@ export function CTAHeroBlock() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.9 }}
-              className="mt-8 flex flex-wrap items-center gap-4 md:mt-12"
+              className="mt-8 flex flex-wrap items-center gap-4 md:mt-12 bg-zinc-900/30 w-fit p-3 rounded-2xl border border-white/5"
             >
-              <div className="flex -space-x-2">
+              <div className="flex -space-x-2 pl-2">
                 {[1, 2, 3, 4].map((i) => (
                   <motion.div
                     key={i}
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 1 + i * 0.1, type: "spring" }}
-                    className="h-10 w-10 overflow-hidden rounded-full border-2 border-background"
+                    className="h-10 w-10 overflow-hidden rounded-full border-2 border-black bg-zinc-800"
                   >
-                    <img
-                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=user${i}`}
+                    <Image
+                      src={`https://api.dicebear.com/7.x/avataaars/svg?seed=nodeuser${i}&backgroundColor=18181b`}
                       alt={`User ${i}`}
+                      width={40}
+                      height={40}
+                      unoptimized
                       className="h-full w-full object-cover"
                     />
                   </motion.div>
                 ))}
               </div>
-              <div className="text-sm">
-                <span className="font-semibold text-foreground">10,000+</span>
-                <span className="text-muted-foreground"> happy customers</span>
+              <div className="text-sm pr-4">
+                <span className="font-bold text-white tracking-tight">10,000+</span>
+                <span className="text-zinc-500 font-medium"> hybrid endpoints</span>
               </div>
             </motion.div>
           </motion.div>
@@ -171,21 +175,27 @@ export function CTAHeroBlock() {
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8, ease: [0.6, 0.05, 0.01, 0.9] }}
-            className="flex items-center justify-center"
+            className="flex items-center justify-center h-full mt-10 lg:mt-0"
           >
             <motion.div
               onHoverStart={() => setIsVideoHovered(true)}
               onHoverEnd={() => setIsVideoHovered(false)}
-              className="relative w-full max-w-lg"
+              className="relative w-full max-w-lg cursor-pointer group"
             >
-              <Card className="relative overflow-hidden border-border/50 bg-gradient-to-br from-card to-card/50 p-4 shadow-2xl md:p-6">
+              <Card className="relative overflow-hidden border-white/10 bg-zinc-900/30 p-2 shadow-2xl backdrop-blur-sm rounded-3xl">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-transparent to-indigo-500/10 opacity-30 mix-blend-screen" />
                 <motion.div
-                  className="relative aspect-video overflow-hidden rounded-lg bg-gradient-to-br from-primary/20 to-primary/5"
-                  whileHover={{ scale: 1.02 }}
+                  className="relative aspect-video overflow-hidden rounded-2xl bg-black border border-white/10"
+                  whileHover={{ scale: 1.01 }}
                   transition={{ duration: 0.3 }}
                 >
-                  {/* Video thumbnail */}
-                  <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-primary/10 to-purple-500/10">
+                  <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+                  
+                  {/* Hexagon pattern background */}
+                  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyOCIgaGVpZ2h0PSI0OSIgdmlld0JveD0iMCAwIDI4IDQ5Ij4KICA8ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPgogICAgPHBhdGggZD0iTTEzLjk5IDIyTDcgMTJWMGw3IDEwTDcuMSAyMGwtNyAxMEMwIDMwLjEgMS4zIDIwLjEgMS4zMSAyMEwxMy45OSAyMi4xbDYuMSAxMFYyMGw2LTEwTDIxIDBE1IgPSJzZWNvbmQiIC8+CiAgICA8cGF0aCBkPSJNMTMuOTkgMjVMMSAzNWwyMiAybDUuMS0xN0wyMSA0NSBMNyA0NWwtNy0xMGw3LTEwTDEzLjk5IDI1eiIvPgogIDwvZz4KPC9zdmc+')] opacity-[0.03] animate-[spin_100s_linear_infinite]" />
+                  
+                  {/* Video thumbnail Inner visual */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-br from-emerald-500/5 to-transparent">
                     <motion.div
                       animate={
                         isVideoHovered
@@ -193,34 +203,35 @@ export function CTAHeroBlock() {
                           : { scale: 1, rotate: 0 }
                       }
                       transition={{ duration: 0.3 }}
-                      className="relative"
+                      className="relative z-20"
                     >
                       <motion.div
-                        className="absolute inset-0 rounded-full bg-primary/20 blur-xl"
-                        animate={{ scale: [1, 1.3, 1] }}
+                        className="absolute inset-0 rounded-full bg-emerald-500/30 blur-2xl"
+                        animate={{ scale: [1, 1.4, 1] }}
                         transition={{ duration: 2, repeat: Infinity }}
                       />
-                      <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-primary shadow-lg md:h-20 md:w-20">
-                        <Play className="ml-1 h-8 w-8 text-primary-foreground md:h-10 md:w-10" />
+                      <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500 shadow-[0_0_30px_rgba(16,185,129,0.5)] md:h-20 md:w-20 border border-emerald-400">
+                        <Play className="ml-1 h-8 w-8 text-black md:h-10 md:w-10 fill-black" />
                       </div>
                     </motion.div>
+                    <div className="mt-6 text-sm font-mono text-zinc-500 tracking-widest uppercase relative z-20">Secure Operations</div>
                   </div>
 
                   {/* Floating elements */}
                   <motion.div
-                    className="absolute right-4 top-4 rounded-lg bg-background/80 p-2 shadow-lg backdrop-blur-sm md:p-3"
+                    className="absolute right-4 top-4 rounded-xl bg-white/5 border border-white/10 p-2 shadow-2xl backdrop-blur-xl md:p-3"
                     animate={{ y: [0, -10, 0] }}
-                    transition={{ duration: 3, repeat: Infinity }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
                   >
-                    <Zap className="h-4 w-4 text-primary md:h-5 md:w-5" />
+                    <Zap className="h-4 w-4 text-emerald-400 md:h-5 md:w-5" />
                   </motion.div>
 
                   <motion.div
-                    className="absolute bottom-4 left-4 rounded-lg bg-background/80 p-2 shadow-lg backdrop-blur-sm md:p-3"
+                    className="absolute bottom-4 left-4 rounded-xl bg-white/5 border border-white/10 p-2 shadow-2xl backdrop-blur-xl md:p-3"
                     animate={{ y: [0, 10, 0] }}
-                    transition={{ duration: 3, repeat: Infinity, delay: 1 }}
+                    transition={{ duration: 5, repeat: Infinity, delay: 1, ease: "easeInOut" }}
                   >
-                    <CheckCircle2 className="h-4 w-4 text-primary md:h-5 md:w-5" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400 md:h-5 md:w-5" />
                   </motion.div>
                 </motion.div>
 
@@ -229,12 +240,12 @@ export function CTAHeroBlock() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 1.2 }}
-                  className="mt-4 grid grid-cols-3 gap-2 md:gap-4"
+                  className="mt-2 grid grid-cols-3 gap-2 p-1"
                 >
                   {[
-                    { label: "Users", value: "50K+" },
-                    { label: "Rating", value: "4.9★" },
-                    { label: "Countries", value: "120+" },
+                    { label: "Queries", value: "3M+" },
+                    { label: "Uptime", value: "99.9%" },
+                    { label: "Nodes", value: "400+" },
                   ].map((stat, index) => (
                     <motion.div
                       key={stat.label}
@@ -244,12 +255,12 @@ export function CTAHeroBlock() {
                         delay: 1.3 + index * 0.1,
                         type: "spring",
                       }}
-                      className="rounded-lg bg-muted/50 p-2 text-center backdrop-blur-sm md:p-3"
+                      className="rounded-xl bg-white/5 border border-white/5 p-2 text-center backdrop-blur-md hover:bg-white/10 transition-colors"
                     >
-                      <div className="text-base font-bold md:text-lg">
+                      <div className="text-base font-black md:text-lg text-white font-mono">
                         {stat.value}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
                         {stat.label}
                       </div>
                     </motion.div>

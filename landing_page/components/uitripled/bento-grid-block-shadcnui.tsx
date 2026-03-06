@@ -1,10 +1,11 @@
 "use client";
 
 import { motion, type Variants } from "framer-motion";
-import { ArrowUpRight, PlayCircle, Sparkles } from "lucide-react";
+import { ArrowUpRight, PlayCircle, Sparkles, Wand2, MonitorPlay, Focus, Layers, Box } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 interface AvatarProfile {
   src: string;
@@ -22,9 +23,9 @@ interface ProcessStep {
   progress: number;
 }
 
-interface GalleryImage {
-  src: string;
-  alt: string;
+interface GalleryItem {
+  icon: any;
+  color: string;
 }
 
 interface ReelStat {
@@ -33,16 +34,16 @@ interface ReelStat {
 
 const avatarProfiles: AvatarProfile[] = [
   {
-    src: "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?w=200&h=200&fit=crop&q=80",
-    alt: "Portrait of a motion designer smiling at the camera",
+    src: "https://api.dicebear.com/7.x/avataaars/svg?seed=motion1&backgroundColor=1f2937",
+    alt: "Portrait of a motion designer",
   },
   {
-    src: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&h=200&fit=crop&q=80",
-    alt: "Portrait of a product strategist in a studio",
+    src: "https://api.dicebear.com/7.x/avataaars/svg?seed=motion2&backgroundColor=1f2937",
+    alt: "Portrait of a product strategist",
   },
   {
-    src: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop&q=80",
-    alt: "Portrait of a UX researcher wearing headphones",
+    src: "https://api.dicebear.com/7.x/avataaars/svg?seed=motion3&backgroundColor=1f2937",
+    alt: "Portrait of a UX researcher",
   },
 ];
 
@@ -79,23 +80,11 @@ const motionProcess: ProcessStep[] = [
   },
 ];
 
-const inspirationGallery: GalleryImage[] = [
-  {
-    src: "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=400&h=320&fit=crop&q=80",
-    alt: "Collage of lighting references for motion design",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?w=400&h=320&fit=crop&q=80",
-    alt: "Creative workspace with monitors and sketchbook",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1515169067865-5387ec356754?w=400&h=320&fit=crop&q=80",
-    alt: "Colorful motion design storyboard pinned to a wall",
-  },
-  {
-    src: "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=400&h=320&fit=crop&q=80",
-    alt: "Designer adjusting camera lighting in a studio",
-  },
+const inspirationGallery: GalleryItem[] = [
+  { icon: Wand2, color: "from-indigo-500/20 to-purple-500/20" },
+  { icon: MonitorPlay, color: "from-emerald-500/20 to-teal-500/20" },
+  { icon: Focus, color: "from-rose-500/20 to-orange-500/20" },
+  { icon: Layers, color: "from-blue-500/20 to-cyan-500/20" },
 ];
 
 const reelStats: ReelStat[] = [
@@ -124,14 +113,14 @@ const cardVariants: Variants = {
 
 export function BentoGridBlock() {
   return (
-    <section className="relative w-full overflow-hidden bg-background">
+    <section className="relative w-full overflow-hidden bg-transparent">
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-foreground/[0.035] blur-[140px]" />
-        <div className="absolute bottom-0 right-0 h-[360px] w-[360px] rounded-full bg-primary/[0.035] blur-[120px]" />
-        <div className="absolute left-1/4 top-1/2 h-[400px] w-[400px] rounded-full bg-foreground/[0.02] blur-[150px]" />
+        <div className="absolute left-1/2 top-0 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-white/[0.02] blur-[140px]" />
+        <div className="absolute bottom-0 right-0 h-[360px] w-[360px] rounded-full bg-emerald-500/[0.03] blur-[120px]" />
+        <div className="absolute left-1/4 top-1/2 h-[400px] w-[400px] rounded-full bg-indigo-500/[0.02] blur-[150px]" />
       </div>
 
-      <div className="relative mx-auto max-w-7xl px-4 py-16 md:px-6 md:py-24">
+      <div className="relative mx-auto max-w-7xl px-4 py-8 md:px-6 md:py-16">
         <motion.header
           variants={sectionVariants}
           initial="hidden"
@@ -141,18 +130,18 @@ export function BentoGridBlock() {
         >
           <Badge
             variant="outline"
-            className="inline-flex items-center gap-2 rounded-full border-border/50 bg-background/60 px-4 py-1.5 text-xs uppercase tracking-[0.2em] text-foreground/70 backdrop-blur"
+            className="inline-flex items-center gap-2 rounded-full border-white/10 bg-black/40 px-4 py-1.5 text-xs uppercase tracking-[0.2em] text-white/70 backdrop-blur"
           >
             UI TripleD
             <span
-              className="h-2 w-2 rounded-full bg-primary"
+              className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"
               aria-hidden="true"
             />
           </Badge>
-          <h2 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl lg:text-5xl">
-            Bento storytelling built for modern motion systems
+          <h2 className="text-3xl font-semibold tracking-tight text-white md:text-4xl lg:text-5xl">
+            Bento storytelling built for modern systems
           </h2>
-          <p className="max-w-2xl text-base text-foreground/70 md:text-lg">
+          <p className="max-w-2xl text-base text-zinc-400 md:text-lg">
             Pair narrative, metrics, and cinematic visuals inside a responsive
             layout designed around Framer Motion micro-interactions and
             accessible navigation.
@@ -182,23 +171,23 @@ export function BentoGridBlock() {
             variants={cardVariants}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.2 }}
-            className="group relative col-span-1 flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-border/40 bg-background/70 p-6 backdrop-blur transition-all hover:border-border/60 hover:shadow-lg sm:col-span-2 lg:row-span-2"
+            className="group relative col-span-1 flex h-full flex-col justify-between overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/50 p-6 backdrop-blur transition-all hover:border-white/20 hover:shadow-lg sm:col-span-2 lg:row-span-2 shadow-2xl"
             role="article"
             aria-label="Featured case study"
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-foreground/[0.05] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+            <div className="absolute inset-0 bg-gradient-to-br from-white/[0.05] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
             <div className="relative flex h-full flex-col justify-between">
               <div className="space-y-4">
                 <Badge
                   variant="secondary"
-                  className="w-fit rounded-full border-border/40 bg-background/80 px-3 py-1 text-xs uppercase tracking-[0.2em] text-foreground/70"
+                  className="w-fit rounded-full border-white/10 bg-zinc-900/80 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-400"
                 >
                   Featured case study
                 </Badge>
-                <h3 className="text-2xl font-semibold leading-tight text-foreground md:text-3xl">
+                <h3 className="text-2xl font-semibold leading-tight text-white md:text-3xl">
                   Designing delightful product experiences
                 </h3>
-                <p className="text-sm text-foreground/70 md:text-base">
+                <p className="text-sm text-zinc-400 md:text-base">
                   We choreograph micro-interactions and depth cues that elevate
                   usability across every product surface-without sacrificing
                   performance or accessibility.
@@ -210,27 +199,30 @@ export function BentoGridBlock() {
                   role="list"
                   aria-label="Project team avatars"
                 >
-                  {avatarProfiles.map((profile) => (
+                  {avatarProfiles.map((profile, i) => (
                     <div
-                      key={profile.src}
+                      key={i}
                       role="listitem"
-                      className="relative h-11 w-11 overflow-hidden rounded-full border border-border/50 bg-background/80 transition-transform duration-300 group-hover:scale-[1.04]"
+                      className="relative h-11 w-11 overflow-hidden rounded-full border border-zinc-800 bg-zinc-900 transition-transform duration-300 group-hover:scale-[1.04]"
                     >
-                      <img
+                      <Image
                         src={profile.src}
                         alt={profile.alt}
-                        className="h-full w-full object-cover"
+                        width={44}
+                        height={44}
+                        unoptimized
+                        className="h-full w-full object-cover opacity-80"
                       />
                     </div>
                   ))}
                 </div>
                 <Button
                   variant="ghost"
-                  className="group/cta gap-2 rounded-lg bg-background/70 px-4 py-2 text-sm text-foreground hover:bg-background/80"
+                  className="group/cta gap-2 rounded-lg bg-zinc-900/70 px-4 py-2 text-sm text-white hover:bg-zinc-800"
                   aria-label="View the featured case study"
                 >
                   View story
-                  <ArrowUpRight className="h-4 w-4 transition-transform group-hover/cta:translate-x-1" />
+                  <ArrowUpRight className="h-4 w-4 text-emerald-500 transition-transform group-hover/cta:translate-x-1 group-hover/cta:-translate-y-1" />
                 </Button>
               </div>
             </div>
@@ -240,14 +232,14 @@ export function BentoGridBlock() {
             variants={cardVariants}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.2 }}
-            className="group col-span-1 flex h-full flex-col rounded-2xl border border-border/40 bg-background/70 p-6 backdrop-blur transition-all hover:border-border/60 hover:shadow-lg sm:col-span-2"
+            className="group col-span-1 flex h-full flex-col rounded-2xl border border-white/10 bg-zinc-950/50 p-6 backdrop-blur transition-all hover:border-white/20 hover:shadow-lg sm:col-span-2 shadow-2xl"
             role="article"
             aria-label="Key performance metrics"
           >
             <div className="flex items-center justify-between">
               <Badge
                 variant="secondary"
-                className="w-fit rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] text-primary"
+                className="w-fit rounded-full px-3 py-1 text-xs uppercase tracking-[0.2em] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
               >
                 Performance
               </Badge>
@@ -259,19 +251,19 @@ export function BentoGridBlock() {
                   ease: "easeInOut",
                 }}
               >
-                <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
+                <Sparkles className="h-5 w-5 text-emerald-400" aria-hidden="true" />
               </motion.div>
             </div>
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            <div className="mt-6 grid gap-4 sm:grid-cols-3 h-full">
               {keyMetrics.map((metric) => (
-                <div key={metric.label} className="">
-                  <p className="text-xs uppercase tracking-[0.18em] text-foreground/60">
+                <div key={metric.label} className="flex flex-col">
+                  <p className="text-xs uppercase tracking-[0.18em] text-zinc-500 font-mono">
                     {metric.label}
                   </p>
-                  <p className="mt-2 text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+                  <p className="mt-2 text-2xl font-semibold tracking-tight text-white md:text-3xl">
                     {metric.value}
                   </p>
-                  <p className="mt-1 inline-flex items-center gap-2 px-2 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  <p className="mt-auto inline-flex items-center gap-2 px-2 py-1 text-xs font-semibold text-emerald-500 bg-emerald-500/10 rounded-full w-fit mt-3">
                     {metric.caption}
                   </p>
                 </div>
@@ -283,39 +275,41 @@ export function BentoGridBlock() {
             variants={cardVariants}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.2 }}
-            className="group relative col-span-1 overflow-hidden rounded-2xl border border-border/40 bg-background/70 backdrop-blur hover:border-border/60 hover:shadow-lg sm:col-span-2 lg:row-span-3"
+            className="group relative col-span-1 overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/60 backdrop-blur hover:border-white/20 hover:shadow-lg sm:col-span-2 lg:row-span-3 shadow-2xl"
             role="article"
             aria-label="Behind the scenes studio imagery"
           >
-            <div className="absolute inset-0">
-              <img
-                src="https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1200&q=80"
-                alt="Designer workstation lit with cinematic lighting"
-                className="h-full w-full object-cover opacity-80"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 via-emerald-500/5 to-transparent mix-blend-screen opacity-50 group-hover:opacity-100 transition-opacity duration-700" />
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
+            
+            <div className="absolute top-8 left-8 p-4 bg-white/5 rounded-2xl backdrop-blur-xl border border-white/10 shadow-2xl group-hover:scale-105 transition-transform duration-500">
+               <Box className="w-12 h-12 text-indigo-400" strokeWidth={1.5} />
             </div>
-            <div className="relative flex h-full flex-col justify-end space-y-4 p-6 md:p-8">
+
+            <div className="absolute right-0 bottom-1/3 w-64 h-64 bg-emerald-500/20 blur-[80px] rounded-full pointer-events-none group-hover:bg-emerald-400/30 transition-colors" />
+
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-zinc-950/60 to-transparent" />
+            <div className="relative flex h-full flex-col justify-end space-y-4 p-6 md:p-8 z-10">
               <Badge
                 variant="outline"
-                className="w-fit rounded-full border-border/60 bg-background/80 px-3 py-1 text-xs uppercase tracking-[0.2em] text-foreground/70"
+                className="w-fit rounded-full border-white/20 bg-black/60 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-300 backdrop-blur"
               >
                 Behind the scenes
               </Badge>
-              <h3 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-                Immersive motion prototypes with cinematic lighting
+              <h3 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
+                Immersive modular prototypes with cinematic glow
               </h3>
-              <p className="max-w-sm text-sm text-foreground/70 md:text-base">
-                Layered light, shadow, and depth cues help teams experience the
+              <p className="max-w-sm text-sm text-zinc-400 md:text-base">
+                Layered light cues and high-end geometric precision help teams experience the
                 product as it will ship-well before the first line of production
                 code.
               </p>
               <div className="flex flex-wrap gap-2 pt-2">
-                {["Micro-interactions", "Depth cues", "Narrative flow"].map(
+                {["Micro-interactions", "Depth cues", "Component API"].map(
                   (tag) => (
                     <span
                       key={tag}
-                      className="rounded-full border border-border/40 bg-background/70 px-3 py-1 text-xs uppercase tracking-[0.18em] text-foreground/60"
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.18em] text-zinc-400 font-mono"
                     >
                       {tag}
                     </span>
@@ -329,36 +323,35 @@ export function BentoGridBlock() {
             variants={cardVariants}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.2 }}
-            className="group col-span-1 flex h-full flex-col rounded-2xl border border-border/40 bg-background/70 p-6 backdrop-blur transition-all hover:border-border/60 hover:shadow-lg sm:col-span-2 lg:row-span-2"
+            className="group col-span-1 flex h-full flex-col rounded-2xl border border-white/10 bg-zinc-950/50 p-6 backdrop-blur transition-all hover:border-white/20 hover:shadow-lg sm:col-span-2 lg:row-span-2 shadow-2xl"
             role="article"
             aria-label="Motion sprint process overview"
           >
             <div className="space-y-4">
               <Badge
                 variant="outline"
-                className="w-fit rounded-full border-primary/50 bg-background/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-primary"
+                className="w-fit rounded-full border-indigo-500/30 bg-indigo-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-indigo-400"
               >
-                Motion sprint
+                Workflow sprint
               </Badge>
-              <h3 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
+              <h3 className="text-xl font-semibold tracking-tight text-white md:text-2xl">
                 From first sketch to polished prototype in seven days
               </h3>
-              <p className="text-sm text-foreground/70 md:text-base">
+              <p className="text-sm text-zinc-400 md:text-base">
                 We compress discovery, exploration, and refinement into a
-                focused week-long sprint so your team can feel the flow of the
-                final experience sooner.
+                focused week-long sprint.
               </p>
             </div>
             <div className="mt-6 space-y-4">
               {motionProcess.map((step, index) => (
                 <div key={step.label} className="space-y-2">
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-foreground/60">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-zinc-500 font-mono">
                     <span>{step.label}</span>
-                    <span aria-label={`${step.progress}% complete`}>
+                    <span className="text-white" aria-label={`${step.progress}% complete`}>
                       {step.progress}%
                     </span>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-foreground/10">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-white/5 border border-white/10">
                     <motion.div
                       initial={{ width: 0 }}
                       whileInView={{ width: `${step.progress}%` }}
@@ -368,7 +361,7 @@ export function BentoGridBlock() {
                         ease: "easeOut",
                         delay: index * 0.1,
                       }}
-                      className="h-full rounded-full bg-primary"
+                      className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500"
                     />
                   </div>
                 </div>
@@ -376,7 +369,7 @@ export function BentoGridBlock() {
             </div>
             <Button
               variant="ghost"
-              className="mt-8 w-fit gap-2 px-0 text-sm text-primary hover:text-primary/90"
+              className="mt-8 w-fit gap-2 px-0 text-sm text-emerald-400 hover:text-emerald-300 hover:bg-transparent"
               aria-label="Play sprint walkthrough video"
             >
               <PlayCircle className="h-4 w-4" aria-hidden="true" />
@@ -388,66 +381,44 @@ export function BentoGridBlock() {
             variants={cardVariants}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.2 }}
-            className="group col-span-1 flex h-full flex-col overflow-hidden rounded-2xl border border-border/40 bg-gradient-to-br from-primary/15 via-background/70 to-background/90 p-0 backdrop-blur transition-all hover:border-border/60 hover:shadow-lg sm:col-span-2"
+            className="group col-span-1 flex h-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 p-0 backdrop-blur transition-all hover:border-white/20 hover:shadow-lg sm:col-span-2 shadow-2xl relative"
             role="article"
             aria-label="Motion showcase video"
           >
-            <div className="relative h-full">
-              <img
-                src="https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=1200&h=600&fit=crop&q=80"
-                alt="Motion design workspace with monitors"
-                className="absolute inset-0 h-full w-full object-cover opacity-30 transition-opacity duration-500 group-hover:opacity-40"
-              />
-              <div className="relative flex h-full flex-col justify-between bg-gradient-to-br from-background/90 via-background/70 to-transparent p-6 md:p-8">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-600/20 via-rose-600/10 to-transparent mix-blend-screen opacity-60 group-hover:opacity-100 transition-opacity duration-700" />
+            <div className="relative h-full flex flex-col justify-end p-6 md:p-8 z-10 w-full min-h-[300px]">
+                <div className="absolute top-8 right-8 w-16 h-16 bg-white/10 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 group-hover:scale-110 transition-transform">
+                    <PlayCircle className="w-8 h-8 text-white fill-white/20" />
+                </div>
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
                     <Badge
                       variant="outline"
-                      className="w-fit rounded-full border-border/50 bg-background/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-foreground/70"
+                      className="w-fit rounded-full border-white/20 bg-black/50 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-300"
                     >
                       Motion showcase
                     </Badge>
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{
-                        repeat: Infinity,
-                        duration: 2.4,
-                        ease: "easeInOut",
-                      }}
-                      className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/20"
-                    >
-                      <PlayCircle
-                        className="h-4 w-4 text-primary"
-                        aria-hidden="true"
-                      />
-                    </motion.div>
                   </div>
-                  <h3 className="text-xl font-semibold tracking-tight text-foreground md:text-2xl">
-                    Watch our latest animation breakdown
+                  <h3 className="text-xl font-semibold tracking-tight text-white md:text-2xl mt-4">
+                    Watch our latest architecture breakdown
                   </h3>
-                  <p className="max-w-md text-sm text-foreground/70 md:text-base">
-                    A three-minute deep dive into timing curves, coordinated
-                    transitions, and how we translate component choreography
-                    into production-ready systems.
+                  <p className="max-w-md text-sm text-zinc-400 md:text-base">
+                    A three-minute deep dive into sovereign timing curves, coordinated
+                    transitions, and how we translate component choreography.
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 text-xs text-foreground/60">
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-6 text-xs mt-auto">
                   <div className="flex flex-wrap gap-2">
                     {reelStats.map((stat) => (
                       <span
                         key={stat.label}
-                        className="rounded-full bg-background/80 px-3 py-1 uppercase tracking-[0.18em]"
+                        className="rounded-full bg-white/5 border border-white/10 px-3 py-1 uppercase tracking-[0.18em] text-white/50 font-mono"
                       >
                         {stat.label}
                       </span>
                     ))}
                   </div>
-                  <Button size="sm" className="gap-2">
-                    Watch now
-                    <PlayCircle className="h-4 w-4" aria-hidden="true" />
-                  </Button>
                 </div>
-              </div>
             </div>
           </motion.article>
 
@@ -455,43 +426,37 @@ export function BentoGridBlock() {
             variants={cardVariants}
             whileHover={{ y: -4 }}
             transition={{ duration: 0.2 }}
-            className="group col-span-1 flex h-full flex-col rounded-2xl border border-border/40 bg-background/70 p-6 backdrop-blur transition-all hover:border-border/60 hover:shadow-lg sm:col-span-2"
+            className="group col-span-1 flex h-full flex-col rounded-2xl border border-white/10 bg-zinc-950/50 p-6 backdrop-blur transition-all hover:border-white/20 hover:shadow-lg sm:col-span-2 shadow-2xl"
             role="article"
             aria-label="Visual research gallery"
           >
             <div className="space-y-3">
               <Badge
                 variant="outline"
-                className="w-fit rounded-full border-border/50 bg-background/70 px-3 py-1 text-xs uppercase tracking-[0.2em] text-foreground/60"
+                className="w-fit rounded-full border-white/10 bg-zinc-900/50 px-3 py-1 text-xs uppercase tracking-[0.2em] text-zinc-400"
               >
                 Visual research
               </Badge>
-              <h3 className="text-lg font-semibold tracking-tight text-foreground md:text-xl">
-                Capturing texture, light, and pace for new explorations
+              <h3 className="text-lg font-semibold tracking-tight text-white md:text-xl">
+                Capturing precision, shadow, and scale
               </h3>
-              <p className="text-sm text-foreground/70 md:text-base">
-                A snapshot of the references that steer our motion language and
-                narrative rhythm, curated for both product and marketing
-                surfaces.
+              <p className="text-sm text-zinc-400 md:text-base">
+                An archive of generative geometric primitives driving our sovereign language.
               </p>
             </div>
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              {inspirationGallery.map((image) => (
+            <div className="mt-8 grid grid-cols-2 gap-3">
+              {inspirationGallery.map((item, i) => (
                 <div
-                  key={image.src}
-                  className="relative aspect-[4/3] overflow-hidden rounded-xl border border-border/30 bg-background/60"
+                  key={i}
+                  className={`relative aspect-[4/3] overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br ${item.color} flex items-center justify-center`}
                 >
-                  <img
-                    src={image.src}
-                    alt={image.alt}
-                    className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
+                   <item.icon className="w-10 h-10 text-white/50 group-hover:text-white transition-colors duration-500 group-hover:scale-110" strokeWidth={1.5} />
                 </div>
               ))}
             </div>
             <Button
               variant="ghost"
-              className="mt-6 w-fit gap-2 px-0 text-sm text-primary hover:text-primary/90"
+              className="mt-6 w-fit gap-2 px-0 text-sm text-indigo-400 hover:text-indigo-300 hover:bg-transparent"
               aria-label="Open the visual inspiration archive"
             >
               Open inspiration archive

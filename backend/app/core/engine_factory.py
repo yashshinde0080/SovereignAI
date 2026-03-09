@@ -54,10 +54,24 @@ class EngineFactory:
         else:
             model_size = model_path.stat().st_size if model_path.exists() and model_path.is_file() else 0
             engine_model_path_str = str(model_path)
+            
+        print(f"DEBUG: EngineFactory creating engine for {engine_model_path_str}, size: {model_size/(1024**2):.2f} MB")
         
+        # 1. Resolve task to determine if streaming is possible
+        from app.core.task_resolver import TaskResolver
+        task_metadata = TaskResolver.resolve(engine_model_path_str)
+        is_generative = task_metadata.get("is_generative", False)
+
         # Determine mode
         if mode == "auto":
-            mode = self.memory_manager.suggest_mode(model_size)
+            # Only suggest layerstream for generative causal models
+            suggested = self.memory_manager.suggest_mode(model_size)
+            if suggested == "layerstream" and not is_generative:
+                # Fallback to fullram for non-generative tasks if layerstream suggested
+                mode = "fullram"
+            else:
+                mode = suggested
+                
             if mode == "insufficient":
                 raise RuntimeError("Insufficient memory for any execution mode")
         

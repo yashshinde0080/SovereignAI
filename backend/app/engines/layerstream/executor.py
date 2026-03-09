@@ -42,13 +42,29 @@ class LayerStreamEngine(BaseEngine):
             print(f"Components absents. Synchronizing AutoSplitter logic on cpu...")
             splitter = WeightSplitter(self.model_path, self.weights_dir)
             await asyncio.to_thread(splitter.split_and_save, torch.float16)
+        else:
+            # Maybe it was split but tokenizer wasn't copied (old version)
+            # Try to copy if they exist in source
+            tokenizer_files = ["tokenizer.json", "tokenizer_config.json", "vocab.json", "merges.txt"]
+            missing = [f for f in tokenizer_files if not os.path.exists(os.path.join(self.weights_dir, f))]
+            if missing:
+                source_dir = self.model_path
+                if os.path.isfile(source_dir): source_dir = os.path.dirname(source_dir)
+                import shutil
+                for tf in tokenizer_files:
+                    src = os.path.join(source_dir, tf)
+                    if os.path.exists(src):
+                        shutil.copy2(src, os.path.join(self.weights_dir, tf))
 
         try:
             tok_kwargs = {
                 "trust_remote_code": True,
                 "local_files_only": True
             }
-            if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
+            # Try loading from weights_dir first (preferred for split models)
+            if os.path.exists(os.path.join(self.weights_dir, "tokenizer_config.json")):
+                tok_dir = self.weights_dir
+            elif self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
                 tok_kwargs["gguf_file"] = os.path.basename(self.model_path)
                 tok_dir = os.path.dirname(self.model_path)
             else:
@@ -56,24 +72,44 @@ class LayerStreamEngine(BaseEngine):
             
             self.tokenizer = AutoTokenizer.from_pretrained(tok_dir, **tok_kwargs)
         except Exception:
-            # Fallback
+            # Fallback to source
             tok_kwargs.pop("local_files_only", None)
+            if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
+                tok_dir = os.path.dirname(self.model_path)
+            else:
+                tok_dir = self.model_path
             self.tokenizer = AutoTokenizer.from_pretrained(tok_dir, **tok_kwargs)
             
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             
-        self.config = AutoConfig.from_pretrained(self.weights_dir)
+        self.config = AutoConfig.from_pretrained(self.weights_dir, trust_remote_code=True)
+        # Force eager attention to simplify manual layer execution in modern transformers
+        self.config._attn_implementation = "eager"
+        
+        # For LayerStream, we need the text config for things like max_position_embeddings
+        # Multimodal models nest text params under text_config
+        self.ls_config = self.config
+        if hasattr(self.config, "text_config"):
+            self.ls_config = self.config.text_config
+            self.ls_config._attn_implementation = "eager"
         
         with init_empty_weights():
-            self.model = AutoModelForCausalLM.from_config(self.config)
+            # Try AutoModelForCausalLM first (standard text models)
+            # Fall back to AutoModel for multimodal/non-standard architectures
+            try:
+                self.model = AutoModelForCausalLM.from_config(self.config, trust_remote_code=True)
+            except Exception:
+                from transformers import AutoModel
+                self.model = AutoModel.from_config(self.config, trust_remote_code=True)
             
         self.components = ModelIntrospector.detect_model_components(self.model)
-        self.layer_executor = LayerExecutor(self.components, self.config, self.weights_dir, self.device)
+        self.layer_executor = LayerExecutor(self.components, self.ls_config, self.weights_dir, self.device)
         
         self.loaded = True
         self.stats["load_time"] = time.time() - start_time
         print(f"Loaded {self.model_path} LayerStream in {self.stats['load_time']:.1f}s")
+
     
     async def unload(self):
         """Garbage collection enforcement"""
@@ -102,8 +138,7 @@ class LayerStreamEngine(BaseEngine):
             
         start_time = time.perf_counter()
         
-        # Extract inputs
-        prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+        # Extract parameters
         max_tokens = kwargs.get("max_tokens", 512)
         temperature = kwargs.get("temperature", 0.7)
         top_p = kwargs.get("top_p", 0.9)
@@ -117,6 +152,15 @@ class LayerStreamEngine(BaseEngine):
         # Wipe residual memory structures safely
         executor.kv_manager.clear()
         
+        # Support Chat Template
+        if isinstance(input_data, list):
+            # Assume chat messages
+            prompt = tokenizer.apply_chat_template(input_data, tokenize=False, add_generation_prompt=True)
+        elif isinstance(input_data, dict) and "messages" in input_data:
+            prompt = tokenizer.apply_chat_template(input_data["messages"], tokenize=False, add_generation_prompt=True)
+        else:
+            prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+            
         inputs = tokenizer(prompt, return_tensors="pt")
         input_ids = inputs["input_ids"].to(self.device)
         prompt_tokens = input_ids.shape[1]
@@ -177,17 +221,24 @@ class LayerStreamEngine(BaseEngine):
         if not self.loaded:
             raise RuntimeError("Engine not loaded")
             
-        prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
-        max_tokens = kwargs.get("max_tokens", 512)
-        temperature = kwargs.get("temperature", 0.7)
-        top_p = kwargs.get("top_p", 0.9)
-            
         tokenizer = self.tokenizer
         executor = self.layer_executor
         if not tokenizer or not executor:
-            url = "Engine dependencies have been unloaded."
             yield {"token": "", "finish_reason": "error"}
             return
+            
+        # Support Chat Template
+        if isinstance(input_data, list):
+            # Assume chat messages
+            prompt = tokenizer.apply_chat_template(input_data, tokenize=False, add_generation_prompt=True)
+        elif isinstance(input_data, dict) and "messages" in input_data:
+            prompt = tokenizer.apply_chat_template(input_data["messages"], tokenize=False, add_generation_prompt=True)
+        else:
+            prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+            
+        max_tokens = kwargs.get("max_tokens", 512)
+        temperature = kwargs.get("temperature", 0.7)
+        top_p = kwargs.get("top_p", 0.9)
             
         executor.kv_manager.clear()
         inputs = tokenizer(prompt, return_tensors="pt")

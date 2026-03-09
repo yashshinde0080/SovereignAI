@@ -33,9 +33,10 @@ interface ModelTableProps {
   onUnload: () => Promise<void>;
   onDelete: (model: string) => Promise<void>;
   loading: boolean;
+  loadingId?: string | null;
 }
 
-export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, loading }: ModelTableProps) {
+export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, loading, loadingId }: ModelTableProps) {
   if (models.length === 0) {
     return (
       <div className="text-center py-8 text-muted-foreground">
@@ -98,10 +99,10 @@ export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, l
                         size="sm"
                         variant="destructive"
                         onClick={() => onUnload()}
-                        disabled={loading}
+                        disabled={loading && loadingId === model.id}
                         title="Unload Model"
                       >
-                        {loading ? (
+                        {loading && loadingId === model.id ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <Square className="h-4 w-4" fill="currentColor" />
@@ -113,10 +114,10 @@ export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, l
                       size="sm"
                       variant="default"
                       onClick={() => onLoad(model.id)}
-                      disabled={loading || !!currentModel} // disable if another model is loaded
+                      disabled={(loading && loadingId !== null) || !!currentModel} // disable if another is loading or loaded
                       title="Load Model"
                     >
-                      {loading ? (
+                      {loading && loadingId === model.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Play className="h-4 w-4" />

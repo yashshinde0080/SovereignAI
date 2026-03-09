@@ -112,6 +112,7 @@ class LayerExecutor:
         embed = self.components['embed']
         self.assign_weights(embed, embed_dict)
         hidden_states = embed(input_ids)
+        
         if hasattr(self, "DEBUG") and self.DEBUG:
             print(f"DEBUG: execute_forward embed max: {hidden_states.max().item()}")
         self.offload_weights(embed)
@@ -123,6 +124,24 @@ class LayerExecutor:
         position_ids = torch.arange(past_length, past_length + seq_length, dtype=torch.long, device=self.device).unsqueeze(0)
         cache_position = torch.arange(past_length, past_length + seq_length, dtype=torch.long, device=self.device)
         attention_mask = self._create_attention_mask((batch_size, seq_length), past_length, hidden_states.dtype)
+        
+        # Pre-compute RoPE if required by newer transformers
+        position_embeddings = None
+        rotary_emb = self.components.get("rotary_emb")
+        if rotary_emb is not None:
+             # Ensure rotary_emb buffers are in the right place
+             rotary_emb.to(self.device)
+             # Modern transformers expect (cos, sin) tuple
+             # Note: Some architectures differ, but this is the standard for Qwen2/Llama3
+             res = rotary_emb(hidden_states, position_ids)
+             if isinstance(res, tuple):
+                 # Return (cos, sin) as-is from the rotary_emb module.
+                 # Modern transformers (4.46+) expect these to be broadcastable 
+                 # to (batch, num_heads, seq, head_dim).
+                 # Standard Qwen2RotaryEmbedding returns (batch, seq, head_dim).
+                 position_embeddings = res
+             else:
+                 position_embeddings = res
         
         hf_cache = HFProxyCache(self.kv_manager)
 
@@ -144,15 +163,42 @@ class LayerExecutor:
                 kwargs["position_ids"] = position_ids
             if "attention_mask" in sig.parameters:
                 kwargs["attention_mask"] = attention_mask
-            if "use_cache" in sig.parameters:
-                kwargs["use_cache"] = True
-            if "past_key_value" in sig.parameters:
-                kwargs["past_key_value"] = hf_cache
+            
+            # Detect if this layer has exotic sub-modules that need special cache types
+            # (e.g. Qwen3.5 DecoderLayer routes past_key_values to GatedDeltaNet
+            #  which expects Qwen3_5DynamicCache with conv_states/recurrent_states)
+            has_exotic_submodule = any(
+                "cache_params" in inspect.signature(child.forward).parameters
+                for name, child in layer.named_children()
+                if hasattr(child, 'forward') and callable(child.forward)
+                and name in ('linear_attn', 'mamba', 'ssm', 'recurrent')
+            )
+            
+            if has_exotic_submodule:
+                # Pass None for cache — these layers run statelessly in LayerStream
+                if "past_key_values" in sig.parameters:
+                    kwargs["past_key_values"] = None
+                if "use_cache" in sig.parameters:
+                    kwargs["use_cache"] = False
+            else:
+                if "use_cache" in sig.parameters:
+                    kwargs["use_cache"] = True
+                # Support both old (past_key_value) and new (past_key_values) param names
+                if "past_key_values" in sig.parameters:
+                    kwargs["past_key_values"] = hf_cache
+                elif "past_key_value" in sig.parameters:
+                    kwargs["past_key_value"] = hf_cache
+                
             if "cache_position" in sig.parameters:
                 kwargs["cache_position"] = cache_position
+            if "position_embeddings" in sig.parameters:
+                kwargs["position_embeddings"] = position_embeddings
                 
             layer_outputs = layer(hidden_states, **kwargs)
-            hidden_states = layer_outputs[0]
+            if isinstance(layer_outputs, tuple):
+                hidden_states = layer_outputs[0]
+            else:
+                hidden_states = layer_outputs
             if hasattr(self, "DEBUG") and self.DEBUG:
                 print(f"DEBUG: layer {i} max: {hidden_states.max().item()}")
             

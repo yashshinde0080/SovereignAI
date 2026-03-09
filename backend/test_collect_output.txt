@@ -1,0 +1,108 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.19, pytest-9.0.2, pluggy-1.6.0
+rootdir: D:\SovereignAI\backend
+configfile: pyproject.toml
+plugins: anyio-4.12.1, asyncio-1.3.0
+asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 5 items / 2 errors
+
+<Dir backend>
+  <Module test_dl_fail.py>
+    <Function test>
+  <Module test_hf.py>
+    <Function test_dl>
+  <Module test_mode.py>
+    <Function test_engine_mode>
+  <Module test_tqdm.py>
+    <Function test>
+  <Module test_ws.py>
+    <Function test>
+
+=================================== ERRORS ====================================
+______________________ ERROR collecting app/load_test.py ______________________
+.venv\lib\site-packages\urllib3\connection.py:204: in _new_conn
+    sock = connection.create_connection(
+.venv\lib\site-packages\urllib3\util\connection.py:85: in create_connection
+    raise err
+.venv\lib\site-packages\urllib3\util\connection.py:73: in create_connection
+    sock.connect(sa)
+E   ConnectionRefusedError: [WinError 10061] No connection could be made because the target machine actively refused it
+
+The above exception was the direct cause of the following exception:
+.venv\lib\site-packages\urllib3\connectionpool.py:787: in urlopen
+    response = self._make_request(
+.venv\lib\site-packages\urllib3\connectionpool.py:493: in _make_request
+    conn.request(
+.venv\lib\site-packages\urllib3\connection.py:500: in request
+    self.endheaders()
+C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\http\client.py:1278: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\http\client.py:1038: in _send_output
+    self.send(msg)
+C:\Users\yash shinde\AppData\Roaming\uv\python\cpython-3.10.19-windows-x86_64-none\lib\http\client.py:976: in send
+    self.connect()
+.venv\lib\site-packages\urllib3\connection.py:331: in connect
+    self.sock = self._new_conn()
+.venv\lib\site-packages\urllib3\connection.py:219: in _new_conn
+    raise NewConnectionError(
+E   urllib3.exceptions.NewConnectionError: HTTPConnection(host='localhost', port=8000): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it
+
+The above exception was the direct cause of the following exception:
+.venv\lib\site-packages\requests\adapters.py:644: in send
+    resp = conn.urlopen(
+.venv\lib\site-packages\urllib3\connectionpool.py:841: in urlopen
+    retries = retries.increment(
+.venv\lib\site-packages\urllib3\util\retry.py:535: in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+E   urllib3.exceptions.MaxRetryError: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/models/load (Caused by NewConnectionError("HTTPConnection(host='localhost', port=8000): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))
+
+During handling of the above exception, another exception occurred:
+app\load_test.py:9: in <module>
+    response = requests.post(url, json=data)
+.venv\lib\site-packages\requests\api.py:115: in post
+    return request("post", url, data=data, json=json, **kwargs)
+.venv\lib\site-packages\requests\api.py:59: in request
+    return session.request(method=method, url=url, **kwargs)
+.venv\lib\site-packages\requests\sessions.py:589: in request
+    resp = self.send(prep, **send_kwargs)
+.venv\lib\site-packages\requests\sessions.py:703: in send
+    r = adapter.send(request, **kwargs)
+.venv\lib\site-packages\requests\adapters.py:677: in send
+    raise ConnectionError(e, request=request)
+E   requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=8000): Max retries exceeded with url: /v1/models/load (Caused by NewConnectionError("HTTPConnection(host='localhost', port=8000): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"))
+_______________________ ERROR collecting test_smollm.py _______________________
+.venv\lib\site-packages\transformers\utils\hub.py:403: in cached_file
+    resolved_file = hf_hub_download(
+.venv\lib\site-packages\huggingface_hub\utils\_validators.py:106: in _inner_fn
+    validate_repo_id(arg_value)
+.venv\lib\site-packages\huggingface_hub\utils\_validators.py:160: in validate_repo_id
+    raise HFValidationError(
+E   huggingface_hub.errors.HFValidationError: Repo id must use alphanumeric chars or '-', '_', '.', '--' and '..' are forbidden, '-' and '.' cannot start or end the name, max length is 96: 'D:\SovereignAI\models\installed\HuggingFaceTB-SmolLM-135M'.
+
+The above exception was the direct cause of the following exception:
+test_smollm.py:4: in <module>
+    tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
+.venv\lib\site-packages\transformers\models\auto\tokenization_auto.py:844: in from_pretrained
+    tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+.venv\lib\site-packages\transformers\models\auto\tokenization_auto.py:676: in get_tokenizer_config
+    resolved_config_file = cached_file(
+.venv\lib\site-packages\transformers\utils\hub.py:469: in cached_file
+    raise EnvironmentError(
+E   OSError: Incorrect path_or_model_id: 'D:\SovereignAI\models\installed\HuggingFaceTB-SmolLM-135M'. Please provide either the path to a local folder or the repo_id of a model on the Hub.
+------------------------------- Captured stdout -------------------------------
+Loading tokenizer...
+============================== warnings summary ===============================
+.venv\lib\site-packages\requests\__init__.py:86
+  D:\SovereignAI\backend\.venv\lib\site-packages\requests\__init__.py:86: RequestsDependencyWarning: Unable to find acceptable character detection dependency (chardet or charset_normalizer).
+    warnings.warn(
+
+app\config.py:9
+  D:\SovereignAI\backend\app\config.py:9: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class Settings(BaseSettings):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+ERROR app/load_test.py - requests.exceptions.ConnectionError: HTTPConnectionP...
+ERROR test_smollm.py - OSError: Incorrect path_or_model_id: 'D:\SovereignAI\m...
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!
+==================== 5 tests collected, 2 errors in 36.42s ====================

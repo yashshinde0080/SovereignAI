@@ -46,24 +46,40 @@ class ModelEncryption:
         return self._derive_key(machine_id)
     
     async def encrypt_model(self, model_path: Path) -> Path:
-        """Encrypt model file"""
-        encrypted_path = model_path.with_suffix(model_path.suffix + ".enc")
-        
-        # Read and encrypt in chunks
-        chunk_size = 64 * 1024 * 1024  # 64MB chunks
-        
-        with open(model_path, "rb") as f_in:
-            with open(encrypted_path, "wb") as f_out:
-                while chunk := f_in.read(chunk_size):
-                    encrypted_chunk = self.fernet.encrypt(chunk)
-                    # Write chunk size first
-                    f_out.write(len(encrypted_chunk).to_bytes(8, "big"))
-                    f_out.write(encrypted_chunk)
-        
-        # Remove original
-        model_path.unlink()
-        
-        return encrypted_path
+        """Encrypt model files"""
+        if model_path.is_dir():
+            encrypted_files = []
+            for root, dirs, files in os.walk(model_path):
+                for file in files:
+                    if file.endswith(('.bin', '.safetensors', '.pt', '.json', '.gguf')):
+                        target_file = Path(root) / file
+                        encrypted_path = target_file.with_suffix(target_file.suffix + ".enc")
+                        
+                        chunk_size = 64 * 1024 * 1024
+                        with open(target_file, "rb") as f_in:
+                            with open(encrypted_path, "wb") as f_out:
+                                while chunk := f_in.read(chunk_size):
+                                    encrypted_chunk = self.fernet.encrypt(chunk)
+                                    f_out.write(len(encrypted_chunk).to_bytes(8, "big"))
+                                    f_out.write(encrypted_chunk)
+                        
+                        target_file.unlink()
+                        encrypted_files.append(encrypted_path)
+            return model_path  # Return directory root if it was a directory
+        else:
+            encrypted_path = model_path.with_suffix(model_path.suffix + ".enc")
+            
+            chunk_size = 64 * 1024 * 1024
+            
+            with open(model_path, "rb") as f_in:
+                with open(encrypted_path, "wb") as f_out:
+                    while chunk := f_in.read(chunk_size):
+                        encrypted_chunk = self.fernet.encrypt(chunk)
+                        f_out.write(len(encrypted_chunk).to_bytes(8, "big"))
+                        f_out.write(encrypted_chunk)
+            
+            model_path.unlink()
+            return encrypted_path
     
     async def decrypt_model(self, encrypted_path: Path) -> bytes:
         """Decrypt model to memory"""

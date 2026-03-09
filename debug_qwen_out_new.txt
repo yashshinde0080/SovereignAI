@@ -1,0 +1,14 @@
+`torch_dtype` is deprecated! Use `dtype` instead!
+Traceback (most recent call last):
+  File "D:\SovereignAI\debug_load_qwen.py", line 20, in <module>
+    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+  File "D:\SovereignAI\backend\.venv\lib\site-packages\transformers\models\auto\auto_factory.py", line 374, in from_pretrained
+    return model_class.from_pretrained(
+  File "D:\SovereignAI\backend\.venv\lib\site-packages\transformers\modeling_utils.py", line 4001, in from_pretrained
+    device_map = check_and_set_device_map(device_map)  # warn, error and fix the device map
+  File "D:\SovereignAI\backend\.venv\lib\site-packages\transformers\integrations\accelerate.py", line 134, in check_and_set_device_map
+    raise ValueError(
+ValueError: Using a `device_map`, `tp_plan`, `torch.device` context manager or setting `torch.set_default_device(device)` requires `accelerate`. You can install it with `pip install accelerate`
+Testing load for D:\SovereignAI\backend\models\installed\Qwen-Qwen3.5-0.8B
+Config loaded: qwen3_5
+Error during load:

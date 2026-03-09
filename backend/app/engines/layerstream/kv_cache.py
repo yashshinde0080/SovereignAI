@@ -54,6 +54,10 @@ class HFProxyCache(DynamicCache):
         super().__init__()
         self.manager = manager
         
+    @property
+    def has_previous_state(self):
+        return self.manager.get_seq_length(0) > 0
+        
     def update(
         self,
         key_states: torch.Tensor,
@@ -78,3 +82,13 @@ class HFProxyCache(DynamicCache):
         
     def get_max_length(self) -> Optional[int]:
         return None
+    
+    def __len__(self):
+        return len(self.manager.key_cache)
+    
+    def __getitem__(self, layer_idx: int):
+        kv = self.manager.get(layer_idx)
+        if kv is not None:
+            return kv
+        return None
+

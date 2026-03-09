@@ -44,7 +44,6 @@ class FullRAMEngine(BaseEngine):
                 
             model_kwargs = {
                 "trust_remote_code": True,
-                "local_files_only": True,
                 "low_cpu_mem_usage": True,
                 "ignore_mismatched_sizes": True
 
@@ -73,7 +72,6 @@ class FullRAMEngine(BaseEngine):
                 try:
                      tok_kwargs = {
                          "trust_remote_code": True,
-                         "local_files_only": True
                      }
                      if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
                          tok_kwargs["gguf_file"] = os.path.basename(self.model_path)
@@ -151,22 +149,61 @@ class FullRAMEngine(BaseEngine):
         processed_inputs = {}
         prompt_tokens = 0
         
+        # Determine modality-based input processing
         if task_type == "question_answering":
              prompt = input_data.get("question", "")
              context = input_data.get("context", "")
              processed_inputs = self.tokenizer(prompt, context, return_tensors="pt")
              prompt_tokens = processed_inputs.input_ids.shape[1]
              
-        elif modality == "text" or (task_type in ["causal_lm", "sequence_classification"]):
-             if not self.tokenizer:
-                 raise RuntimeError("Model requires a tokenizer but none was loaded.")
-             prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
-             processed_inputs = self.tokenizer(prompt, return_tensors="pt")
-             prompt_tokens = processed_inputs.input_ids.shape[1]
-             
-        elif modality == "image" or task_type == "image_classification":
+        elif modality == "image":
              image = input_data.get("image")
              processed_inputs = self.processor(images=image, return_tensors="pt")
+             
+        elif modality == "audio":
+             audio = input_data.get("audio")
+             processed_inputs = self.processor(audio=audio, return_tensors="pt")
+             
+        elif modality == "multimodal":
+             if isinstance(input_data, str):
+                 prompt = input_data
+                 image = None
+             elif isinstance(input_data, list):
+                 if self.tokenizer:
+                     prompt = self.tokenizer.apply_chat_template(input_data, tokenize=False, add_generation_prompt=True)
+                 else:
+                     prompt = str(input_data)
+                 image = None
+             else:
+                 image = input_data.get("image")
+                 if "messages" in input_data and self.tokenizer:
+                     prompt = self.tokenizer.apply_chat_template(input_data["messages"], tokenize=False, add_generation_prompt=True)
+                 else:
+                     prompt = input_data.get("prompt", "")
+             
+             if image is not None and self.processor:
+                 processed_inputs = self.processor(text=prompt, images=image, return_tensors="pt")
+             elif self.tokenizer:
+                 processed_inputs = self.tokenizer(prompt, return_tensors="pt")
+             else:
+                 raise RuntimeError("No tokenizer or processor found for text input in multimodal mode.")
+             
+             prompt_tokens = processed_inputs.input_ids.shape[1] if hasattr(processed_inputs, "input_ids") else 0
+             
+        else: # Default: Text
+             if not self.tokenizer:
+                 raise RuntimeError("Model requires a tokenizer but none was loaded.")
+             
+             if isinstance(input_data, list):
+                 # Assume chat messages
+                 prompt = self.tokenizer.apply_chat_template(input_data, tokenize=False, add_generation_prompt=True)
+             elif isinstance(input_data, dict) and "messages" in input_data:
+                 prompt = self.tokenizer.apply_chat_template(input_data["messages"], tokenize=False, add_generation_prompt=True)
+             else:
+                 prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+                 
+             processed_inputs = self.tokenizer(prompt, return_tensors="pt")
+             prompt_tokens = processed_inputs.input_ids.shape[1]
              
         if is_generative:
              max_tokens = kwargs.get("max_tokens", 512)
@@ -183,61 +220,39 @@ class FullRAMEngine(BaseEngine):
                   gen_kwargs["pad_token_id"] = self.tokenizer.eos_token_id
              processed_inputs["generation_kwargs"] = gen_kwargs
 
-        # 2. Route Execution
-        def _execute_sync():
-            # Send mapped dict to task router correctly handling devices
-            try:
-                if is_generative:
-                     # manual generation handling for stream parsing
-                     dev_inputs = {k: v.to(self.device) for k, v in processed_inputs.items() if isinstance(v, torch.Tensor)}
-                     with torch.no_grad():
-                         output_ids = self.model.generate(**dev_inputs, **gen_kwargs)
-                     return {"output": output_ids}
-                else: 
-                     # use standard routing
-                     dev_inputs = {k: v.to(self.device) for k, v in processed_inputs.items() if isinstance(v, torch.Tensor)}
-                     with torch.no_grad():
-                         outputs = getattr(self.model, "__call__")(**dev_inputs)
-                     return {"raw_outputs": outputs}
-            except Exception as e:
-                return {"error": str(e)}
-                 
-        result = await asyncio.to_thread(_execute_sync)
-        if "error" in result:
-             raise RuntimeError(f"Execution Error: {result['error']}")
+        # 2. Route Execution via TaskRouter for unified logic
+        result = await TaskRouter.execute(
+            model=self.model,
+            task_metadata=self.task_metadata,
+            inputs=processed_inputs,
+            device=self.device
+        )
         
-        # 3. Process outputs dynamically
-        output_res = None
-        confidence = 1.0
+        # 3. Process outputs dynamically for user reporting
+        output_res = result.get("output")
+        confidence = result.get("confidence", 1.0)
+        completion_tokens = 0
         
         if is_generative:
-             output_ids = result["output"]
-             if modality == "text" or "text" in input_data:
-                  # slice the prompt
-                  output_ids = output_ids[0][prompt_tokens:]
-             else:
-                  output_ids = output_ids[0]
-             
-             output_res = self.tokenizer.decode(output_ids, skip_special_tokens=True)
-             completion_tokens = len(output_ids)
-             
-        elif task_type in ["sequence_classification", "image_classification"]:
-             outputs = result["raw_outputs"]
-             logits = outputs.logits
-             probs = torch.nn.functional.softmax(logits, dim=-1)[0].cpu().tolist()
-             predicted_class = logits.argmax(-1).item()
-             confidence = probs[predicted_class]
-             # label lookup
-             output_res = self.model.config.id2label.get(predicted_class, str(predicted_class)) if getattr(self.model.config, "id2label", None) else str(predicted_class)
-             completion_tokens = 0
-             
+            output_ids = output_res # TaskRouter returns output_ids for generative
+            if modality == "text":
+                # slice the prompt
+                output_ids = output_ids[0][prompt_tokens:]
+            else:
+                output_ids = output_ids[0]
+            
+            output_res = self.tokenizer.decode(output_ids, skip_special_tokens=True)
+            completion_tokens = len(output_ids)
+            
         elif task_type == "question_answering":
-             outputs = result["raw_outputs"]
-             answer_start = torch.argmax(outputs.start_logits)
-             answer_end = torch.argmax(outputs.end_logits) + 1
-             answer_tokens = processed_inputs["input_ids"][0][answer_start:answer_end]
-             output_res = self.tokenizer.decode(answer_tokens)
-             completion_tokens = len(answer_tokens)
+            # Extract text from QA logits
+            start_logits = result["start_logits"]
+            end_logits = result["end_logits"]
+            answer_start = torch.argmax(start_logits)
+            answer_end = torch.argmax(end_logits) + 1
+            answer_tokens = processed_inputs["input_ids"][0][answer_start:answer_end]
+            output_res = self.tokenizer.decode(answer_tokens)
+            completion_tokens = len(answer_tokens)
 
         elapsed = time.perf_counter() - start_time
         
@@ -269,7 +284,15 @@ class FullRAMEngine(BaseEngine):
         # 1. Process inputs
         if not self.tokenizer:
             raise RuntimeError("Model requires a tokenizer but none was loaded.")
-        prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+            
+        if isinstance(input_data, list):
+            # Assume chat messages
+            prompt = self.tokenizer.apply_chat_template(input_data, tokenize=False, add_generation_prompt=True)
+        elif isinstance(input_data, dict) and "messages" in input_data:
+            prompt = self.tokenizer.apply_chat_template(input_data["messages"], tokenize=False, add_generation_prompt=True)
+        else:
+            prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+            
         inputs = self.tokenizer(prompt, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         

@@ -29,7 +29,6 @@ class WeightSplitter:
 
         
         if str(self.model_id).endswith(".gguf") or str(self.model_id).endswith(".gguf.enc"):
-            import os
             model_dir = os.path.dirname(self.model_id)
             kwargs["gguf_file"] = os.path.basename(self.model_id)
             model = AutoModelForCausalLM.from_pretrained(model_dir, **kwargs)
@@ -54,6 +53,23 @@ class WeightSplitter:
         
         # Save config
         model.config.save_pretrained(self.output_dir)
+        
+        # Copy tokenizer if it exists in source dir
+        import shutil
+        tokenizer_files = [
+            "tokenizer.json", "tokenizer_config.json", "vocab.json", 
+            "merges.txt", "special_tokens_map.json", "added_tokens.json",
+            "tokenizer.model"
+        ]
+        
+        source_dir = self.model_id
+        if os.path.isfile(source_dir):
+            source_dir = os.path.dirname(source_dir)
+            
+        for tf in tokenizer_files:
+            src = os.path.join(source_dir, tf)
+            if os.path.exists(src):
+                shutil.copy2(src, os.path.join(self.output_dir, tf))
         
         # Clean up full model from RAM
         del model

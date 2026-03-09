@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     
     # Initialize model manager
     app.state.model_manager = ModelManager()
-    await app.state.model_manager.initialize()
+    await app.state.model_manager.initialize(app=app)
     
     # Initialize plugin manager
     app.state.plugin_manager = PluginManager()

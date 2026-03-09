@@ -1,11 +1,14 @@
 [project]
 name = "backend"
 version = "0.1.0"
-description = "Add your description here"
+description = "SovereignAI - Privacy-First Local AI Engine"
+authors = [
+    { name = "SovereignAI Team", email = "contact@sovereignai.com" }
+]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "accelerate==0.34.1",
+    "accelerate>=1.0.0",
     "aiofiles==23.2.1",
     "aiohttp==3.9.1",
     "aiosqlite==0.19.0",
@@ -13,8 +16,9 @@ dependencies = [
     "faiss-cpu==1.7.4",
     "fastapi==0.109.0",
     "httpx>=0.28.1",
-    "huggingface-hub==0.23.4",
+    "huggingface-hub>=0.23.4",
     "numpy>=1.24.0,<2.0.0",
+    "pillow>=12.1.1",
     "prompt-toolkit==3.0.43",
     "psutil==5.9.7",
     "pydantic>=2.0.0",
@@ -28,20 +32,27 @@ dependencies = [
     "sentence-transformers>=2.2.0",
     "toml>=0.10.2",
     "torch==2.5.1",
+    "torchaudio>=2.5.1",
+    "torchvision>=0.20.1",
     "tqdm==4.66.4",
-    "transformers==4.45.2",
+    "transformers @ git+https://github.com/huggingface/transformers.git",
     "typer>=0.12.0",
     "uvicorn[standard]==0.27.0",
     "websockets==12.0",
 ]
 
-[project.scripts]
-sovereign = "app.cli.setup_cli:app"
+[dependency-groups]
+dev = [
+    "black>=24.1.1",
+    "isort>=5.13.2",
+]
 
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["app*"]
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

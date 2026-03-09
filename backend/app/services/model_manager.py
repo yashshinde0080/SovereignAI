@@ -30,66 +30,138 @@ class ModelManager:
         
         self.provider = HuggingFaceProvider()
     
-    async def initialize(self):
-        """Initialize model manager"""
+    async def initialize(self, app=None):
+        """Initialize model manager with app reference for engine state"""
+        self.app = app
         await self.registry.initialize()
         await self.provider.initialize()
         
         # Scan for models
-        await self._scan_models()
+        await self.scan_installed()
     
-    async def _scan_models(self):
-        """Scan models directory for installed models"""
+    async def scan_installed(self):
+        """Scan models directory for installed models and sync with registry"""
         installed_dir = self.models_dir / "installed"
         installed_dir.mkdir(parents=True, exist_ok=True)
         
-        for model_dir in installed_dir.iterdir():
-            if model_dir.is_dir():
-                metadata_path = model_dir / "metadata.json"
-                metadata = None
-                if metadata_path.exists():
-                    try:
-                        with open(metadata_path) as f:
-                            metadata = json.load(f)
+        folders = [d for d in installed_dir.iterdir() if d.is_dir()]
+        gguf_files = list(installed_dir.glob("*.gguf")) + list(installed_dir.glob("*.gguf.enc"))
+        
+        installed_ids = []
+        
+        # Scan folders
+        for model_dir in folders:
+            metadata_path = model_dir / "metadata.json"
+            metadata = None
+            
+            if metadata_path.exists():
+                try:
+                    with open(metadata_path) as f:
+                        metadata = json.load(f)
+                    
+                    # Sync path with current filesystem location
+                    if "path" in metadata:
+                        original_path = Path(metadata["path"])
+                        if not original_path.exists():
+                            # If direct path fails, assume it's this directory
+                            metadata["path"] = str(model_dir)
+                except Exception as e:
+                    print(f"Error reading metadata for {model_dir}: {e}")
+                    pass
+            
+            if not metadata:
+                # Try to discover model manually if metadata is missing
+                metadata = await self._discover_model(model_dir)
+            
+            if metadata:
+                print(f"SCAN: Found model {metadata['id']} at {metadata['path']}")
+                # Always register/update to sync DB with disk
+                await self.registry.add_model(metadata)
+                installed_ids.append(metadata["id"])
+
+        # Scan standalone GGUF files
+        for gguf_path in gguf_files:
+            model_id = gguf_path.name
+            metadata = {
+                "id": model_id,
+                "name": gguf_path.name,
+                "family": "gguf",
+                "parameters": "unknown",
+                "quant": "unknown",
+                "size_gb": round(gguf_path.stat().st_size / (1024**3), 2),
+                "path": str(gguf_path),
+                "downloaded": True,
+                "modes_supported": ["fullram", "layerstream"],
+                "created_at": datetime.now().isoformat()
+            }
+            print(f"SCAN: Found GGUF model {model_id} at {gguf_path}")
+            await self.registry.add_model(metadata)
+            installed_ids.append(model_id)
+        
+        # ALSO SCAN OFFLOAD CACHE
+        cache_dir = Path("offload_cache")
+        if cache_dir.exists():
+            for cache_model_dir in cache_dir.iterdir():
+                if cache_model_dir.is_dir():
+                    # Check if it looks like a pre-split model
+                    if (cache_model_dir / "embed.safetensors").exists():
+                        model_id = f"split:{cache_model_dir.name}"
+                        metadata_path = cache_model_dir / "metadata.json"
+                        metadata = None
                         
-                        # Sync path with current filesystem location in case of moves
-                        if "path" in metadata:
-                            original_path = Path(metadata["path"])
-                            if not original_path.exists():
-                                # Try to find the file or folder within this model_dir
-                                if original_path.is_file():
-                                    # Single file model
-                                    new_path = model_dir / original_path.name
-                                    if new_path.exists():
-                                        metadata["path"] = str(new_path)
-                                else:
-                                    # Directory model
-                                    metadata["path"] = str(model_dir)
-                    except Exception:
-                        pass
-                
-                if not metadata:
-                    # Try to discover model
-                    metadata = await self._discover_model(model_dir)
-                
-                if metadata:
-                    # Always update registration to ensure paths are synchronized with filesystem moves
-                    await self.registry.add_model(metadata)
+                        if metadata_path.exists():
+                            try:
+                                with open(metadata_path) as f:
+                                    metadata = json.load(f)
+                                metadata["id"] = model_id # Force prefix
+                                metadata["path"] = str(cache_model_dir)
+                            except: pass
+                            
+                        if not metadata:
+                            # Create minimal metadata
+                            metadata = {
+                                "id": model_id,
+                                "name": f"{cache_model_dir.name} (Split)",
+                                "family": "split",
+                                "parameters": "unknown",
+                                "quant": "fp16",
+                                "size_gb": round(sum(f.stat().st_size for f in cache_model_dir.glob("*.safetensors")) / (1024**3), 2),
+                                "path": str(cache_model_dir),
+                                "downloaded": True,
+                                "modes_supported": ["layerstream"],
+                                "created_at": datetime.now().isoformat()
+                            }
+                        
+                        print(f"SCAN: Found split model {model_id} at {metadata['path']}")
+                        await self.registry.add_model(metadata)
+                        installed_ids.append(model_id)
+
+        # Cleanup registry: remove models that no longer exist on disk
+        db_models = await self.registry.list_models()
+        for db_m in db_models:
+             if db_m["id"] not in installed_ids:
+                 # Check if path still exists
+                 if not Path(db_m["path"]).exists():
+                     await self.registry.delete_model(db_m["id"])
 
     async def _discover_model(self, model_dir: Path) -> Optional[Dict[str, Any]]:
         """Try to discover model information from a directory"""
         # Look for config.json (HF repo)
         config_path = model_dir / "config.json"
+        
+        # ID strategy: use folder name if metadata is missing
+        # If folder follows name-repo format from download_model, it will stay as is
+        model_id = model_dir.name 
+        
         if config_path.exists():
             # HF repo
-            model_id = model_dir.name.replace("-", "/") # Try to restore original name format if possible
-            # Try to get better name from config
+            model_type = "unknown"
             try:
                 with open(config_path) as f:
                     config = json.load(f)
                 model_type = config.get("model_type", "unknown")
             except Exception:
-                model_type = "unknown"
+                pass
             
             # Calculate size
             size_bytes = sum(f.stat().st_size for f in model_dir.rglob("*") if f.is_file())
@@ -103,7 +175,7 @@ class ModelManager:
                 "size_gb": round(size_bytes / (1024**3), 2),
                 "path": str(model_dir),
                 "downloaded": True,
-                "modes_supported": ["fullram"],
+                "modes_supported": ["fullram", "layerstream"],
                 "created_at": datetime.now().isoformat()
             }
         
@@ -111,7 +183,6 @@ class ModelManager:
         gguf_files = list(model_dir.glob("*.gguf"))
         if gguf_files:
             gguf_path = gguf_files[0]
-            model_id = gguf_path.stem
             return {
                 "id": model_id,
                 "name": model_id,
@@ -127,6 +198,91 @@ class ModelManager:
             
         return None
     
+    async def load_model(self, model_id: str, mode: str = "auto") -> Dict[str, Any]:
+        """Unified load logic with hardware check"""
+        from app.core.engine_factory import EngineFactory
+        
+        print(f"LOAD: Request for model {model_id} (mode={mode})")
+        model = await self.get_model(model_id)
+        
+        if not model:
+            # Fuzzy match: if model_id has slashes but we only found the folder name
+            # or vice versa (some frontends replace slashes with dashes)
+            all_models = await self.list_models()
+            clean_request = model_id.replace("/", "-").replace(":", "-").lower()
+            
+            # Phase 1: Direct clean match
+            for m in all_models:
+                clean_m = m["id"].replace("/", "-").replace(":", "-").lower()
+                if clean_m == clean_request:
+                    print(f"LOAD: Direct fuzzy match {model_id} to {m['id']}")
+                    model = m
+                    break
+            
+            # Phase 2: Prefix/Suffix/Containment match
+            if not model:
+                for m in all_models:
+                    clean_m = m["id"].replace("/", "-").replace(":", "-").lower()
+                    
+                    # Match without split: prefix
+                    stripped_m = clean_m.replace("split-", "")
+                    stripped_req = clean_request.replace("split-", "")
+                    
+                    if stripped_m == stripped_req:
+                        model = m
+                        break
+                    if stripped_req in stripped_m or stripped_m in stripped_req:
+                        model = m
+                        break
+            
+            if model:
+                print(f"LOAD: Fuzzy matched {model_id} to {model['id']}")
+                model_id = model["id"]
+                    
+        if not model:
+            print(f"LOAD: Model {model_id} not found in registry")
+            raise ValueError(f"Model {model_id} not found in registry")
+            
+        if not self.app:
+            raise RuntimeError("ModelManager not linked to FastAPI application state")
+            
+        # Unload current if any
+        await self.unload_model()
+        
+        # Initialize engine
+        factory = EngineFactory(self.app.state.hardware_profile)
+        engine = await factory.create_engine(
+            model_path=model["path"],
+            mode=mode
+        )
+        
+        # Update app state
+        self.app.state.active_engine = engine
+        self.app.state.active_model = model_id
+        self.app.state.active_mode = engine.mode
+        
+        return {
+            "status": "loaded",
+            "model": model_id,
+            "mode": engine.mode,
+            "metadata": getattr(engine, "task_metadata", {})
+        }
+        
+    async def unload_model(self):
+        """Safely unload active model"""
+        if not self.app or not getattr(self.app.state, "active_engine", None):
+            return
+            
+        engine = self.app.state.active_engine
+        await engine.unload()
+        
+        self.app.state.active_engine = None
+        self.app.state.active_model = None
+        self.app.state.active_mode = None
+        
+        import gc
+        gc.collect()
+
     async def list_models(self) -> List[Dict[str, Any]]:
         """List all installed models"""
         return await self.registry.list_models()
@@ -194,8 +350,6 @@ class ModelManager:
                 progress_callback=update_progress
             )
             
-            # Skip encryption to allow direct loading via HuggingFace Hub mechanics
-            
             # Get specific file info for metadata
             file_info = info.get_file_by_quant(actual_quant) or info.get_best_file() if actual_quant else None
             
@@ -217,7 +371,7 @@ class ModelManager:
                 "path": str(model_path),
                 "checksum": file_info.checksum if file_info else "",
                 "downloaded": True,
-                "modes_supported": info.modes_supported if not actual_quant == "" else ["fullram"],
+                "modes_supported": ["fullram", "layerstream"],
                 "created_at": datetime.now().isoformat()
             }
             
@@ -240,7 +394,6 @@ class ModelManager:
         finally:
             if model_name in self._download_tasks:
                 del self._download_tasks[model_name]
-
     
     async def delete_model(self, model_name: str) -> bool:
         """Delete a model"""
@@ -249,7 +402,12 @@ class ModelManager:
             return False
         
         # Delete files
-        model_dir = Path(model["path"]).parent
+        model_path = Path(model["path"])
+        if model_path.is_dir():
+            model_dir = model_path
+        else:
+            model_dir = model_path.parent
+            
         if model_dir.exists():
             import shutil
             shutil.rmtree(model_dir)

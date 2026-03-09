@@ -9,6 +9,7 @@ import { Model } from '@/types';
 export function useModels() {
   const [models, setModels] = useState<Model[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<any>(null);
   const { setSystemStatus, setCurrentModel, setTaskType, setIsGenerative, setExecutionMode } = useStore();
   const { toast } = useToast();
@@ -31,6 +32,7 @@ export function useModels() {
 
   const loadModel = useCallback(async (model: string) => {
     setLoading(true);
+    setLoadingId(model);
     try {
       const result = await api.loadModel(model);
       const status = await api.getSystemStatus();
@@ -56,11 +58,14 @@ export function useModels() {
       });
     } finally {
       setLoading(false);
+      setLoadingId(null);
     }
   }, [setSystemStatus, setCurrentModel, setTaskType, setIsGenerative, setExecutionMode, toast]);
 
   const unloadModel = useCallback(async () => {
+    const activeId = useStore.getState().currentModel;
     setLoading(true);
+    if (activeId) setLoadingId(activeId);
     try {
       await api.unloadModel();
       const status = await api.getSystemStatus();
@@ -81,8 +86,9 @@ export function useModels() {
       });
     } finally {
       setLoading(false);
+      setLoadingId(null);
     }
-  }, [setSystemStatus, toast]);
+  }, [setSystemStatus, toast, setCurrentModel, setTaskType, setIsGenerative]);
 
   const deleteModel = useCallback(async (model: string) => {
     try {
@@ -169,6 +175,7 @@ export function useModels() {
   return {
     models,
     loading,
+    loadingId,
     refresh,
     loadModel,
     unloadModel,

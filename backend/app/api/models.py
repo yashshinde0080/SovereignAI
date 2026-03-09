@@ -61,58 +61,42 @@ async def pull_status(request: Request, model_name: str):
 
 @router.post("/load")
 async def load_model(request: Request, load_request: LoadRequest):
-    """Load a model into memory"""
+    """Load model into RAM/VRAM"""
     app = request.app
-    model_manager = app.state.model_manager
+    manager: ModelManager = app.state.model_manager
     
-    # Get model metadata
-    model = await model_manager.get_model(load_request.model)
-    if not model:
-        raise HTTPException(status_code=404, detail="Model not found")
-    
-    # Determine mode
-    mode = load_request.mode or "auto"
-    
-    # Create engine factory
-    factory = EngineFactory(app.state.hardware_profile)
-    
-    # Unload current model if any
-    if app.state.active_engine:
-        await app.state.active_engine.unload()
-    
-    # Create and load engine
     try:
-        engine = await factory.create_engine(
-            model_path=model["path"],
-            mode=mode
+        result = await manager.load_model(
+            model_id=load_request.model,
+            mode=load_request.mode
         )
-        
-        app.state.active_engine = engine
-        app.state.active_model = load_request.model
-        app.state.active_mode = engine.mode
-        
-        return {
-            "status": "loaded",
-            "model": load_request.model,
-            "mode": engine.mode,
-            "ram_usage": engine.get_memory_usage()
-        }
+        return result
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
+        raise HTTPException(status_code=500, detail=f"Model configuration error: {msg}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to load model: {str(e)}")
 
 
 @router.post("/unload")
 async def unload_model(request: Request):
-    """Unload current model"""
-    app = request.app
-    
-    if app.state.active_engine:
-        await app.state.active_engine.unload()
-        app.state.active_engine = None
-        app.state.active_model = None
-        app.state.active_mode = None
-    
+    """Unload active model"""
+    manager: ModelManager = request.app.state.model_manager
+    await manager.unload_model()
     return {"status": "unloaded"}
+
+
+@router.post("/refresh")
+async def refresh_models(request: Request):
+    """Scan models directory and update registry"""
+    manager: ModelManager = request.app.state.model_manager
+    await manager.scan_installed()
+    models = await manager.list_models()
+    return {"status": "refreshed", "count": len(models)}
 
 
 @router.get("/current")

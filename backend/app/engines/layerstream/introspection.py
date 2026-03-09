@@ -54,6 +54,13 @@ class ModelIntrospector:
             else:
                 components['norm'] = None # Some models may not have a final norm
                 
+        # 5. Rotary Embeddings (RoPE)
+        components['rotary_emb'] = None
+        for name, module in base_model.named_modules():
+            if "rotary_emb" in name:
+                components['rotary_emb'] = module
+                break
+
         # Validate existence
         if 'embed' not in components or components['embed'] is None:
             raise ValueError("Could not dynamically detect Embedding layer.")

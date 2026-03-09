@@ -91,12 +91,21 @@ class MemoryManager:
         return model_size_bytes * 1.2 < available
     
     def suggest_mode(self, model_size_bytes: int) -> str:
-        """Suggest execution mode based on memory"""
+        """Suggest execution mode based on memory and VRAM availability"""
+        import torch
+        if torch.cuda.is_available():
+            try:
+                free_vram, _ = torch.cuda.mem_get_info()
+                if model_size_bytes * 1.1 < free_vram:
+                    return "fullram"
+            except Exception:
+                pass
+                
         available_ram = psutil.virtual_memory().available
         
-        if model_size_bytes * 1.4 < available_ram:
+        if model_size_bytes * 1.1 < available_ram:
             return "fullram"
-        elif model_size_bytes * 0.3 < available_ram:
+        elif model_size_bytes * 0.1 < available_ram:
             return "layerstream"
         else:
             return "insufficient"

@@ -10,6 +10,7 @@ import { Cpu, HardDrive, MemoryStick, Zap, ArrowRight, Gauge } from 'lucide-reac
 import Link from 'next/link';
 import { ModelControlPanel } from '@/components/models/ModelControlPanel';
 
+
 export default function HomePage() {
   const { systemStatus, setSystemStatus, hardware, setHardware } = useStore();
   const [recommendations, setRecommendations] = useState<any[]>([]);

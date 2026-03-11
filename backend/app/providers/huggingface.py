@@ -598,6 +598,8 @@ class HuggingFaceProvider(BaseProvider):
         
         class ProgressTracker(tqdm):
             def __init__(self, *args, **kwargs):
+                # Remove unsupported arguments like 'name' that may be passed by huggingface_hub
+                kwargs.pop('name', None)
                 self.is_bytes = kwargs.get('unit', '') == 'B'
                 super().__init__(*args, **kwargs)
 

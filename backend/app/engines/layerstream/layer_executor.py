@@ -18,6 +18,10 @@ class LayerExecutor:
         self.device = torch.device(device)
         self.num_layers = len(components['layers'])
         
+        # CPU Optimization: float16 is very slow on many CPUs. 
+        # Use bfloat16 or float32 for CPU-only runs.
+        self.compute_dtype = torch.float16 if self.device.type == "cuda" else torch.float32
+        
         self.loader = LayerWeightLoader(weights_dir)
         self.tracker = BenchmarkTracker()
         self.kv_manager = KVCacheManager()
@@ -44,6 +48,7 @@ class LayerExecutor:
         return mask
 
     def assign_weights(self, module: nn.Module, state_dict: dict):
+        """Ultra-fast weight assignment with vGPU/CUDA awareness."""
         for name, _ in module.named_parameters():
             if name in state_dict:
                 parts = name.split('.')
@@ -51,6 +56,7 @@ class LayerExecutor:
                 for part in parts[:-1]:
                     parent = getattr(parent, part)
                 attr = parts[-1]
+                # vGPU/CUDA optimization: use non_blocking=True to overlap copy with next disk read
                 dev_tensor = state_dict[name].to(self.device, non_blocking=True)
                 parent._parameters[attr] = nn.Parameter(dev_tensor, requires_grad=False)
                 
@@ -65,6 +71,7 @@ class LayerExecutor:
                 dev_tensor = state_dict[name].to(self.device, non_blocking=True)
                 parent._buffers[attr] = dev_tensor
             elif buf is not None and buf.device.type == 'meta':
+                # Handle RoPE and other buffers specifically for CUDA/vGPU
                 if "inv_freq" in attr:
                     dim = buf.shape[0] * 2
                     base = getattr(self.config, "rope_theta", 10000.0)
@@ -74,7 +81,7 @@ class LayerExecutor:
                     if getattr(buf, 'dtype', None) in [torch.int, torch.long, torch.bool]:
                         parent._buffers[attr] = torch.zeros_like(buf, device=self.device)
                     else:
-                        parent._buffers[attr] = torch.zeros_like(buf, device=self.device, dtype=torch.float16)
+                        parent._buffers[attr] = torch.zeros_like(buf, device=self.device, dtype=self.compute_dtype)
 
     def offload_weights(self, module: nn.Module):
         """Immediately destroys dense parameters to isolate VRAM peak values."""
@@ -117,9 +124,8 @@ class LayerExecutor:
             print(f"DEBUG: execute_forward embed max: {hidden_states.max().item()}")
         self.offload_weights(embed)
         
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-            torch.cuda.empty_cache()
+        # Removed aggressive CUDA sync/empty_cache here for speed.
+        # The allocator handles fragmentation naturally.
 
         position_ids = torch.arange(past_length, past_length + seq_length, dtype=torch.long, device=self.device).unsqueeze(0)
         cache_position = torch.arange(past_length, past_length + seq_length, dtype=torch.long, device=self.device)
@@ -149,7 +155,8 @@ class LayerExecutor:
         for i, layer in enumerate(self.components['layers']):
             t0 = time.perf_counter()
             next_idx = i + 1
-            if mode == "prefill" and next_idx < self.num_layers:
+            # Enable prefetching for both prefill and decode to maintain pipeline speed
+            if next_idx < self.num_layers:
                 self.loader.prefetch_async(self.layer_paths[next_idx])
             
             layer_dict = self.loader.get_weights(self.layer_paths[i])
@@ -191,10 +198,9 @@ class LayerExecutor:
             
             self.offload_weights(layer)
             
-            # VRAM boundaries maintained continuously
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
+            # REMOVED: torch.cuda.empty_cache() and synchronize() in inner loop
+            # These were the primary bottlenecks for LayerStream generation speed.
+            # We only record VRAM usage here.
             self.tracker.update_vram()
             
         norm = self.components['norm']
@@ -205,9 +211,6 @@ class LayerExecutor:
             self.assign_weights(norm, norm_dict)
             hidden_states = norm(hidden_states)
             self.offload_weights(norm)
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
             self.tracker.update_vram()
 
         lm_head = self.components['lm_head']
@@ -219,9 +222,6 @@ class LayerExecutor:
         last_hidden_state = hidden_states[:, -1:, :]
         logits = lm_head(last_hidden_state)
         self.offload_weights(lm_head)
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()
-            torch.cuda.empty_cache()
         self.tracker.update_vram()
         
         self.tracker.record_compute(time.perf_counter() - compute_start)

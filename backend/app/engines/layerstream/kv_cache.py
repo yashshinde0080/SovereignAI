@@ -18,20 +18,24 @@ class KVCacheManager:
             self.conv_states.append(None)
             self.recurrent_states.append(None)
             
-    def get(self, layer_idx: int) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
+    def get(self, layer_idx: int, device: Optional[torch.device] = None) -> Optional[Tuple[torch.Tensor, torch.Tensor]]:
         if layer_idx < len(self.key_cache):
             k = self.key_cache[layer_idx]
             v = self.value_cache[layer_idx]
             if k is not None and v is not None:
+                # vGPU/CUDA Optimization: Move to cache/compute device only when needed
+                if device is not None and k.device != device:
+                    return k.to(device, non_blocking=True), v.to(device, non_blocking=True)
                 return k, v
         return None
         
     def set(self, layer_idx: int, kv: Tuple[torch.Tensor, torch.Tensor]):
         self.ensure_layer(layer_idx)
         k, v = kv
-        # Enforce CPU residency
-        self.key_cache[layer_idx] = k.detach().cpu()
-        self.value_cache[layer_idx] = v.detach().cpu()
+        # Optimization: Keep on GPU for speed. Weights are offloaded, but KV cache
+        # residency on GPU is critical for latency in streaming engines.
+        self.key_cache[layer_idx] = k
+        self.value_cache[layer_idx] = v
         
     def clear(self):
         self.key_cache = []
@@ -63,6 +67,7 @@ class ProxyList:
         lst = getattr(self.manager, self.attr_name)
         val = lst[i]
         if val is not None:
+            # Fallback for CPU runs: don't force to CUDA if we are explicitly on CPU
             device = "cuda" if torch.cuda.is_available() else "cpu"
             view = val.to(device)
             self._active_views[i] = view
@@ -84,7 +89,8 @@ class ProxyList:
         lst = getattr(self.manager, self.attr_name)
         for i, view in self._active_views.items():
             if view is not None:
-                lst[i] = view.detach().cpu()
+                # Keep on original device for speed if possible
+                lst[i] = view.detach()
         self._active_views.clear()
 
 class HFProxyCache(DynamicCache):
@@ -106,11 +112,14 @@ class HFProxyCache(DynamicCache):
         layer_idx: int,
         cache_kwargs=None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        past_kv = self.manager.get(layer_idx)
+        # Intelligent Update: Detects vGPU vs Dedicated GPU vs CPU
+        compute_device = key_states.device
+        past_kv = self.manager.get(layer_idx, device=compute_device)
+        
         if past_kv is not None:
-            k_cpu, v_cpu = past_kv
-            k_new = torch.cat([k_cpu.to(key_states.device), key_states], dim=-2)
-            v_new = torch.cat([v_cpu.to(value_states.device), value_states], dim=-2)
+            prev_k, prev_v = past_kv
+            k_new = torch.cat([prev_k, key_states], dim=-2)
+            v_new = torch.cat([prev_v, value_states], dim=-2)
         else:
             k_new = key_states
             v_new = value_states

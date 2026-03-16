@@ -164,30 +164,13 @@ class LayerExecutor:
             if "attention_mask" in sig.parameters:
                 kwargs["attention_mask"] = attention_mask
             
-            # Detect if this layer has exotic sub-modules that need special cache types
-            # (e.g. Qwen3.5 DecoderLayer routes past_key_values to GatedDeltaNet
-            #  which expects Qwen3_5DynamicCache with conv_states/recurrent_states)
-            has_exotic_submodule = any(
-                "cache_params" in inspect.signature(child.forward).parameters
-                for name, child in layer.named_children()
-                if hasattr(child, 'forward') and callable(child.forward)
-                and name in ('linear_attn', 'mamba', 'ssm', 'recurrent')
-            )
-            
-            if has_exotic_submodule:
-                # Pass None for cache — these layers run statelessly in LayerStream
-                if "past_key_values" in sig.parameters:
-                    kwargs["past_key_values"] = None
-                if "use_cache" in sig.parameters:
-                    kwargs["use_cache"] = False
-            else:
-                if "use_cache" in sig.parameters:
-                    kwargs["use_cache"] = True
-                # Support both old (past_key_value) and new (past_key_values) param names
-                if "past_key_values" in sig.parameters:
-                    kwargs["past_key_values"] = hf_cache
-                elif "past_key_value" in sig.parameters:
-                    kwargs["past_key_value"] = hf_cache
+            if "use_cache" in sig.parameters:
+                kwargs["use_cache"] = True
+            # Support both old (past_key_value) and new (past_key_values) param names
+            if "past_key_values" in sig.parameters:
+                kwargs["past_key_values"] = hf_cache
+            elif "past_key_value" in sig.parameters:
+                kwargs["past_key_value"] = hf_cache
                 
             if "cache_position" in sig.parameters:
                 kwargs["cache_position"] = cache_position
@@ -195,6 +178,10 @@ class LayerExecutor:
                 kwargs["position_embeddings"] = position_embeddings
                 
             layer_outputs = layer(hidden_states, **kwargs)
+            
+            hf_cache.conv_states.sync_back()
+            hf_cache.recurrent_states.sync_back()
+            
             if isinstance(layer_outputs, tuple):
                 hidden_states = layer_outputs[0]
             else:
@@ -221,6 +208,7 @@ class LayerExecutor:
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
+            self.tracker.update_vram()
 
         lm_head = self.components['lm_head']
         t0 = time.perf_counter()
@@ -234,7 +222,9 @@ class LayerExecutor:
         if torch.cuda.is_available():
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
+        self.tracker.update_vram()
         
         self.tracker.record_compute(time.perf_counter() - compute_start)
         self.tracker.set_kv_cache_size(self.kv_manager.get_size_mb())
+        self.kv_manager.seq_length = past_length + seq_length
         return logits

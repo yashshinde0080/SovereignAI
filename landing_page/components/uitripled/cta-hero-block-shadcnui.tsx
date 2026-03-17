@@ -69,9 +69,9 @@ export function CTAHeroBlock() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              Transform Your Architecture{" "}
+              Sovereign Portable.{" "}
               <span className="bg-gradient-to-r from-emerald-400 to-emerald-600 bg-clip-text text-transparent">
-                Today.
+                Intelligence System
               </span>
             </motion.h1>
 
@@ -81,7 +81,7 @@ export function CTAHeroBlock() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              Join thousands of autonomous nodes routing on our sovereign infrastructure to boost latency, secure logic, and outpace hardware cycles.
+              "A sovereign, portable AI compute environment that runs anywhere without installation or internet. Built for true air-gapped deployments with zero cloud dependency, zero telemetry, and enterprise-grade security"
             </motion.p>
 
             {/* Email signup form */}
@@ -94,14 +94,14 @@ export function CTAHeroBlock() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Input
                   type="email"
-                  placeholder="Allocate a node endpoint..."
+                  placeholder="Join us in the AI Revolution.............."
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="h-12 flex-1 text-base md:h-14 bg-zinc-900/50 border-white/10 text-white placeholder:text-zinc-600 focus-visible:ring-emerald-500 focus-visible:ring-1"
                 />
                 <Button size="lg" className="group h-12 md:h-14 bg-emerald-500 text-black font-bold hover:bg-emerald-400 transition-colors">
                   <Zap className="mr-2 h-4 w-4" />
-                  Spin Instance
+                  Download
                   <motion.div
                     className="ml-2"
                     animate={{ x: [0, 5, 0] }}
@@ -165,7 +165,7 @@ export function CTAHeroBlock() {
               </div>
               <div className="text-sm pr-4">
                 <span className="font-bold text-white tracking-tight">10,000+</span>
-                <span className="text-zinc-500 font-medium"> hybrid endpoints</span>
+                <span className="text-zinc-500 font-medium"> Models Integrated with Hugging Face</span>
               </div>
             </motion.div>
           </motion.div>

@@ -54,17 +54,18 @@ class SettingsDatabase:
                 );
             """)
 
-            # Insert default settings if not exist
-            cursor = conn.execute("SELECT COUNT(*) as cnt FROM settings")
-            count = cursor.fetchone()["cnt"]
-            if count == 0:
-                defaults = FullSettings()
-                for section in ["general", "personalization", "data_controls", "security", "parental_controls"]:
+            # Ensure all sections exist
+            defaults = FullSettings()
+            for section in ["general", "personalization", "data_controls", "security", "parental_controls", "project"]:
+                cursor = conn.execute("SELECT COUNT(*) as cnt FROM settings WHERE section = ?", (section,))
+                if cursor.fetchone()["cnt"] == 0:
                     data = getattr(defaults, section).model_dump_json()
                     conn.execute(
                         "INSERT INTO settings (section, data) VALUES (?, ?)",
                         (section, data)
                     )
+
+
 
             # Insert default agents if not exist
             cursor = conn.execute("SELECT COUNT(*) as cnt FROM agents")
@@ -148,7 +149,7 @@ class SettingsDatabase:
         conn = self._get_connection()
         try:
             defaults = FullSettings()
-            for section in ["general", "personalization", "data_controls", "security", "parental_controls"]:
+            for section in ["general", "personalization", "data_controls", "security", "parental_controls", "project"]:
                 data = getattr(defaults, section).model_dump_json()
                 conn.execute(
                     """INSERT INTO settings (section, data, updated_at) 
@@ -157,6 +158,7 @@ class SettingsDatabase:
                        DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP""",
                     (section, data)
                 )
+
 
             # Reset agents
             conn.execute("DELETE FROM agents")

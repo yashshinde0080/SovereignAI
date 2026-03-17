@@ -186,6 +186,18 @@ class ParentalControlsSettings(BaseModel):
     activity_log: bool = False
 
 
+class ProjectSettings(BaseModel):
+    project_name: str = "SovereignAI"
+    project_version: str = "1.0.0"
+    project_description: str = "A powerful AI platform with local and cloud model support."
+    author: str = "Sovereign Team"
+    github_repo: str = "https://github.com/SovereignAI/Sovereign"
+    environment: str = "development"
+    api_endpoint: str = "http://localhost:8000"
+    documentation_url: str = "https://docs.sovereign.ai"
+
+
+
 class FullSettings(BaseModel):
     general: GeneralSettings = GeneralSettings()
     agents: list[AgentConfig] = []
@@ -193,6 +205,8 @@ class FullSettings(BaseModel):
     data_controls: DataControlsSettings = DataControlsSettings()
     security: SecuritySettings = SecuritySettings()
     parental_controls: ParentalControlsSettings = ParentalControlsSettings()
+    project: ProjectSettings = ProjectSettings()
+
 
 
 class SettingsUpdateResponse(BaseModel):

@@ -65,7 +65,12 @@ interface Store {
   
   history: Array<{time: string, cpu: number, ram: number}>;
   setHistory: (history: any) => void;
+
+  // UI State
+  settingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
 }
+
 
 export const useStore = create<Store>((set) => ({
   systemStatus: null,
@@ -95,4 +100,7 @@ export const useStore = create<Store>((set) => ({
   setHistory: (history) => set((state) => ({ 
     history: typeof history === 'function' ? history(state.history) : history 
   })),
-}));
+
+  settingsOpen: false,
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+}));

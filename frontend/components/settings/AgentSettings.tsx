@@ -21,8 +21,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Power, PowerOff } from "lucide-react";
+import { Plus, Power, PowerOff, FlaskConical } from "lucide-react";
+
 import { AgentCard } from "./AgentCard";
+
 import { useToast } from "@/components/ui/use-toast";
 
 const API_BASE = "http://127.0.0.1:8000/v1/settings";
@@ -53,7 +55,9 @@ const ICONS = [
   "scale",
   "graduation-cap",
   "flask",
+  "flask-conical",
   "pen-tool",
+
   "heart",
   "dollar-sign",
   "bar-chart",

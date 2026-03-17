@@ -8,8 +8,10 @@ from .schemas import (
     DataControlsSettings,
     SecuritySettings,
     ParentalControlsSettings,
+    ProjectSettings,
     FullSettings,
 )
+
 
 
 class SettingsService:
@@ -107,6 +109,18 @@ class SettingsService:
         if not stored_hash:
             return True
         return hashlib.sha256(pin.encode()).hexdigest() == stored_hash
+
+    # ── Project ──
+
+    def get_project(self) -> dict:
+        data = self.db.get_section("project")
+        if data is None:
+            return ProjectSettings().model_dump()
+        return data
+
+    def update_project(self, settings: ProjectSettings) -> bool:
+        return self.db.update_section("project", settings.model_dump())
+
 
     # ── Agents ──
 

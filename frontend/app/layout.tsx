@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { TopBar } from '@/components/layout/TopBar';
+import { ClientLayout } from '@/components/layout/ClientLayout';
 import { Toaster } from '@/components/ui/toaster';
 
 const inter = Inter({ subsets: ['latin'] });
@@ -20,15 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={inter.className} suppressHydrationWarning>
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar />
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <TopBar />
-            <main className="flex-1 overflow-auto p-6">
-              {children}
-            </main>
-          </div>
-        </div>
+        <ClientLayout>
+          {children}
+        </ClientLayout>
         <Toaster />
       </body>
     </html>

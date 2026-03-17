@@ -10,8 +10,9 @@ import {
   Code,
   Scale,
   GraduationCap,
-  Flask,
+  FlaskConical,
   PenTool,
+
   Heart,
   DollarSign,
   BarChart,
@@ -33,8 +34,10 @@ const ICON_MAP: Record<string, React.ElementType> = {
   code: Code,
   scale: Scale,
   "graduation-cap": GraduationCap,
-  flask: Flask,
+  "flask-conical": FlaskConical,
   "pen-tool": PenTool,
+
+
   heart: Heart,
   "dollar-sign": DollarSign,
   "bar-chart": BarChart,

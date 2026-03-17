@@ -19,9 +19,12 @@ import {
   Shield,
   Baby,
   RotateCcw,
+  Info,
 } from "lucide-react";
 import { GeneralSettings } from "./GeneralSettings";
+import { ProjectSettings } from "./ProjectSettings";
 import { AgentSettings } from "./AgentSettings";
+
 import { PersonalizationSettings } from "./PersonalizationSettings";
 import { DataControlsSettings } from "./DataControlsSettings";
 import { SecuritySettings } from "./SecuritySettings";
@@ -32,20 +35,24 @@ const API_BASE = "http://127.0.0.1:8000/v1/settings";
 
 type Section =
   | "general"
+  | "project"
   | "agents"
   | "personalization"
   | "data_controls"
   | "security"
   | "parental_controls";
 
+
 const sections: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "general", label: "General", icon: Settings },
+  { key: "project", label: "Project Info", icon: Info },
   { key: "agents", label: "Agents", icon: Bot },
   { key: "personalization", label: "Personalization", icon: Palette },
   { key: "data_controls", label: "Data Controls", icon: Database },
   { key: "security", label: "Security", icon: Shield },
   { key: "parental_controls", label: "Parental Controls", icon: Baby },
 ];
+
 
 interface SettingsDialogProps {
   open: boolean;
@@ -89,11 +96,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     try {
       const endpointMap: Record<string, string> = {
         general: "/general",
+        project: "/project",
         personalization: "/personalization",
         data_controls: "/data-controls",
         security: "/security",
         parental_controls: "/parental-controls",
       };
+
 
       const endpoint = endpointMap[section];
       if (!endpoint) return;
@@ -204,6 +213,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       onSave={(data) => updateSection("general", data)}
                     />
                   )}
+                  {activeSection === "project" && (
+                    <ProjectSettings
+                      data={settings.project || {}}
+                      onSave={(data) => updateSection("project", data)}
+                    />
+                  )}
+
                   {activeSection === "agents" && (
                     <AgentSettings
                       agents={agents}

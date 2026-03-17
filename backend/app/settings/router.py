@@ -6,8 +6,10 @@ from .schemas import (
     DataControlsSettings,
     SecuritySettings,
     ParentalControlsSettings,
+    ProjectSettings,
     SettingsUpdateResponse,
 )
+
 from .service import SettingsService
 
 router = APIRouter(prefix="/v1/settings", tags=["settings"])
@@ -177,6 +179,26 @@ async def set_parental_pin(pin: str):
 async def verify_parental_pin(pin: str):
     valid = service.verify_parental_pin(pin)
     return {"valid": valid}
+
+
+# ──────────────────────────────────────────────
+# PROJECT
+# ──────────────────────────────────────────────
+
+@router.get("/project")
+async def get_project_settings():
+    return service.get_project()
+
+
+@router.put("/project", response_model=SettingsUpdateResponse)
+async def update_project_settings(settings: ProjectSettings):
+    success = service.update_project(settings)
+    return SettingsUpdateResponse(
+        success=success,
+        message="Project settings updated" if success else "Update failed",
+        updated_section="project"
+    )
+
 
 
 # ──────────────────────────────────────────────

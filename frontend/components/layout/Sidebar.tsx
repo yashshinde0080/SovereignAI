@@ -13,6 +13,7 @@ import {
   Home,
   Gauge
 } from 'lucide-react';
+import { useStore } from '@/store';
 
 const navItems = [
   { href: '/', icon: Home, label: 'Home' },
@@ -26,6 +27,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { setSettingsOpen } = useStore();
 
   return (
     <aside className="w-64 border-r bg-card flex flex-col">
@@ -58,9 +60,19 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t">
-        <p className="text-xs text-muted-foreground">v1.0.0</p>
+      <div className="p-4 border-t space-y-2">
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors w-full text-muted-foreground hover:text-foreground hover:bg-muted"
+        >
+          <Settings className="h-4 w-4" />
+          Settings
+        </button>
+        <div className="flex items-center justify-between px-3">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">SovereignAI</p>
+          <p className="text-[10px] text-muted-foreground">v1.0.0</p>
+        </div>
       </div>
     </aside>
   );
-}
+}

@@ -108,18 +108,18 @@ export default function FibonacciLanding() {
 
             <div className="relative z-20 mt-auto pt-8">
               <h1 className="text-6xl md:text-7xl lg:text-8xl xl:text-[8.5rem] font-black tracking-[-0.04em] leading-[0.85] mb-8 drop-shadow-2xl text-white">
-                Unleash <br/>
+                Sovereign Portable <br/>
                 <span className="text-transparent bg-clip-text bg-gradient-to-br from-zinc-200 via-zinc-400 to-zinc-600">
-                  Autonomy.
+                  Intelligence System.
                 </span>
               </h1>
               <p className="text-lg text-zinc-400 max-w-md font-medium leading-[1.6] mb-10">
-                The absolute pinnacle of sovereign artificial intelligence. Fully decentralized architecture, cryptographically secure edge-processing, and entirely under your direct command.
+                "A plug-and-play LLM system running entirely from your pocket. No install required. No cloud. No surveillance."
               </p>
               
               <div className="flex flex-wrap gap-4 pb-2">
                 <button className="h-14 px-8 rounded-full bg-white text-black font-bold flex items-center gap-3 hover:scale-105 hover:bg-zinc-100 transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.15)] group shrink-0">
-                  Deploy Instance <ArrowUpRight className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+                  View Hardware Bundles  <ArrowUpRight className="w-5 h-5 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                 </button>
               </div>
             </div>
@@ -155,8 +155,10 @@ export default function FibonacciLanding() {
             </div>
             
             <div className="relative z-20 mt-16">
-              <h3 className="text-3xl font-black mb-3 tracking-tighter text-white">Neural Core</h3>
-              <p className="text-zinc-400 text-sm leading-relaxed max-w-[90%]">Proprietary quantum-resilient reasoning models engineered specifically for multi-step asymmetric tasks.</p>
+              <h3 className="text-3xl font-black mb-3 tracking-tighter text-white">Portable AI Compute Infrastructure.</h3>
+              <p className="text-zinc-400 text-sm leading-relaxed max-w-[90%]">* No cloud dependency. Zero telemetry. Enterprise-ready.</p>
+              <p className="text-zinc-400 text-sm leading-relaxed max-w-[90%]">* Air-gapped AI appliance. Compliance-friendly AI runtime.</p>
+              <p className="text-zinc-400 text-sm leading-relaxed max-w-[90%]">* Zero cloud. Just silicon and stubbornness.</p>
             </div>
             
             <div className="absolute top-2 right-2 text-zinc-800/30 group-hover:text-rose-500/10 transition-colors">
@@ -193,8 +195,8 @@ export default function FibonacciLanding() {
                 <span className="text-indigo-800 font-mono text-[10px] font-bold">01</span>
             </div>
             <div className="relative z-20 text-center w-full mt-2">
-                <div className="font-black text-3xl text-white tracking-tighter mb-1">0.2s</div>
-                <div className="text-[10px] text-indigo-200 font-medium tracking-widest uppercase">Cold Start</div>
+                <div className="font-black text-3xl text-white tracking-tighter mb-1">Secure</div>
+                <div className="text-[10px] text-indigo-200 font-medium tracking-widest uppercase">AES-266 & SHA-256 with checksum</div>
             </div>
             {/* Background waveform */}
             <div className="absolute bottom-0 left-0 w-full opacity-20 pointer-events-none group-hover:opacity-40 transition-opacity">
@@ -216,8 +218,8 @@ export default function FibonacciLanding() {
             
             <div className="relative z-20 flex flex-col items-center mt-2 group-hover:scale-110 transition-transform duration-500">
                 <Activity className="w-6 h-6 mb-1 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8" />
-                <span className="font-black text-3xl text-white group-hover:text-black transition-colors tracking-tighter">H100</span>
-                <div className="text-[10px] text-zinc-500 group-hover:text-zinc-600 font-medium tracking-widest uppercase mt-1">Native GPU</div>
+                <span className="font-black text-3xl text-white group-hover:text-black transition-colors tracking-tighter">Native GPU</span>
+                <div className="text-[10px] text-zinc-500 group-hover:text-zinc-600 font-medium tracking-widest uppercase mt-1">NVIDIA</div>
             </div>
             <div className="absolute inset-0 bg-gradient-to-b from-transparent to-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
           </motion.div>

@@ -31,34 +31,49 @@
 - **Plugin System:** Allows the injection of custom Python scripts to extend functionality (e.g., local RAG over documents, custom system prompts, localized web search simulation based on local archives).
 - **Model Agnosticism:** Supports the GGUF model format natively, allowing users to drop in variants of Llama, Mistral, Gemma, etc.
 
+![SovereignAI Edge Hero](./assets/hero.png)
+
 ## 4. Product System Context Visual
-```text
-+-----------------------------------------------------------------------------------+
-|                                 SovereignAI Edge                                  |
-|                                                                                   |
-|  +--------------------+   +--------------------+   +---------------------------+  |
-|  |   User Interfaces  |   |   Core Services    |   |     Execution Engines     |  |
-|  |                    |   |                    |   |                           |  |
-|  |  +--------------+  |   |  +--------------+  |   |  +---------------------+  |  |
-|  |  |  React UI    +--------->  API Gateway +--------->   Hardware Profiler |  |  |
-|  |  +--------------+  |   |  +--------------+  |   |  +----------+----------+  |  |
-|  |                    |   |          |         |   |             |             |  |
-|  |  +--------------+  |   |  +-------v------+  |   |    +--------v--------+    |  |
-|  |  | Electron App +---------> Task Scheduler  |   |    | Is RAM > Model? |    |  |
-|  |  +--------------+  |   |  +-------+------+  |   |    +---+---------+---+    |  |
-|  |                    |   |          |         |   |      Yes|        |No      |  |
-|  |  +--------------+  |   |  +-------v------+  |   | +-------v-++-----v------+ |  |
-|  |  |  Python CLI  +--------->  Plugin Mgr  |  |   | |FullRAM  ||LayerStream | |  |
-|  |  +--------------+  |   |  +--------------+  |   | |Engine   ||Engine      | |  |
-|  +--------------------+   +--------------------+   | +---------++------------+ |  |
-|                                                    +---------------------------+  |
-|                                                                 |                 |
-|                                                    +------------v--------------+  |
-|                                                    |     Local File System     |  |
-|                                                    | (Models, Configs, Drives) |  |
-|                                                    +---------------------------+  |
-+-----------------------------------------------------------------------------------+
+```mermaid
+graph TB
+    subgraph UI ["User Interfaces"]
+        ReactUI["React Web UI"]
+        Electron["Electron Desktop App"]
+        CLI["Python CLI"]
+    end
+
+    subgraph Core ["Core Services"]
+        Gateway["API Gateway (FastAPI)"]
+        Scheduler["Task Scheduler"]
+        PluginMgr["Plugin Manager"]
+    end
+
+    subgraph Engines ["Execution Engines"]
+        Profiler["Hardware Profiler"]
+        Decision{"Is RAM > Model?"}
+        FullRAM["FullRAM Engine"]
+        LayerStream["LayerStream Engine"]
+    end
+
+    FS[("Local File System\n(Models, Configs, SQLite)")]
+
+    ReactUI --> Gateway
+    Electron --> Gateway
+    CLI --> Gateway
+    
+    Gateway --> TaskQueue["Task Queue"]
+    TaskQueue --> Scheduler
+    Scheduler --> Profiler
+    Profiler --> Decision
+    
+    Decision -- Yes --> FullRAM
+    Decision -- No --> LayerStream
+    
+    FullRAM --> FS
+    LayerStream --> FS
+    PluginMgr <--> Gateway
 ```
+
 
 ## 5. Security & Constraints
 - **Data Retention:** Chat histories and configurations are saved locally via SQLite or flat JSON files.

@@ -17,26 +17,22 @@ The backend communicates its state to the frontend UI via a persistent SSE (Serv
 2. The UI swaps visual blocks (e.g., morphing an input box into a "Loading Model... 45%" progress bar).
 
 ## 4. State Machine Visual
-```text
-          [ APP BOOT ]
-               |
-               v
-      +-----------------+
-      |  UNINITIALIZED  | (Failed startup checks)
-      +--------+--------+
-               | (Success)
-               v
-      +-----------------+       (Model Selected)     +---------------+
-      |   READY_IDLE    | -------------------------> | LOADING_MODEL |
-      +--------+--------+                            +-------+-------+
-               ^                                             | (Finished)
-               | (Unload Command)                            v
-               |                                     +---------------+
-               +------------------------------------ |  ACTIVE_IDLE  |
-               |                                     +-------+-------+
-               | (Error Detected)                            | (Prompt Rx)
-               v                                             v
-      +-----------------+     (Yield Complete)       +---------------+
-      |   ERROR_STATE   | <------------------------- |  INFERENCING  |
-      +-----------------+                            +---------------+
+```mermaid
+stateDiagram-v2
+    [*] --> UNINITIALIZED: App Boot
+    UNINITIALIZED --> READY_IDLE: Startup Checks Success
+    UNINITIALIZED --> [*]: Fatal Dependency Error
+
+    READY_IDLE --> LOADING_MODEL: Model Selected
+    LOADING_MODEL --> ACTIVE_IDLE: Finish Loading
+    LOADING_MODEL --> ERROR_STATE: Mapping/IO Error
+
+    ACTIVE_IDLE --> INFERENCING: Prompt Received
+    ACTIVE_IDLE --> READY_IDLE: Unload Command
+
+    INFERENCING --> ACTIVE_IDLE: Yield Complete
+    INFERENCING --> ERROR_STATE: SSD Detach / VRAM Crash
+
+    ERROR_STATE --> READY_IDLE: Cleanup & Teardown
 ```
+

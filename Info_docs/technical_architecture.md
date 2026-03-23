@@ -23,45 +23,44 @@ This is the heart of SovereignAI Edge.
 Uses dynamic Python `importlib`. The backend scans the `./plugins/` directory on startup. Plugins can register hooks via decorators (e.g., `@hook('pre_prompt')`, `@hook('post_generation')`).
 
 ## 3. Detailed Architecture Visual
-```text
-  +-----------------------------------------------------------------------+
-  |                             Electron Process                          |
-  |                                                                       |
-  |  +------------------+      +-------------------+   +---------------+  |
-  |  | React Components |      | State Management  |   | Axios / Fetch |  |
-  |  | (Chat Window)    |<---->| (Zustand/Redux)   |<->| HTTP Client   |  |
-  |  +------------------+      +-------------------+   +-------+-------+  |
-  +------------------------------------------------------------|----------+
-                                                               |
-                     (HTTP REST / WebSockets on localhost:PORT)|
-                                                               |
-+--------------------------------------------------------------v-------------+
-|                              Python Backend Server                         |
-|                                                                            |
-|  +---------------------+       +----------------------+                    |
-|  |  FastAPI Router     | <---> |  Plugin Middleware   | (Modifies input)   |
-|  |  (Endpoints)        |       |  (Dynamic Loading)   |                    |
-|  +----------+----------+       +----------------------+                    |
-|             |                                                              |
-|  +----------v----------+       +----------------------+                    |
-|  |  Task Queue &       | ----> |  Hardware Profiler   | (Checks Specs)     |
-|  |  Scheduler          |       |  (psutil/GPUtil)     |                    |
-|  +----------+----------+       +----------+-----------+                    |
-|             |                             |                                |
-|             v                             v                                |
-|  +----------------------------------------------------+                    |
-|  |                 Inference Core                     |                    |
-|  |                                                    |                    |
-|  |  +------------------+        +------------------+  |                    |
-|  |  | FullRAM Engine   |        |LayerStream Engine|  |                    |
-|  |  | (High Mem, Fast) |        | (Low Mem, Paged) |  |                    |
-|  |  +------------------+        +------------------+  |                    |
-|  +------------------+---------------------+-----------+                    |
-|                     |                     |                                |
-+---------------------|---------------------|--------------------------------+
-                      |                     |
-            +---------v---------+ +---------v---------+
-            | Mmap Model File   | | Disk I/O Layers   |
-            | (GGUF Format)     | | (GGUF Tensor Read)|
-            +-------------------+ +-------------------+
+```mermaid
+graph TD
+    subgraph UI ["Electron / React UI Environment"]
+        Components["React UI Components"]
+        State["State (Zustand)"]
+        Axios["Axios / WS Client"]
+        Components <--> State
+        State <--> Axios
+    end
+
+    subgraph Backend ["Python Backend Environment"]
+        Gateway["FastAPI Router"]
+        Middleware["Plugin Middleware"]
+        TaskQueue["Task Scheduler"]
+        Profiler["Hardware Profiler"]
+        
+        Gateway <--> Middleware
+        Gateway --> TaskQueue
+        TaskQueue --> Profiler
+        
+        subgraph EngineCore ["Inference Core Engine"]
+            FullRAM["FullRAM Engine"]
+            LayerStream["LayerStream Engine"]
+        end
+        
+        Profiler --> EngineCore
+    end
+
+    subgraph Hardware ["Hardware / File Systems"]
+        Mmap["Mmap Memory Bound"]
+        DiskIO["Sequential Disk I/O"]
+        GGUF[("GGUF Model Files")]
+        
+        FullRAM --> Mmap
+        LayerStream --> DiskIO
+    end
+
+    Axios -- localhost:PORT --> Gateway
+    Mmap <--> GGUF
+    DiskIO <--> GGUF
 ```

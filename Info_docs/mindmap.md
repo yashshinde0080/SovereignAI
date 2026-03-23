@@ -4,41 +4,29 @@
 The mindmap details the vast scale and modular architecture of SovereignAI Edge. Because the platform acts as a monolith, mapping out its components visualizes responsibilities from the presentation layer down to OS-level tensor execution.
 
 ## 2. Detailed Mindmap Visual Structure
-```text
-========================================================================+
-                          [ SovereignAI Edge ]
-                          (Core Platform Hub)
-========================================================================
-       |                         |                          |
-+------v--------+            +-----v--------+              +-----v--------+
-| UI Interfaces |            | Backend API  |              | Core Logic   |
-+------+--------+            +-----v--------+              +-----v--------+
-       |                         |                           |
-       +--> React Web App        +--> FastAPI App            +--> Llama.cpp Bindings
-       |    - React Context      |    - Models Router        |    (FullRAM Execution)
-       |    - Tailwind CSS       |    - Chat Router          |
-       |    - Vite Bundler       |    - Settings Router      +--> LayerStream Core
-       |                         |                           |    (Sequential SSD I/O)
-       +--> Desktop Wrapper      +--> Websocket Mgr          |
-       |    - Electron.js        |    - Real-time Stream     +--> Plugin Registry
-       |    - IPC Bridge         |    - Connection Pools     |    - Hook Injection
-       |                         |                           |    - Local Search Sim
-       +--> Python CLI           +--> Background Tasks       |
-            - Curses UI               - DB Garbage Collect.  +--> State Manager
-            - Headless Mode           - Log Rotation              - SQLite Connector
-                                                                  - Config Parser
-
-                      |                            |
-                 +----v----+                  +----v-----+
-                 | Storage |                  | Security |
-                 +----+----+                  +----+-----+
-                      |                            |
-                      +--> ./models/               +--> Hardware Bounds
-                      |    (GGUF/Bin weights)      |    (Memory protection caps)
-                      |                            |
-                      +--> ./database/             +--> OS Sandboxing 
-                      |    (SQLite db file)        |    (No reverse shells)
-                      |                            |
-                      +--> ./plugins/              +--> Data Privacy
-                           (Custom py scripts)          (0 bytes leave localhost)
+```mermaid
+mindmap
+    root((SovereignAI Edge))
+        UI["UI Interfaces"]
+            React["React Web App"]
+            Electron["Desktop Wrapper"]
+            CLI["Python CLI"]
+        API["Backend API"]
+            FastAPI["FastAPI App"]
+            WS["Websocket Mgr"]
+            Tasks["Background Tasks"]
+        Core["Core Logic"]
+            LlamaCPP["Llama.cpp Bindings"]
+            LayerStream["LayerStream Core"]
+            Plugins["Plugin Registry"]
+            State["State Manager"]
+        Storage["Storage"]
+            Models["/models"]
+            Database["/database"]
+            PluginDir["/plugins"]
+        Security["Security"]
+            Hardware["Hardware Bounds"]
+            Sandboxing["OS Sandboxing"]
+            Privacy["Data Privacy"]
 ```
+

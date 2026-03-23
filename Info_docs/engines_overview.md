@@ -46,31 +46,20 @@ The engine supports two inference modes:
 - Tokens are yielded asynchronously to the caller the moment they are decoded from the model, providing real-time text visualization.
 
 ### 1.4 Visual Architecture: FullRAM Flow
-
-```text
-+=======================================================================+
-|                            FullRAM Engine                             |
-+=======================================================================+
-|                                                                       |
-|  [HuggingFace Hub / Local Path]                                       |
-|               |                                                       |
-|               v (Direct Load into active system memory space)         |
-| +-------------------------------------------------------------------+ |
-| |                        Active VRAM / RAM                          | |
-| |                                                                   | |
-| |  [Embeddings] -> [Layer 1...N] -> [Norm/Head] -> [Logits]         | |
-| |  (All parameters reside permanently in memory until unloaded)     | |
-| +-------------------------------------------------------------------+ |
-|               |                                                       |
-|               | (Forward Pass execution)                              |
-|               v                                                       |
-| +-----------------------------+     +-------------------------------+ |
-| |  Standard Generation Loop   | or  | TextIteratorStreamer (Async)  | |
-| +-----------------------------+     +-------------------------------+ |
-|               |                                                       |
-|               v                                                       |
-|     { "text": Output Dict }                                           |
-+=======================================================================+
+```mermaid
+graph TD
+    Source[HuggingFace / Local Model] -->|Direct Load| ActiveMem["Active VRAM / RAM"]
+    
+    subgraph ActiveMem ["Active System Memory"]
+        Embed[Embeddings Layer]
+        Layers[Layers 1...N]
+        Head[Norm & Head]
+    end
+    
+    ActiveMem --> Pass[Execute Forward Pass]
+    Pass --> OutMode{Select Mode}
+    OutMode --> Standard[Standard Generation (Blocking)]
+    OutMode --> Stream[Streaming Generation (Iterative)]
 ```
 
 ---
@@ -117,44 +106,21 @@ Inference strictly bypasses HuggingFace's `generate()` method, instead building 
 - Loop terminates when `eos_token_id` is reached or `max_tokens` is hit.
 
 ### 2.4 Visual Architecture: LayerStream Flow
-
-```text
-+===================================================================================+
-|                              LayerStream Engine                                   |
-+===================================================================================+
-|                                                                                   |
-|  [HuggingFace Hub / Local Path]                                                   |
-|               |                                                                   |
-|               v (Pre-Processing)                                                  |
-| +---------------------------------+      +--------------------------------------+ |
-| |        WeightSplitter           |      |      Meta Scaffolding (RAM)          | |
-| | Chunks model into separate      |      | accelerate.init_empty_weights()      | |
-| | .safetensors per layer          |      |  (Contains no tensor weights)        | |
-| +---------------------------------+      +--------------------------------------+ |
-|               |                                             ^                     |
-|               v (Write to Disk)                             |                     |
-| +---------------------------------+                         |                     |
-| |      Disk Cache (offload_cache) |                         |                     |
-| |                                 |                         |                     |
-| | [embed.safetensors]             |                         |                     |
-| | [layer_0.safetensors]           | <============[ I/O Streaming ]                |
-| | [layer_1.safetensors]           |                         |                     |
-| |          ...                    |                         |                     |
-| | [norm.safetensors]              |                         v                     |
-| +---------------------------------+      +--------------------------------------+ |
-|                                          |           LayerExecutor              | |
-|                                          | 1. Load Layer [N] from Disk          | |
-|                                          | 2. Execute Forward Pass (Tensors)    | |
-|                                          | 3. Save K/V State via kv_manager     | |
-|                                          | 4. Unload Layer [N], Garage Collect  | |
-|                                          +--------------------------------------+ |
-|                                                             |                     |
-|                                                             v                     |
-|                                          +--------------------------------------+ |
-|                                          |              Sampler                 | |
-|                                          | Computes Logits -> Gets Next Token   | |
-|                                          +--------------------------------------+ |
-+===================================================================================+
+```mermaid
+graph TD
+    HF[HuggingFace / Local Model] -->|One-time| Split[WeightSplitter]
+    Split -->|Discrete .safetensors| SSD[Disk Cache / SSD]
+    
+    subgraph RAM ["System RAM"]
+        Meta[Metascaffolding / Config]
+        KV[KV Manager / Cache]
+        Exec[LayerExecutor Controller]
+    end
+    
+    SSD <-->|Sequential IO Streaming| Exec
+    Exec -->|Hidden States| Forward[Execute Layer Step]
+    Forward -->|State State| KV
+    Forward -->|Last Token| Sampler[Sampler (Logits)]
 ```
 
 ---

@@ -27,30 +27,42 @@ Closure is critical to prevent database corruption.
 - SQLite connections are cleanly closed.
 
 ## 5. Detailed Operational Diagram
-```text
-(1) User -> [ launch.bat ]
-                 |
-                 v
-(2) Script: Check Dependencies + Find Open Port (e.g., 8055)
-                 |
-        +--------+--------+ (Forks processing)
-        |                 |
-(3a) Start FastAPI   (3b) Start Electron
-     on :8055             with ARG port=8055
-        |                 |
-        v                 v
-   [ Idle State <---(HTTP GET /models)-- React UI Load ]
-        |                 |
-(4) REST/WS               | (User Types Prompt)
-    Accept Request <------+ (POST /chat)
-        |
-(5) Backend Core          |
-    Initialize Engine     |
-    Compute Tokens        |
-    Yield Text Stream ----> (React Markdown Renderer)
-        |                 |
-(6) Emits "Done" Event    |
-        |                 v
-(7) Write to Disk         [ View Formatted LLM Answer ]
-    (SQLite /logs)
+```mermaid
+sequenceDiagram
+    participant User
+    participant Script as launch.bat/sh
+    participant Backend as FastAPI Server
+    participant UI as Electron/React UI
+    participant Core as Inference Core
+    participant Disk as Local Storage
+
+    User->>Script: Execute launch script
+    Script->>Script: Validate Dependencies
+    Script->>Script: Find Open Port (e.g. 8055)
+    
+    par Start Backend
+        Script->>Backend: Start FastAPI on :8055
+    and Start UI
+        Script->>UI: Start Electron (port=8055)
+    end
+
+    UI->>Backend: GET /status (Wait for ready)
+    Backend-->>UI: Ready
+
+    User->>UI: Select Model & Send Prompt
+    UI->>Backend: WS /api/stream (Prompt)
+    
+    Backend->>Core: Initialise Engine & Load Weights
+    Core->>Disk: Read GGUF Layers
+    
+    loop Token Generation
+        Core->>Core: Compute Next Token
+        Core-->>Backend: Yield Token
+        Backend-->>UI: Stream Token (Markdown)
+        UI->>User: Display Content
+    end
+
+    Backend->>Disk: Write Chat History (SQLite)
+    Backend-->>UI: event: done
 ```
+

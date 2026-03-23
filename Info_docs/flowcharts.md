@@ -4,61 +4,27 @@
 The following logic tree illustrates how SovereignAI Edge parses incoming commands, handles errors, and executes models in strictly offline environments. 
 
 ## 2. Model Initialization Flowchart Visual
-```text
-           [ User Request: Load Model ]
-                        |
-            +-----------v-----------+
-            | Is Model File Present |
-            | in ./models folder?   |
-            +-----+-----------+-----+
-                  |           | (No)
-            (Yes) |           v
-                  |     +-----------+
-                  |     | Throw 404 |
-                  |     | Error UI  |
-                  |     +-----------+
-            +-----v-----+
-            | Read GGUF |
-            | Header    |
-            +-----+-----+
-                  |
-        +---------v---------+
-        | Calculate Compute |
-        | Footprint (VRAM)  |
-        +---------+---------+
-                  |
-        +---------v---------+
-        | Compare w/ System | <--- (psutil/pyNVML)
-        +----+---------+----+
-             |         |
- (Fits in RAM)         (Too Large for RAM)
-       +-----v----+    +-----v---------+
-       | Llama.cpp|    | Initialize    |
-       | Full Load|    | LayerStream   |
-       +----------+    +---------------+
+```mermaid
+graph TD
+    Start([User Request: Load Model]) --> CheckModel{Is Model File Present?}
+    CheckModel -- No --> Error[Throw 404 Error UI]
+    CheckModel -- Yes --> ReadHeader[Read GGUF Header]
+    ReadHeader --> CalcFootprint[Calculate Compute Footprint]
+    CalcFootprint --> Compare[Compare w/ System Specs]
+    Compare --> Decision{Fits in RAM?}
+    Decision -- Yes --> FullLoad[Llama.cpp Full Load]
+    Decision -- No --> LayerStream[Initialize LayerStream]
 ```
 
 ## 3. Request Error Handling Flowchart Visual
-```text
-             [ Incoming Chat Payload ]
-                        |
-            +-----------v-----------+
-            |  Pydantic Validation  |
-            +-----+-----------+-----+
-                  |           |
-        (Invalid) |           | (Valid)
-            +-----v-----+     v 
-            | Return 422|     [ Pre-processing Pipeline ]
-            | (Bad Reg) |           |
-            +-----------+     +-----v-----+
-                              | Is Engine |
-                              | Busy?     |
-                              +--+-----+--+
-                                 |     | (No)
-                           (Yes) |     v
-                                 |  [ Trigger Inference ]
-                         +-------v-------+      |
-                         | Enqueue Job & |      v
-                         | Send 202 Stat |  [ Stream Response ]
-                         +---------------+
+```mermaid
+graph TD
+    Start([Incoming Chat Payload]) --> Validate{Pydantic Validation}
+    Validate -- Invalid --> Return422[Return 422 Error]
+    Validate -- Valid --> PreProcess[Pre-processing Pipeline]
+    PreProcess --> BusyCheck{Is Engine Busy?}
+    BusyCheck -- Yes --> Enqueue[Enqueue Job & Send 202]
+    BusyCheck -- No --> Inference[Trigger Inference]
+    Inference --> Stream[Stream Response]
 ```
+

@@ -42,34 +42,51 @@ Since the application runs off external drives, absolute paths cannot be used. O
 - `./plugins/` - User-added Python scripts.
 - `./backend/` & `./frontend/` - Application binaries.
 
+![SovereignAI Dual Engine Approach](./Info_docs/assets/dual_engine.png)
+
 ## 5. Technology Stack Visual Diagram
-```text
-+-----------------------------------------------------------------------------+
-|                                SOVEREIGN AI SECURE EDGE                     |
-|                                                                             |
-| +-------------------------+ +-------------------------+ +-----------------+ |
-| |      UI Layer           | |     API Gateway         | | Storage Layer   | |
-| |                         | |                         | |                 | |
-| |  [ React 18 + Vite ]    | |  [ FastAPI Framework ]  | |  [ SQLite3 ]    | |
-| |  [ Tailwind CSS    ]    | |  [ Uvicorn Server    ]  | |  [ File I/O ]   | |
-| |  [ Electron Build  ]    | |  [ Pydantic Models   ]  | |                 | |
-| |                         | |                         | |                 | |
-| +------------+------------+ +------------+------------+ +--------+--------+ |
-|              |                           |                       |          |
-|              +-------+ (REST/WS) +-------+                       |          |
-|                      |           |                               |          |
-|                      v           v                               |          |
-| +--------------------+-----------+--------------------+          |          |
-| |             INFERENCE ACCELERATION ENGINE           | <--------+          |
-| |                                                     |                     |
-| |  +-------------------+        +------------------+  |                     |
-| |  | Hardware Profiler | -----> | Memory Manager   |  |                     |
-| |  +---------+---------+        +--------+---------+  |                     |
-| |            |                           |            |                     |
-| |  +---------v---------+        +--------v---------+  |                     |
-| |  | Llama.cpp Core    | <----- | Engine Selector  |  |                     |
-| |  | (C++ Bindings)    |        | (Full/Layer Stm) |  |                     |
-| |  +-------------------+        +------------------+  |                     |
-| +-----------------------------------------------------+                     |
-+-----------------------------------------------------------------------------+
+```mermaid
+graph LR
+    subgraph UI ["Frontend / UI Layer"]
+        React["React 18 + Vite"]
+        Tailwind["Tailwind CSS"]
+        Electron_UI["Electron Shell"]
+    end
+
+    subgraph API ["Backend API Gateway"]
+        FastAPI["FastAPI Framework"]
+        Uvicorn["Uvicorn Server"]
+        Pydantic["Pydantic Models"]
+    end
+
+    subgraph Storage ["Storage Layer"]
+        SQLite["SQLite3"]
+        FileIO["Direct File I/O"]
+    end
+
+    subgraph Inference ["Inference Acceleration Engine"]
+        Profiler["Hardware Profiler"]
+        MemoryMgr["Memory Manager"]
+        Selector["Engine Selector"]
+        
+        subgraph Engines ["Execution Types"]
+            FullRAM["FullRAM Mode"]
+            LayerStream["LayerStream Mode"]
+        end
+
+        LlamaCPP["Llama.cpp Core\n(C++ Bindings)"]
+    end
+
+    React -- REST/WS --> FastAPI
+    FastAPI <--> SQLite
+    FastAPI --> Profiler
+    Profiler --> MemoryMgr
+    MemoryMgr --> Selector
+    Selector --> FullRAM
+    Selector --> LayerStream
+    FullRAM --> LlamaCPP
+    LayerStream --> LlamaCPP
+    FileIO <--> SQL["Weights / KV Cache"]
+    LlamaCPP --> FileIO
 ```
+

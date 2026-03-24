@@ -26,8 +26,7 @@ import { Plus, Power, PowerOff, FlaskConical } from "lucide-react";
 import { AgentCard } from "./AgentCard";
 
 import { useToast } from "@/components/ui/use-toast";
-
-const API_BASE = "http://127.0.0.1:8000/v1/settings";
+import { api } from "@/lib/api";
 
 const ROLES = [
   { value: "doctor", label: "Doctor" },
@@ -116,12 +115,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
     const payload = { ...form, id: agentId };
 
     try {
-      const res = await fetch(`${API_BASE}/agents`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Create failed");
+      await api.createAgent(payload);
       toast({ title: "Created", description: `Agent '${form.name}' created` });
       setCreateOpen(false);
       resetForm();
@@ -138,12 +132,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
   const handleUpdate = async () => {
     if (!editAgent) return;
     try {
-      const res = await fetch(`${API_BASE}/agents/${editAgent.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error("Update failed");
+      await api.updateAgent(editAgent.id, form);
       toast({ title: "Updated", description: "Agent updated" });
       setEditAgent(null);
       resetForm();
@@ -159,10 +148,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
 
   const handleDelete = async (agentId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/agents/${agentId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Delete failed");
+      await api.deleteAgent(agentId);
       toast({ title: "Deleted", description: "Agent removed" });
       onRefresh();
     } catch {
@@ -176,10 +162,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
 
   const handleActivate = async (agentId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/agents/${agentId}/activate`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Activation failed");
+      await api.activateAgent(agentId);
       toast({ title: "Activated", description: "Agent activated" });
       onRefresh();
     } catch {
@@ -193,10 +176,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
 
   const handleDeactivateAll = async () => {
     try {
-      const res = await fetch(`${API_BASE}/agents/deactivate`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Deactivation failed");
+      await api.deactivateAllAgents();
       toast({ title: "Deactivated", description: "All agents deactivated" });
       onRefresh();
     } catch {

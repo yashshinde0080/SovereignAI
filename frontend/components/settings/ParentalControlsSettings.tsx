@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Save, Lock, ShieldAlert } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { api } from "@/lib/api";
 
 const API_BASE = "http://127.0.0.1:8000/v1/settings";
 
@@ -64,11 +65,7 @@ export function ParentalControlsSettings({
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE}/parental-controls/set-pin?pin=${encodeURIComponent(newPin)}`,
-        { method: "POST" }
-      );
-      if (!res.ok) throw new Error("Failed");
+      await api.setParentalPin(newPin);
       toast({ title: "PIN Set", description: "Parental control PIN has been set" });
       setNewPin("");
       update("require_pin_for_settings", true);
@@ -298,12 +295,11 @@ export function ParentalControlsSettings({
               />
             </div>
 
-            <div className="flex items-center justify-between">
+            {/* The following div is replaced as per user instruction */}
+            <div key="activity_log" className="flex items-center justify-between">
               <div>
                 <Label className="text-sm text-slate-300">Activity log</Label>
-                <p className="text-xs text-slate-500">
-                  Log all conversations for review
-                </p>
+                <p className="text-xs text-slate-500">Log all conversations for review</p>
               </div>
               <Switch
                 checked={form.activity_log}

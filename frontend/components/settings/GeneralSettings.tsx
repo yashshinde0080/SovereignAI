@@ -223,7 +223,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
               <p className="text-xs text-slate-500">{desc}</p>
             </div>
             <Switch
-              checked={form[key] as boolean}
+              checked={(form as any)[key] as boolean}
               onCheckedChange={(v) => update(key, v)}
             />
           </div>

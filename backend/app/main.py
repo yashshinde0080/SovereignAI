@@ -43,6 +43,26 @@ async def lifespan(app: FastAPI):
     app.state.model_manager = ModelManager()
     await app.state.model_manager.initialize(app=app)
     
+    # Initialize settings service
+    from app.settings.service import SettingsService
+    app.state.settings_service = SettingsService()
+    
+    # Load startup model if configured
+    try:
+        general = app.state.settings_service.get_general()
+        startup_model = general.get("startup_model")
+        mode = general.get("default_mode", "auto")
+        if startup_model:
+            print(f"Loading startup model: {startup_model} (mode={mode})")
+            # Run in background to not block startup too much? 
+            # Actually, blocking is fine for small models, 
+            # but maybe better to do it after yield if we want the server to respond to health checks.
+            # But lifespan startup *should* finish before the server accepts requests.
+            # Let's just do it here.
+            await app.state.model_manager.load_model(startup_model, mode=mode)
+    except Exception as e:
+        print(f"Startup model error: {e}")
+    
     # Initialize plugin manager
     app.state.plugin_manager = PluginManager()
     await app.state.plugin_manager.load_plugins()

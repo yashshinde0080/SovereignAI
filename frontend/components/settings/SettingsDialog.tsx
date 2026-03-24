@@ -30,8 +30,7 @@ import { DataControlsSettings } from "./DataControlsSettings";
 import { SecuritySettings } from "./SecuritySettings";
 import { ParentalControlsSettings } from "./ParentalControlsSettings";
 import { useToast } from "@/components/ui/use-toast";
-
-const API_BASE = "http://127.0.0.1:8000/v1/settings";
+import { api } from "@/lib/api";
 
 type Section =
   | "general"
@@ -69,10 +68,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const fetchAllSettings = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(API_BASE);
-      if (!res.ok) throw new Error("Failed to fetch settings");
-      const data = await res.json();
-      const { agents: agentList, ...rest } = data;
+      const data = await api.getAllSettings();
+      const { agents: agentList, ...rest } = data as any;
       setSettings(rest);
       setAgents(agentList || []);
     } catch (err) {
@@ -94,34 +91,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const updateSection = async (section: string, data: any) => {
     try {
-      const endpointMap: Record<string, string> = {
-        general: "/general",
-        project: "/project",
-        personalization: "/personalization",
-        data_controls: "/data-controls",
-        security: "/security",
-        parental_controls: "/parental-controls",
-      };
-
-
-      const endpoint = endpointMap[section];
-      if (!endpoint) return;
-
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      if (!res.ok) throw new Error("Update failed");
-
-      const result = await res.json();
-
+      const result = await api.updateSettingsSection(section, data);
+ 
       setSettings((prev) => ({ ...prev, [section]: data }));
-
+ 
       toast({
         title: "Saved",
-        description: result.message || "Settings updated successfully",
+        description: (result as any).message || "Settings updated successfully",
       });
     } catch (err) {
       toast({
@@ -134,8 +110,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const resetAll = async () => {
     try {
-      const res = await fetch(`${API_BASE}/reset`, { method: "POST" });
-      if (!res.ok) throw new Error("Reset failed");
+      await api.resetSettings();
       await fetchAllSettings();
       toast({ title: "Reset", description: "All settings restored to defaults" });
     } catch (err) {

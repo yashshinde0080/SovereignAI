@@ -12,7 +12,7 @@ from .schemas import (
 
 from .service import SettingsService
 
-router = APIRouter(prefix="/v1/settings", tags=["settings"])
+router = APIRouter(prefix="/settings", tags=["settings"])
 
 service = SettingsService()
 

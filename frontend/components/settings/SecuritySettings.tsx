@@ -8,8 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Save, Lock, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-
-const API_BASE = "http://127.0.0.1:8000/v1/settings";
+import { api } from "@/lib/api";
 
 interface SecuritySettingsProps {
   data: Record<string, any>;
@@ -54,11 +53,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE}/security/set-password?password=${encodeURIComponent(newPassword)}`,
-        { method: "POST" }
-      );
-      if (!res.ok) throw new Error("Failed");
+      await api.setSecurityPassword(newPassword);
       toast({ title: "Password Set", description: "Application password has been set" });
       setNewPassword("");
       update("require_password", true);
@@ -271,7 +266,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
               <p className="text-xs text-slate-500">{desc}</p>
             </div>
             <Switch
-              checked={form[key] as boolean}
+              checked={(form as any)[key] as boolean}
               onCheckedChange={(v) => update(key, v)}
             />
           </div>

@@ -154,6 +154,78 @@ class ApiClient {
   async disablePlugin(pluginId: string) {
     return this.request(`/v1/plugins/${pluginId}/disable`, { method: 'POST' });
   }
+
+  // Settings
+  async getAllSettings() {
+    return this.request('/v1/settings');
+  }
+
+  async updateSettingsSection(section: string, data: any) {
+    const endpointMap: Record<string, string> = {
+      general: '/settings/general',
+      project: '/settings/project',
+      personalization: '/settings/personalization',
+      data_controls: '/settings/data-controls',
+      security: '/settings/security',
+      parental_controls: '/settings/parental-controls',
+    };
+    const endpoint = endpointMap[section];
+    if (!endpoint) throw new Error('Invalid section');
+
+    return this.request(`/v1${endpoint}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async resetSettings() {
+    return this.request('/v1/settings/reset', { method: 'POST' });
+  }
+
+  async setSecurityPassword(password: string) {
+    return this.request(`/v1/settings/security/set-password?password=${encodeURIComponent(password)}`, {
+      method: 'POST',
+    });
+  }
+
+  async setParentalPin(pin: string) {
+    return this.request(`/v1/settings/parental-controls/set-pin?pin=${encodeURIComponent(pin)}`, {
+      method: 'POST',
+    });
+  }
+
+  // Agents
+  async listAgents() {
+    return this.request<any[]>('/v1/settings/agents');
+  }
+
+  async createAgent(agent: any) {
+    return this.request('/v1/settings/agents', {
+      method: 'POST',
+      body: JSON.stringify(agent),
+    });
+  }
+
+  async updateAgent(agentId: string, agent: any) {
+    return this.request(`/v1/settings/agents/${agentId}`, {
+      method: 'PUT',
+      body: JSON.stringify(agent),
+    });
+  }
+
+  async deleteAgent(agentId: string) {
+    return this.request(`/v1/settings/agents/${agentId}`, { method: 'DELETE' });
+  }
+
+  async activateAgent(agentId: string) {
+    return this.request(`/v1/settings/agents/${agentId}/activate`, {
+      method: 'POST',
+    });
+  }
+
+  async deactivateAllAgents() {
+    return this.request('/v1/settings/agents/deactivate', { method: 'POST' });
+  }
 }
 
 export const api = new ApiClient(API_BASE);

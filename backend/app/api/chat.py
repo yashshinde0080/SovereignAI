@@ -36,6 +36,20 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     
     messages_dicts = [{"role": msg.role, "content": msg.content} for msg in chat_request.messages]
     
+    # Apply Personalization & Agent Settings
+    settings_service = getattr(app.state, "settings_service", None)
+    if settings_service:
+        system_prompt = settings_service.get_system_prompt()
+        
+        if system_prompt:
+            # If there's already a system message, prepend our settings-based prompt
+            if messages_dicts and messages_dicts[0]["role"] == "system":
+                if system_prompt not in messages_dicts[0]["content"]:
+                    messages_dicts[0]["content"] = system_prompt + "\n\n" + messages_dicts[0]["content"]
+            else:
+                # Otherwise, insert it as the first message
+                messages_dicts.insert(0, {"role": "system", "content": system_prompt})
+    
     # RAG Integration
     rag_metadata_out = None
     if chat_request.use_rag and getattr(app.state, "vector_store", None):

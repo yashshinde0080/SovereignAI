@@ -340,18 +340,18 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
             AI Agents
           </h3>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 mt-1 sm:max-w-md">
             Configure specialized AI agents with specific roles and
             instructions.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"

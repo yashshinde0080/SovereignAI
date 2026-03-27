@@ -63,14 +63,14 @@ A critical feature of the platform is its "Hardware Awareness." Before any infer
            |  < 80% Avail RAM?|
            +--------+---------+
                     |
-          +---------+---------+
-          |                   |
+          +---------+-----------+
+          |                     |
     [ YES: FullRAM ]    [ NO: LayerStream ]
-          |                   |
-  +-------v-------+   +-------v-------+
-  | MAP ALL TENSORS |   | INIT SCAFFOLD |
+          |                     |
+  +-------v---------+   +-------v--------+
+  | MAP ALL TENSORS |   | INIT SCAFFOLD  |
   | INTO VRAM/RAM   |   | (Empty Weights)|
-  +-------+-------+   +-------+-------+
+  +-------+---------+   +-------+--------+
           |                   |
           +---------+---------+
                     |
@@ -84,23 +84,23 @@ The LayerStream engine enables running massive models (e.g., 70B) on low-memory 
 
 ```text
  PHYSICAL DISK (SSD)             SYSTEM RAM (Inference Loop)
-+-------------------+          +-------------------------------------+
-| [Model Shards]    |          |                                     |
-|                   |          |  1. LOAD LAYER N (e.g. Layer 5)     |
-| +---------------+ |  Streaming  +------------+                      |
-| | Layer 1 (.saf)| | ---------> | [ ACTIVE ] |                      |
-| +---------------+ |     IO     | [ TENSOR ] |                      |
-| | Layer 2 (.saf)| |            +-----+------+                      |
-| +---------------+ |                  |                             |
-| | ...           | |          2. PROCESS HIDDEN STATE               |
-| +---------------+ |                  |                             |
-| | Layer N (.saf)| |          3. UPDATE KV CACHE                    |
-| +---------------+ |                  |                             |
-|                   |          4. PURGE LAYER N (Free RAM)           |
-+-------------------+                  |                             |
-                                       +--------------> 5. REPEAT    |
-                                                           FOR N+1   |
-                               +-------------------------------------+
++-------------------+          +----------------------------------------+
+| [Model Shards]    |          |                                        |
+|                   |          |     1. LOAD LAYER N (e.g. Layer 5)     |
+| +---------------+ |  Streaming     +------------+                     |
+| | Layer 1 (.saf)| | --------->     | [ ACTIVE ] |                     |
+| +---------------+ |     IO   |     | [ TENSOR ] |                     |
+| | Layer 2 (.saf)| |          |     +-----+------+                     |
+| +---------------+ |          |           |                            |
+| | ...           | |          |   2.PROCESS HIDDEN STATE               |
+| +---------------+ |          |              |                         |
+| | Layer N (.saf)| |          |   3.UPDATE KV CACHE                    |
+| +---------------+ |          |              |                         |
+|                   |          |   4.PURGE LAYER N (Free RAM)           |
++-------------------+          |           |                            |
+                               |           +--------------> 5. REPEAT   |
+                               |                               FOR N+1  |
+                               +----------------------------------------+
 ```
 
 ---
@@ -151,11 +151,11 @@ To hide disk latency, LayerStream utilizes a "Ping-Pong" double-buffering techni
 +---------------------------+        +-----------------------+
 |                           |        |                       |
 |  +---------------------+  |        |  +-----------------+  |
-|  |   BUFFER A (Active) |  | <----------|   Layer N       |  |
+|  |   BUFFER A (Active) |  | <----------|   Layer N      |  |
 |  |   [ Computing... ]  |  |  (IO)  |  +-----------------+  |
 |  +----------+----------+  |        |                       |
 |             |             |        |  +-----------------+  |
-|             v             |  +---------|   Layer N+1     |  |
+|             v             |  +---------|   Layer N+1    |  |
 |  +----------+----------+  |  |     |  +-----------------+  |
 |  |   BUFFER B (Wait)   |  | <+     |                       |
 |  |   [ Pre-Loading ]   |  |        |        (...)          |
@@ -172,20 +172,20 @@ When the conversation exceeds the maximum token limit, the system employs "Ancho
 
 ```text
 [ INITIAL CONTEXT WINDOW ]
-+-------------------------------------------------------------+
++--------------------------------------------------------------+
 | System Prompt |  Chat Turn 1  |  Chat Turn 2  |  Chat Turn 3 |
 | (Pinned 512t) | (Token IDs)   | (Token IDs)   | (Available)  |
-+-------------------------------------------------------------+
++--------------------------------------------------------------+
       ^                                               ^
       |                                               |
 [ PINNED ANCHOR ]                             [ CURRENT HEAD ]
 
 
 [ EXCEEDED LIMIT - SLIDING TRIGGERED ]
-+-------------------------------------------------------------+
-| System Prompt | [ PRUNED ] |  Chat Turn 2  |  Chat Turn 3   |
++--------------------------------------------------------------+
+| System Prompt | [ PRUNED ] |  Chat Turn 2  |  Chat Turn 3    |
 | (Pinned 512t) | (Discarded)| (New History) | (New Generation)|
-+-------------------------------------------------------------+
++--------------------------------------------------------------+
       |               |               ^               ^
       +---------------+---------------+---------------+
                       |
@@ -195,17 +195,18 @@ When the conversation exceeds the maximum token limit, the system employs "Ancho
 ---
 
 ## 8. Data Flow Matrix (Senior Designer View)
+
 A summary of how data types move through the different system components.
 
 | Component      | Primary Data Input | Transformation Logic | Primary Data Output |
 | :------------- | :----------------- | :------------------- | :------------------ |
-| **Electron**  | User Keystrokes    | IPC / Process Mgmt   | UI State Updates   |
-| **FastAPI**   | UI JSON Payloads   | Plugin Hook Routing  | WS / SSE Stream     |
-| **Profiler**  | OS Syscalls        | Comparison Logic     | Engine Choice (ID)  |
-| **Tokenizer** | UTF-8 String       | Vocabulary Mapping   | Int32 Token Tensors |
-| **Inference** | Hidden States      | Matrix Dot-Product   | Logit Probability   |
-| **Sampler**   | Logit Tensors      | Temp/Top-P/Top-K     | Scalar Token ID     |
-| **SQLite**    | Chat Chunks        | SQL INSERT / UPDATE  | Chat Search Index   |
+| **Electron**   | User Keystrokes    | IPC / Process Mgmt   | UI State Updates    |
+| **FastAPI**    | UI JSON Payloads   | Plugin Hook Routing  | WS / SSE Stream     |
+| **Profiler**   | OS Syscalls        | Comparison Logic     | Engine Choice (ID)  |
+| **Tokenizer**  | UTF-8 String       | Vocabulary Mapping   | Int32 Token Tensors |
+| **Inference**  | Hidden States      | Matrix Dot-Product   | Logit Probability   |
+| **Sampler**    | Logit Tensors      | Temp/Top-P/Top-K     | Scalar Token ID     |
+| **SQLite**     | Chat Chunks        | SQL INSERT / UPDATE  | Chat Search Index   |
 
 ---
 
@@ -232,3 +233,178 @@ How SovereignAI Edge maintains "Zero-Configuration" portability across different
 |   |-- [ cache ]        <-- KV Cache and Layer Shards
 ```
 
+---
+
+## 10. Professional Pipeline Diagram (+-| style)
+A structured, stage-by-stage pipeline from user input to saved output.
+
+```text
++---------------------+      +---------------------+      +---------------------+
+| 1) User Input Event |----->| 2) Frontend Router  |----->| 3) Backend API      |
++---------------------+      +---------------------+      +---------------------+
+          |                          |                             |
+          |                          |                             v
+          |                          |                    +-----------------------+
+          |                          |                    | 4) Preprocessor       |
+          |                          |                    +-----------------------+
+          |                          |                             |
+          |                          |                             v
+          |                          |                    +-----------------------+
+          |                          |                    | 5) Inference Engine   |
+          |                          |                    +-----------------------+
+          |                          |                             |
+          |                          |                             v
+          |                          |                    +-----------------------+
+          |                          |                    | 6) Postprocessor      |
+          |                          |                    +-----------------------+
+          |                          |                             |
+          |                          |                             v
+          |                          |                    +-----------------------+
+          |                          |                    | 7) DB Persistence     |
+          |                          |                    +-----------------------+
+          |                          |                             |
+          |                          |                             v
+          +--------------------------+------------------->+-----------------------+
+                                                          | 8) UI Stream Update   |
+                                                          +-----------------------+
+```
+
+---
+
+## 11. User Flow (Component Touchpoints)
+Sequence for a user chat session represented as a UX flow.
+
+```text
+USER
+  |
+  | tap send
+  v
+[Electron UI] --(IPC)--> [Frontend JS] --(HTTP/WebSocket)--> [API Gateway]
+  |                            |                              |
+  |                            |                              v
+  |                            |                     [Inference Orchestrator]
+  |                            |                              |
+  |                            |                              v
+  |                            +<-- stream token chunk -------[Model Engine]
+  |                                                           |
+  |                          confirmed event                  v
+  v                                                          [Scheduler]
+[Render message] <---------------------------------------------+
+```
+
+---
+
+## 12. Detailed Entity-Relationship (ER) Diagram
+A comprehensive view of the local SQLite schema, tracking model status, session analytics, and hardware profiles.
+
+```text
+  +-----------------------+       +-----------------------+       +-----------------------+
+  |        MODELS         |       |       SESSIONS        |       |       HARDWARE        |
+  +-----------------------+       +-----------------------+       +-----------------------+
+  | id (PK) [INT]         |       | id (PK) [INT]         |       | id (PK) [INT]         |
+  | name [TEXT]           | 1   N | session_id [TEXT]     |       | cpu_name [TEXT]       |
+  | family [TEXT]         |-------| model_name [TEXT]     |       | cpu_cores [INT]       |
+  | file_path [TEXT]      |       | engine_mode [TEXT]    |       | total_ram_mb [FLOAT]  |
+  | file_size [BIGINT]    |       | started_at [DATETIME] |       | gpu_vram_mb [FLOAT]   |
+  | ram_required [FLOAT]  |       | total_tokens [INT]    |       | recommended [TEXT]    |
+  | status [TEXT]         |       | peak_ram_mb [FLOAT]   |       | profiled_at [DATETIME]|
+  +-----------------------+       | status [TEXT]         |       +-----------------------+
+              |                   +-----------------------+
+              |                               |
+              |                               | 1
+              |                               |
+              |       +-----------------------+       +-----------------------+
+              |       |       MESSAGES        |       |        PLUGINS        |
+              |       +-----------------------+       +-----------------------+
+              |       | id (PK) [INT]         |       | id (PK) [INT]         |
+              |     N | session_id (FK) [TEXT]|       | plugin_id [TEXT]      |
+              +-------| role [TEXT]           |       | name [TEXT]           |
+                      | content [TEXT]        |       | is_active [BOOL]      |
+                      | tokens [INT]          |       | permissions [TEXT]    |
+                      | timestamp [DATETIME]  |       | entry_point [TEXT]    |
+                      +-----------------------+       +-----------------------+
+```
+
+---
+
+## 13. System Design Summary (Goal-Driven)
+- Local-first inference with host profile-based engine selection.
+- Modular plugin paths in `backend/plugins` for preprocessing, token filtering, or external API bridging.
+- Pluggable storage: embeds SQLite for chat history and optional file-based model cache.
+- Multi-mode compute execution: FullRAM (dedicated RAM/GPU) vs LayerStream (SSD-backed low memory).
+- Event-driven UI update path using SSE / WebSocket for HMI fluidity.
+
+---
+
+## 14. Architectural CSS-like View (+-|)
+Single view for components and integration boundaries.
+
+```text
++---------------------------------------------------------------------+
+|                             APP SHELL                               |
+| +------------------+  +----------------+  +----------------------+  |
+| | Electron Host    |  | Backend API    |  | Scheduler / Worker   |  |
+| | - UI Rendering   |  | - FastAPI      |  | - LayerStream queue  |  |
+| +--------+---------+  +--------+-------+  +----------+-----------+  |
+|          |                   |                   |                | |
+|          |  IPC/WS/HTTP      |                   v                | |
+|          +-------------------+         +--------------------------+ |
+|                                        | Inference Backend        | |
+|                                        | - Tokenizer              | |
+|                                        | - Model Executor         | |
+|                                        | - Sampler                | |
+|                                        +--------------------------+ |
+|                                                    |                |
+|                                      +-------------+-------------+  |
+|                                      |   Storage / Thread-safe   |  |
+|                                      |   Cache / SQLite / Disk   |  |
+|                                      +---------------------------+  |
++---------------------------------------------------------------------+
+```
+
+
+
+---
+
+## 15. Backend Engine UML Diagram
+Class-level view of the inference orchestration and execution strategy.
+
+```text
++-----------------------------------------------------------+
+|                      Inference System                     |
++-----------------------------------------------------------+
+|                                                           |
+|  <<interface>>                                            |
+|  BaseEngine                                               |
+|  -------------------------------------------------------  |
+|  # model_path: str                                        |
+|  # hardware: dict                                         |
+|  # memory_manager: MemoryManager                          |
+|  -------------------------------------------------------  |
+|  + load() : None                                          |
+|  + unload() : None                                        |
+|  + generate(data) : Result                                |
+|  + generate_stream(data) : Stream                         |
+|  + get_stats() : dict                                     |
+|                                                           |
+|          ^                        ^                       |
+|          |                        |                       |
+|  +-------+-----------+    +-------+--------------+        |
+|  | FullRAMEngine     |    | LayerStreamEngine    |        |
+|  | ----------------- |    | -------------------- |        |
+|  | - mmap_ptr        |    | - layer_buffer       |        |
+|  | - vram_offset     |    | - disk_io_handle     |        |
+|  | ----------------- |    | -------------------- |        |
+|  | + load()          |    | + load()             |        |
+|  | + generate()      |    | + stream_next()      |        |
+|  +-------------------+    +----------------------+        |
+|                                                           |
++-----------------------------------------------------------+
+|                                                           |
+|  [Orchestrator]                                           |
+|  - EngineSelector                                         |
+|  - Profiler                                               |
+|  -------------------------------------------------------  |
+|  + pick_engine(model_id) -> BaseEngine                    |
++-----------------------------------------------------------+
+```

@@ -84,7 +84,7 @@ export function AgentCard({
       )}
     >
       <div className="flex items-start justify-between">
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
           <div
             className={cn(
               "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",

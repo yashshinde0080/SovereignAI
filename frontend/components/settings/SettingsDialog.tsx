@@ -124,10 +124,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[900px] h-[680px] p-0 bg-slate-950 border-slate-800 text-white overflow-hidden">
-        <div className="flex h-full">
+      <DialogContent className="w-[90vw] max-w-[900px] h-[80vh] max-h-[680px] p-0 bg-slate-950 border-slate-800 text-white overflow-hidden flex flex-col sm:flex-row">
+        <div className="flex h-full w-full">
           {/* Sidebar */}
-          <div className="w-[220px] border-r border-slate-800 flex flex-col">
+          <div className="w-[220px] shrink-0 border-r border-slate-800 flex flex-col">
             <DialogHeader className="p-4 pb-2">
               <DialogTitle className="text-lg font-semibold flex items-center gap-2">
                 <Settings className="h-5 w-5 text-blue-500" />
@@ -169,8 +169,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           </div>
 
           {/* Content */}
-          <div className="flex-1 flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-800">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-6 py-4 pr-12 border-b border-slate-800 shrink-0">
               <h2 className="text-lg font-semibold capitalize">
                 {sections.find((s) => s.key === activeSection)?.label}
               </h2>

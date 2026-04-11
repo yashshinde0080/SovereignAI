@@ -32,7 +32,7 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="relative bg-sovereign-black">
+    <main style={{ position: 'relative', background: '#050505', minHeight: '100vh' }}>
       <Navbar />
       <Hero />
       <ScrollSequence />

@@ -587,9 +587,9 @@ function SectionOverlay({
   let opacity = 0;
   if (scrollProgress >= startProgress && scrollProgress <= endProgress) {
     if (scrollProgress < fadeInEnd) {
-      opacity = (scrollProgress - startProgress) / (fadeInEnd - startProgress);
+      opacity = startProgress === 0 ? 1 : (scrollProgress - startProgress) / (fadeInEnd - startProgress);
     } else if (scrollProgress > fadeOutStart) {
-      opacity = (endProgress - scrollProgress) / (endProgress - fadeOutStart);
+      opacity = endProgress >= 0.95 ? 1 : (endProgress - scrollProgress) / (endProgress - fadeOutStart);
     } else {
       opacity = 1;
     }

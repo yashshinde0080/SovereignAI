@@ -15,6 +15,15 @@ class ModelRegistry:
     async def initialize(self):
         """Initialize database"""
         async with aiosqlite.connect(self.db_path) as db:
+            # Drop corrupted models table if created by manager.py schemas
+            try:
+                cursor = await db.execute("PRAGMA table_info(models)")
+                cols = [row[1] for row in await cursor.fetchall()]
+                if 'size_label' in cols:
+                    await db.execute("DROP TABLE models")
+            except Exception:
+                pass
+                
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS models (
                     id TEXT PRIMARY KEY,
@@ -42,6 +51,24 @@ class ModelRegistry:
                     FOREIGN KEY (model_id) REFERENCES models(id)
                 )
             """)
+            
+            # Migrate older schema versions
+            columns = [
+                ("parameters", "TEXT"),
+                ("modes_supported", "TEXT"),
+                ("size_gb", "REAL"),
+                ("quant", "TEXT"),
+                ("family", "TEXT"),
+                ("path", "TEXT"),
+                ("checksum", "TEXT"),
+                ("downloaded", "INTEGER DEFAULT 1"),
+                ("created_at", "TEXT")
+            ]
+            for col, dtype in columns:
+                try:
+                    await db.execute(f"ALTER TABLE models ADD COLUMN {col} {dtype}")
+                except Exception:
+                    pass
             
             await db.commit()
     

@@ -35,7 +35,8 @@ class LayerStreamEngine(BaseEngine):
         """Prepare meta scaffolding"""
         start_time = time.time()
         
-        self.weights_dir = os.path.join("offload_cache", os.path.basename(self.model_path.rstrip("/\\")))
+        from app.config import settings
+        self.weights_dir = os.path.join(str(settings.workspace_dir / "offload_cache"), os.path.basename(self.model_path.rstrip("/\\")))
         os.makedirs(self.weights_dir, exist_ok=True)
         
         if not os.path.exists(os.path.join(self.weights_dir, "embed.safetensors")):

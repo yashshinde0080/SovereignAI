@@ -20,10 +20,11 @@ class Settings(BaseSettings):
     
     # Paths
     base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent)
-    models_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent / "models")
     workspace_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace")
-    plugins_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "plugins")
-    database_path: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "database" / "sovereign.db")
+    models_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "models")
+    plugins_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "plugins")
+    database_path: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "database" / "sovereign.db")
+    data_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "data")
     
     # Memory
     max_ram_usage_percent: float = 0.75

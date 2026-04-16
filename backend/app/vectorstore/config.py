@@ -10,7 +10,8 @@ from dataclasses import dataclass
 
 @dataclass
 class VectorStoreConfig:
-    index_path: str = "data/vector_index"
+    from app.config import settings
+    index_path: str = str(settings.data_dir / "vector_index")
     index_file: str = "index.faiss"
     metadata_db: str = "metadata.db"
     embedding_model: str = "all-MiniLM-L6-v2"
@@ -42,8 +43,9 @@ def load_vector_config(config_path: str = "config/storage.toml") -> VectorStoreC
     config = toml.load(config_path)
     vs_config = config.get("vectorstore", {})
 
+    from app.config import settings
     return VectorStoreConfig(
-        index_path=vs_config.get("index_path", "data/vector_index"),
+        index_path=vs_config.get("index_path", str(settings.data_dir / "vector_index")),
         index_file=vs_config.get("index_file", "index.faiss"),
         metadata_db=vs_config.get("metadata_db", "metadata.db"),
         embedding_model=vs_config.get("embedding_model", "all-MiniLM-L6-v2"),

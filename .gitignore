@@ -117,3 +117,4 @@ coverage/
 /backend/models
 
 /backend/offload_cache
+/workspace

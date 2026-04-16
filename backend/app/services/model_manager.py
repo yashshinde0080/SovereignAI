@@ -99,7 +99,7 @@ class ModelManager:
             installed_ids.append(model_id)
         
         # ALSO SCAN OFFLOAD CACHE
-        cache_dir = Path("offload_cache")
+        cache_dir = settings.workspace_dir / "offload_cache"
         if cache_dir.exists():
             for cache_model_dir in cache_dir.iterdir():
                 if cache_model_dir.is_dir():

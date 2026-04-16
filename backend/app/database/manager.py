@@ -44,7 +44,8 @@ class DatabaseManager:
         else:
             db_config = {}
 
-        self.db_path = db_config.get("path", "data/sovereign.db")
+        from app.config import settings
+        self.db_path = str(db_config.get("path", settings.database_path))
         journal_mode = db_config.get("journal_mode", "WAL")
         busy_timeout = db_config.get("busy_timeout", 5000)
         cache_size = db_config.get("cache_size", -64000)

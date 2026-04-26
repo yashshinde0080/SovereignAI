@@ -60,7 +60,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n    {\"role\": \"user\", \"content\": \"Hello!\"}\n  ],\n  \"model\": \"llama3:8b\",\n  \"max_tokens\": 512,\n  \"temperature\": 0.7,\n  \"stream\": false,\n  \"use_rag\": false\n}"
+							"raw": "{\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n    {\"role\": \"user\", \"content\": \"Hello!\"}\n  ],\n  \"model\": \"Qwen/Qwen2.5-0.5B-Instruct\",\n  \"max_tokens\": 512,\n  \"temperature\": 0.7,\n  \"stream\": false,\n  \"use_rag\": false\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/v1/chat/completions",
@@ -166,7 +166,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"model\": \"phi-2\",\n  \"quant\": \"q4_k_m\"\n}"
+							"raw": "{\n  \"model\": \"Qwen/Qwen2.5-0.5B-Instruct\",\n  \"quant\": \"q4_k_m\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/v1/models/pull",
@@ -188,7 +188,7 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/v1/models/pull/status/phi-2",
+							"raw": "{{base_url}}/v1/models/pull/status/Qwen/Qwen2.5-0.5B-Instruct",
 							"host": [
 								"{{base_url}}"
 							],
@@ -197,7 +197,8 @@
 								"models",
 								"pull",
 								"status",
-								"phi-2"
+								"Qwen",
+								"Qwen2.5-0.5B-Instruct"
 							]
 						}
 					},
@@ -215,7 +216,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"model\": \"phi-2\",\n  \"mode\": \"fullram\"\n}"
+							"raw": "{\n  \"model\": \"Qwen/Qwen2.5-0.5B-Instruct\",\n  \"mode\": \"fullram\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/v1/models/load",
@@ -294,14 +295,15 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/v1/models/phi-2",
+							"raw": "{{base_url}}/v1/models/Qwen/Qwen2.5-0.5B-Instruct",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"v1",
 								"models",
-								"phi-2"
+								"Qwen",
+								"Qwen2.5-0.5B-Instruct"
 							]
 						}
 					},
@@ -313,14 +315,15 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/v1/models/phi-2",
+							"raw": "{{base_url}}/v1/models/Qwen/Qwen2.5-0.5B-Instruct",
 							"host": [
 								"{{base_url}}"
 							],
 							"path": [
 								"v1",
 								"models",
-								"phi-2"
+								"Qwen",
+								"Qwen2.5-0.5B-Instruct"
 							]
 						}
 					},
@@ -746,7 +749,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"app_name\": \"SovereignAI\",\n  \"startup_model\": \"phi-2\",\n  \"default_mode\": \"fullram\"\n}"
+							"raw": "{\n  \"app_name\": \"SovereignAI\",\n  \"startup_model\": \"Qwen/Qwen2.5-0.5B-Instruct\",\n  \"default_mode\": \"fullram\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/v1/settings/general",

@@ -1,0 +1,1334 @@
+{
+	"info": {
+		"_postman_id": "cbb80c8b-df40-4130-acb9-ab557ec9bc0d",
+		"name": "SovereignAI API",
+		"description": "Postman Collection for SovereignAI Portable Offline AI Compute Platform",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "General",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{	
+					"name": "Detailed Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chat",
+			"item": [
+				{
+					"name": "Chat Completions",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"You are a helpful assistant.\"},\n    {\"role\": \"user\", \"content\": \"Hello!\"}\n  ],\n  \"model\": \"llama3:8b\",\n  \"max_tokens\": 512,\n  \"temperature\": 0.7,\n  \"stream\": false,\n  \"use_rag\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/completions",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"completions"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Universal Execution",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"task\": \"summarize\",\n  \"input\": \"This is a long text to summarize.\",\n  \"generation_kwargs\": {\n    \"max_tokens\": 100\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/chat/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"execute"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Switch Execution Mode",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/chat/mode/switch?mode=layerstream",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"chat",
+								"mode",
+								"switch"
+							],
+							"query": [
+								{
+									"key": "mode",
+									"value": "layerstream"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Models",
+			"item": [
+				{
+					"name": "List Models",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pull Model",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"phi-2\",\n  \"quant\": \"q4_k_m\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/models/pull",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"pull"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Pull Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/pull/status/phi-2",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"pull",
+								"status",
+								"phi-2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Load Model",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"model\": \"phi-2\",\n  \"mode\": \"fullram\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/models/load",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"load"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Unload Model",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/unload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"unload"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Models",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/refresh",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"refresh"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Current Loaded Model",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/current",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"current"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Model Details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/phi-2",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"phi-2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Model",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/models/phi-2",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"models",
+								"phi-2"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "System",
+			"item": [
+				{
+					"name": "Hardware Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/system/hardware",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"system",
+								"hardware"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "System Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/system/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"system",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Resource Usage",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/system/resources",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"system",
+								"resources"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Model Recommendations",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/system/recommendation",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"system",
+								"recommendation"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Benchmark",
+			"item": [
+				{
+					"name": "Run Benchmark",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"iterations\": 3,\n  \"max_tokens\": 128\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/benchmark/run",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"benchmark",
+								"run"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Compare Modes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/benchmark/compare",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"benchmark",
+								"compare"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "RAG",
+			"item": [
+				{
+					"name": "Upload Document",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/rag/upload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"rag",
+								"upload"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Query Documents",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"What is SovereignAI?\",\n  \"top_k\": 5,\n  \"generate_response\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/rag/query",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"rag",
+								"query"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Documents",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/rag/documents",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"rag",
+								"documents"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Document",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/rag/documents/doc_123",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"rag",
+								"documents",
+								"doc_123"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Plugins",
+			"item": [
+				{
+					"name": "List Plugins",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/plugins/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"plugins",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Plugin Details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/plugins/pdf_ingestion",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"plugins",
+								"pdf_ingestion"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enable Plugin",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/plugins/pdf_ingestion/enable",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"plugins",
+								"pdf_ingestion",
+								"enable"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Disable Plugin",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/plugins/pdf_ingestion/disable",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"plugins",
+								"pdf_ingestion",
+								"disable"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Execute Plugin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"extract\",\n  \"params\": {\"file_path\": \"test.pdf\"}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/plugins/pdf_ingestion/execute",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"plugins",
+								"pdf_ingestion",
+								"execute"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Settings",
+			"item": [
+				{
+					"name": "Get All Settings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reset All Settings",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/reset",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"reset"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get General Settings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/general",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"general"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update General Settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"app_name\": \"SovereignAI\",\n  \"startup_model\": \"phi-2\",\n  \"default_mode\": \"fullram\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/settings/general",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"general"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Personalization Settings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/personalization",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"personalization"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Personalization Settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_name\": \"User\",\n  \"ai_name\": \"Sovereign\",\n  \"tone\": \"helpful\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/settings/personalization",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"personalization"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get System Prompt",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/system-prompt",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"system-prompt"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Data Controls",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/data-controls",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"data-controls"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Data Controls",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"history_retention_days\": 30,\n  \"auto_delete_history\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/settings/data-controls",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"data-controls"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Security Settings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/security",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"security"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Security Settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"require_password\": true,\n  \"api_port\": 8000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/settings/security",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"security"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Set Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/security/set-password?password=mysecretpassword",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"security",
+								"set-password"
+							],
+							"query": [
+								{
+									"key": "password",
+									"value": "mysecretpassword"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Verify Password",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/security/verify-password?password=mysecretpassword",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"security",
+								"verify-password"
+							],
+							"query": [
+								{
+									"key": "password",
+									"value": "mysecretpassword"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Parental Controls",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/parental-controls",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"parental-controls"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Parental Controls",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"enable_filtering\": true,\n  \"allowed_hours\": [9, 21]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/settings/parental-controls",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"parental-controls"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Set Parental PIN",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/parental-controls/set-pin?pin=1234",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"parental-controls",
+								"set-pin"
+							],
+							"query": [
+								{
+									"key": "pin",
+									"value": "1234"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Verify Parental PIN",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/parental-controls/verify-pin?pin=1234",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"parental-controls",
+								"verify-pin"
+							],
+							"query": [
+								{
+									"key": "pin",
+									"value": "1234"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Project Settings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/project",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"project"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Project Settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project_name\": \"Default Project\",\n  \"auto_save\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/settings/project",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"project"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List All Agents",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/agents",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"agents"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Active Agent",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/agents/active",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"agents",
+								"active"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Specific Agent",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/agents/coding_expert",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"agents",
+								"coding_expert"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Agent",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"new_agent\",\n  \"name\": \"New Agent\",\n  \"system_prompt\": \"You are a new agent.\",\n  \"capabilities\": [\"text\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/settings/agents",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"agents"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Agent",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"new_agent\",\n  \"name\": \"Updated Agent Name\",\n  \"system_prompt\": \"You are an updated agent.\",\n  \"capabilities\": [\"text\", \"code\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/v1/settings/agents/new_agent",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"agents",
+								"new_agent"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Agent",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/agents/new_agent",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"agents",
+								"new_agent"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Activate Agent",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/agents/coding_expert/activate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"agents",
+								"coding_expert",
+								"activate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Deactivate All Agents",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/agents/deactivate",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"agents",
+								"deactivate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Audit Log",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/v1/settings/audit-log?limit=50",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"v1",
+								"settings",
+								"audit-log"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000"
+		}
+	]
+}

@@ -233,34 +233,19 @@ def build_prompt(messages: list) -> str:
 
 @router.post("/mode/switch")
 async def switch_mode(request: Request, mode: str):
-    """Switch execution mode"""
+    """Switch execution mode for current model"""
     app = request.app
-    
-    if mode not in ["fullram", "layerstream", "auto"]:
-        raise HTTPException(status_code=400, detail="Invalid mode")
-    
     if not app.state.active_model:
         raise HTTPException(status_code=400, detail="No model loaded")
     
-    # Get model metadata
-    model_meta = await app.state.model_manager.get_model(app.state.active_model)
-    
-    # Create new engine
-    factory = EngineFactory(app.state.hardware_profile)
-    
-    # Unload current
-    if app.state.active_engine:
-        await app.state.active_engine.unload()
-    
-    # Load with new mode
-    app.state.active_engine = await factory.create_engine(
-        model_path=model_meta["path"],
-        mode=mode
-    )
-    app.state.active_mode = mode
-    
-    return {
-        "status": "success",
-        "model": app.state.active_model,
-        "mode": app.state.active_mode
-    }
+    try:
+        # Use ModelManager's load_model to handle engine creation and path resolution
+        result = await app.state.model_manager.load_model(
+            model_id=app.state.active_model,
+            mode=mode
+        )
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

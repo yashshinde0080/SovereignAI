@@ -249,10 +249,34 @@ class ModelManager:
         # Unload current if any
         await self.unload_model()
         
+        # If we're in fullram mode but selected a split model, try to use the base model
+        model_path = model["path"]
+        if mode == "fullram" and model["id"].startswith("split:"):
+            target_base = model["id"].replace("split:", "")
+            
+            # Reuse fuzzy matching logic to find the base model
+            all_models = await self.list_models()
+            clean_target = target_base.replace("/", "-").replace(":", "-").lower()
+            
+            base_model = None
+            for m in all_models:
+                # Don't match against other split models
+                if m["id"].startswith("split:"):
+                    continue
+                    
+                clean_m = m["id"].replace("/", "-").replace(":", "-").lower()
+                if clean_m == clean_target:
+                    base_model = m
+                    break
+            
+            if base_model:
+                print(f"LOAD: Switching to base model {base_model['id']} path for fullram mode")
+                model_path = base_model["path"]
+
         # Initialize engine
         factory = EngineFactory(self.app.state.hardware_profile)
         engine = await factory.create_engine(
-            model_path=model["path"],
+            model_path=model_path,
             mode=mode
         )
         

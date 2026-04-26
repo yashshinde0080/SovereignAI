@@ -249,10 +249,12 @@ class LayerStreamEngine(BaseEngine):
             # Initial prompt flush
             logits = await asyncio.to_thread(executor.execute_forward, input_ids, mode="prefill")
             next_token = Sampler.sample(logits, temperature, top_p)
-            token_text = tokenizer.decode([next_token.item()], skip_special_tokens=True)
+            
+            all_tokens = [next_token.item()]
+            decoded_text = tokenizer.decode(all_tokens, skip_special_tokens=True)
             
             yield {
-                "token": token_text,
+                "token": decoded_text,
                 "finish_reason": None,
                 "layers_loaded": executor.num_layers
             }
@@ -267,13 +269,20 @@ class LayerStreamEngine(BaseEngine):
                     
                 logits = await asyncio.to_thread(executor.execute_forward, current_input, mode="decode")
                 next_token = Sampler.sample(logits, temperature, top_p)
-                token_text = tokenizer.decode([next_token.item()], skip_special_tokens=True)
                 
-                yield {
-                    "token": token_text,
-                    "finish_reason": None,
-                    "layers_loaded": executor.num_layers
-                }
+                all_tokens.append(next_token.item())
+                full_text = tokenizer.decode(all_tokens, skip_special_tokens=True)
+                
+                # Extract the new part of the text
+                token_text = full_text[len(decoded_text):]
+                decoded_text = full_text
+                
+                if token_text:
+                    yield {
+                        "token": token_text,
+                        "finish_reason": None,
+                        "layers_loaded": executor.num_layers
+                    }
                 current_input = next_token
                 
         yield {

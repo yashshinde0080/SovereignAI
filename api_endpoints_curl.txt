@@ -1,0 +1,286 @@
+# SovereignAI API Endpoints - cURL Commands for Postman Import
+# Base URL: http://localhost:8000
+
+# --- General ---
+
+# Health Check
+curl -X GET "http://localhost:8000/"
+
+# Detailed Health Check
+curl -X GET "http://localhost:8000/health"
+
+# --- Chat ---
+
+# Chat Completions
+curl -X POST "http://localhost:8000/v1/chat/completions" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "messages": [
+             {"role": "system", "content": "You are a helpful assistant."},
+             {"role": "user", "content": "Hello!"}
+           ],
+           "model": "llama3:8b",
+           "max_tokens": 512,
+           "temperature": 0.7,
+           "stream": false,
+           "use_rag": false
+         }'
+
+# Universal Execution
+curl -X POST "http://localhost:8000/v1/chat/execute" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "task": "summarize",
+           "input": "This is a long text to summarize.",
+           "generation_kwargs": {
+             "max_tokens": 100
+           }
+         }'
+
+# Switch Execution Mode
+curl -X POST "http://localhost:8000/v1/chat/mode/switch?mode=layerstream"
+
+# --- Models ---
+
+# List Models
+curl -X GET "http://localhost:8000/v1/models/"
+
+# Pull Model
+curl -X POST "http://localhost:8000/v1/models/pull" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "model": "phi-2",
+           "quant": "q4_k_m"
+         }'
+
+# Pull Status
+curl -X GET "http://localhost:8000/v1/models/pull/status/phi-2"
+
+# Load Model
+curl -X POST "http://localhost:8000/v1/models/load" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "model": "phi-2",
+           "mode": "fullram"
+         }'
+
+# Unload Model
+curl -X POST "http://localhost:8000/v1/models/unload"
+
+# Refresh Models
+curl -X POST "http://localhost:8000/v1/models/refresh"
+
+# Current Loaded Model
+curl -X GET "http://localhost:8000/v1/models/current"
+
+# Get Model Details
+curl -X GET "http://localhost:8000/v1/models/phi-2"
+
+# Delete Model
+curl -X DELETE "http://localhost:8000/v1/models/phi-2"
+
+# --- System ---
+
+# Hardware Profile
+curl -X GET "http://localhost:8000/v1/system/hardware"
+
+# System Status
+curl -X GET "http://localhost:8000/v1/system/status"
+
+# Resource Usage
+curl -X GET "http://localhost:8000/v1/system/resources"
+
+# Model Recommendations
+curl -X GET "http://localhost:8000/v1/system/recommendation"
+
+# --- Benchmark ---
+
+# Run Benchmark
+curl -X POST "http://localhost:8000/v1/benchmark/run" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "iterations": 3,
+           "max_tokens": 128
+         }'
+
+# Compare Modes
+curl -X GET "http://localhost:8000/v1/benchmark/compare"
+
+# --- RAG ---
+
+# Upload Document (Note: Use form-data in Postman for the file)
+# curl -X POST "http://localhost:8000/v1/rag/upload" -F "file=@/path/to/your/file.txt"
+
+# Query Documents
+curl -X POST "http://localhost:8000/v1/rag/query" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "query": "What is SovereignAI?",
+           "top_k": 5,
+           "generate_response": true
+         }'
+
+# List Documents
+curl -X GET "http://localhost:8000/v1/rag/documents"
+
+# Delete Document
+curl -X DELETE "http://localhost:8000/v1/rag/documents/doc_123"
+
+# --- Plugins ---
+
+# List Plugins
+curl -X GET "http://localhost:8000/v1/plugins/"
+
+# Get Plugin Details
+curl -X GET "http://localhost:8000/v1/plugins/pdf_ingestion"
+
+# Enable Plugin
+curl -X POST "http://localhost:8000/v1/plugins/pdf_ingestion/enable"
+
+# Disable Plugin
+curl -X POST "http://localhost:8000/v1/plugins/pdf_ingestion/disable"
+
+# Execute Plugin
+curl -X POST "http://localhost:8000/v1/plugins/pdf_ingestion/execute" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "action": "extract",
+           "params": {"file_path": "test.pdf"}
+         }'
+
+# --- Settings ---
+
+# Get All Settings
+curl -X GET "http://localhost:8000/v1/settings/"
+
+# Reset All Settings
+curl -X POST "http://localhost:8000/v1/settings/reset"
+
+# Get General Settings
+curl -X GET "http://localhost:8000/v1/settings/general"
+
+# Update General Settings
+curl -X PUT "http://localhost:8000/v1/settings/general" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "app_name": "SovereignAI",
+           "startup_model": "phi-2",
+           "default_mode": "fullram"
+         }'
+
+# Get Personalization Settings
+curl -X GET "http://localhost:8000/v1/settings/personalization"
+
+# Update Personalization Settings
+curl -X PUT "http://localhost:8000/v1/settings/personalization" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "user_name": "User",
+           "ai_name": "Sovereign",
+           "tone": "helpful"
+         }'
+
+# Get System Prompt
+curl -X GET "http://localhost:8000/v1/settings/system-prompt"
+
+# Get Data Controls
+curl -X GET "http://localhost:8000/v1/settings/data-controls"
+
+# Update Data Controls
+curl -X PUT "http://localhost:8000/v1/settings/data-controls" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "history_retention_days": 30,
+           "auto_delete_history": false
+         }'
+
+# Get Security Settings
+curl -X GET "http://localhost:8000/v1/settings/security"
+
+# Update Security Settings
+curl -X PUT "http://localhost:8000/v1/settings/security" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "require_password": true,
+           "api_port": 8000
+         }'
+
+# Set Password
+curl -X POST "http://localhost:8000/v1/settings/security/set-password?password=mysecretpassword"
+
+# Verify Password
+curl -X POST "http://localhost:8000/v1/settings/security/verify-password?password=mysecretpassword"
+
+# Get Parental Controls
+curl -X GET "http://localhost:8000/v1/settings/parental-controls"
+
+# Update Parental Controls
+curl -X PUT "http://localhost:8000/v1/settings/parental-controls" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "enable_filtering": true,
+           "allowed_hours": [9, 21]
+         }'
+
+# Set Parental PIN
+curl -X POST "http://localhost:8000/v1/settings/parental-controls/set-pin?pin=1234"
+
+# Verify Parental PIN
+curl -X POST "http://localhost:8000/v1/settings/parental-controls/verify-pin?pin=1234"
+
+# Get Project Settings
+curl -X GET "http://localhost:8000/v1/settings/project"
+
+# Update Project Settings
+curl -X PUT "http://localhost:8000/v1/settings/project" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "project_name": "Default Project",
+           "auto_save": true
+         }'
+
+# List All Agents
+curl -X GET "http://localhost:8000/v1/settings/agents"
+
+# Get Active Agent
+curl -X GET "http://localhost:8000/v1/settings/agents/active"
+
+# Get Specific Agent
+curl -X GET "http://localhost:8000/v1/settings/agents/coding_expert"
+
+# Create Agent
+curl -X POST "http://localhost:8000/v1/settings/agents" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "id": "new_agent",
+           "name": "New Agent",
+           "system_prompt": "You are a new agent.",
+           "capabilities": ["text"]
+         }'
+
+# Update Agent
+curl -X PUT "http://localhost:8000/v1/settings/agents/new_agent" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "id": "new_agent",
+           "name": "Updated Agent Name",
+           "system_prompt": "You are an updated agent.",
+           "capabilities": ["text", "code"]
+         }'
+
+# Delete Agent
+curl -X DELETE "http://localhost:8000/v1/settings/agents/new_agent"
+
+# Activate Agent
+curl -X POST "http://localhost:8000/v1/settings/agents/coding_expert/activate"
+
+# Deactivate All Agents
+curl -X POST "http://localhost:8000/v1/settings/agents/deactivate"
+
+# Get Audit Log
+curl -X GET "http://localhost:8000/v1/settings/audit-log?limit=50"
+
+# --- WebSockets ---
+
+# System Metrics Stream
+# Connect via WebSocket: ws://localhost:8000/ws/metrics

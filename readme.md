@@ -6,7 +6,8 @@
 > Run large language models (LLMs) locally on consumer-grade hardware or directly from external drives (USB/SSD). No cloud, no telemetry, no compromise.
 
 ---
-
+---
+---
 ## 🚀 Key Features
 
 | Feature | Description |

@@ -118,3 +118,6 @@ coverage/
 
 /backend/offload_cache
 /workspace
+
+.agents
+.claude

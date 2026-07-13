@@ -161,18 +161,7 @@ class ApiClient {
   }
 
   async updateSettingsSection(section: string, data: any) {
-    const endpointMap: Record<string, string> = {
-      general: '/settings/general',
-      project: '/settings/project',
-      personalization: '/settings/personalization',
-      data_controls: '/settings/data-controls',
-      security: '/settings/security',
-      parental_controls: '/settings/parental-controls',
-    };
-    const endpoint = endpointMap[section];
-    if (!endpoint) throw new Error('Invalid section');
-
-    return this.request(`/v1${endpoint}`, {
+    return this.request(`/v1/settings/${section.replace(/_/g, '-')}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });

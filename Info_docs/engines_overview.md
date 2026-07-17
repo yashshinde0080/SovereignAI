@@ -1,19 +1,19 @@
 # SovereignAI Execution Engines Architecture
 
-This documentation provides a deep-dive, technical analysis of the execution engines utilized in the SovereignAI backend: **FullRAM Engine** and **LayerStream Engine**. It details their internal mechanics, class structures, memory management strategies, generation pipelines, and hardware implications.
+This documentation provides a deep-dive, technical analysis of the execution engines utilized in the SovereignAI backend: ==FullRAM Engine== and ==LayerStream Engine==. It details their internal mechanics, class structures, memory management strategies, generation pipelines, and hardware implications.
 
 ---
 
 ## 1. FullRAM Engine (`engines/fullram`)
 
-The **FullRAM** mechanism (`FullRAMEngine`) serves as the core monolithic inference pipeline. It represents the standard paradigm for loading and executing Large Language Models (LLMs) via the Hugging Face `transformers` ecosystem. It relies on having sufficient memory (RAM or VRAM) to hold the entire model architecture simultaneously.
+The **FullRAM** mechanism (`FullRAMEngine`) serves as the core monolithic inference pipeline. It represents the standard paradigm for loading and executing Large Language Models (LLMs) via the [[Hugging Face]] `transformers` ecosystem. It relies on having sufficient memory (RAM or VRAM) to hold the entire model architecture simultaneously.
 
 ### 1.1 Core Architecture
 
 The `FullRAMEngine` class inherits from `BaseEngine` and manages the lifecycle of the model seamlessly.
 
 **Key Components:**
-- **Tokenizer:** `AutoTokenizer` responsible for translating text prompts into tensor representations (`input_ids`).
+- **==Tokenizer==:** `AutoTokenizer` responsible for translating text prompts into tensor representations (`input_ids`).
 - **Model Framework:** `AutoModelForCausalLM` which contains the full transformer stack.
 - **Hardware Mapping:** Automatically utilizes `accelerate` backend (`device_map="auto"`) to push tensors to CUDA if available, falling back to CPU matrices if not.
 
@@ -41,7 +41,7 @@ The engine supports two inference modes:
 - Returns a complete tokenized output upon full sequence completion.
 
 **Streaming Generation (`generate_stream`):**
-- Implements `TextIteratorStreamer` from the Hugging Face library.
+- Implements `TextIteratorStreamer` from the [[Hugging Face]] library.
 - The generation loop is pushed to a background `Threading.Thread`.
 - Tokens are yielded asynchronously to the caller the moment they are decoded from the model, providing real-time text visualization.
 
@@ -66,14 +66,14 @@ graph TD
 
 ## 2. LayerStream Engine (`engines/layerstream`)
 
-The **LayerStream** Engine (`LayerStreamEngine`) represents a true memory-bounded inference architecture. It dynamically circumvents Out-of-Memory (OOM) errors by decoupling the computation pipeline, streaming layers from disk storage sequentially instead of mapping the entire graph into active RAM.
+The **LayerStream** Engine (`LayerStreamEngine`) represents a true ==memory-bounded inference== architecture. It dynamically circumvents Out-of-Memory (OOM) errors by decoupling the computation pipeline, streaming layers from disk storage sequentially instead of mapping the entire graph into active RAM.
 
 ### 2.1 Core Architecture
 
 Unlike FullRAM's monolithic design, LayerStream orchestrates a complex suite of sub-components:
 
-- **WeightSplitter:** Pre-processes models by chunking monolithic weight files into discrete, layer-by-layer `.safetensors` parts mapped to physical disk.
-- **Empty Scaffolding:** Utilizes `accelerate.init_empty_weights()` to construct the logical `AutoConfig` framework of the model without allocating memory for its weights.
+- **==WeightSplitter==:** Pre-processes models by chunking monolithic weight files into discrete, layer-by-layer `.safetensors` parts mapped to physical disk.
+- **==Empty Scaffolding==:** Utilizes `accelerate.init_empty_weights()` to construct the logical `AutoConfig` framework of the model without allocating memory for its weights.
 - **ModelIntrospector:** Scans the empty scaffold to identify component blocks (embedding layers, attention layers, MLP blocks, final norm).
 - **LayerExecutor:** Handles the heavy lifting—loading a single tensor layer into memory, passing the hidden states through it, and immediately flushing the layer from memory.
 
@@ -90,19 +90,19 @@ Aggressive garbage collection is required here.
 2. The Key-Value Key/Value cache (`kv_manager`) is flushed to ensure past sequence states are destroyed.
 3. Explicit `gc.collect()` and `torch.cuda.empty_cache()` are invoked to scrub residual tensor allocations.
 
-### 2.3 The Two-Phase Compution Pipeline
+### 2.3 The Two-Phase Computation Pipeline
 
 Inference strictly bypasses HuggingFace's `generate()` method, instead building a custom computation loop driven by `execute_forward()` and a custom `Sampler`.
 
 #### Phase 1: Context Prefill
 - When a prompt is ingested, the engine must process the entire sequence to generate internal hidden states.
 - It iterates through the disk cache, pulling Layer 1 into memory, passing the prompt tokens, saving the state, unloading Layer 1, loading Layer 2, etc.
-- **Goal:** Establishes the initial logits and K/V cache blocks.
+- **Goal:** Establishes the initial logits and ==KV Cache== blocks.
 
 #### Phase 2: Decoded Token Generation
 - Armed with the final state of the prefill, the engine decodes the first token.
 - For each subsequent required token, the engine passes the singular new token through the layers sequentially.
-- Uses `Sampler.sample()` (with temperature and top-p tuning) to predict the next word.
+- Uses `Sampler.sample()` (with ==temperature== and ==top-p== tuning) to predict the next word.
 - Loop terminates when `eos_token_id` is reached or `max_tokens` is hit.
 
 ### 2.4 Visual Architecture: LayerStream Flow
@@ -173,3 +173,8 @@ $$TPS_{layer} \approx \frac{16\text{GB/s}}{14\text{GB}} \approx 1.14 \text{ toke
 To extend these engines, developers must implement the `BaseEngine` interface. 
 - Ensure that `load()`, `unload()`, `generate()`, and `generate_stream()` are appropriately overridden.
 - Engine memory footprint tracking MUST be reported via `get_memory_usage()` returning a dictionary format parsing active internal buffers (or `psutil` values).
+
+## See Also
+- [[Engine Algorithms]] — Pseudocode and math for both engines
+- [[Algorithms]] — Adaptive memory and LayerStream algorithms
+- [[Technical Architecture]] — System component interactions

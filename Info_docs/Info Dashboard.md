@@ -60,3 +60,20 @@ PRD ──→ TRD ──→ Technical Architecture
 - **==Portable==** — Runs from USB. All paths relative. No registry/install needed.
 - **==Offline==** — 100% local. No telemetry. Zero bytes leave the machine.
 - **==Plugin System==** — Python `importlib`-based hooks for RAG, pre/post processing.
+
+## Technology Stack Nodes
+
+| Technology | Role in Stack |
+|------------|---------------|
+| [[FastAPI]] | Backend API gateway and router |
+| [[React]] | Frontend user interface framework |
+| [[Electron]] | Desktop application shell |
+| [[SQLite]] | Local database for persistence |
+| [[Pydantic]] | Data validation and schemas |
+| [[Zustand]] | Frontend state management |
+| [[Tailwind CSS]] | Utility-first styling framework |
+| [[Vite]] | Frontend build tool and dev server |
+| [[Hugging Face]] | ML transformers and tokenizers |
+| [[GGUF]] | Model weight file format |
+| [[KV Cache]] | Memory optimization for inference |
+| [[LayerStream]] | Low-memory inference engine |

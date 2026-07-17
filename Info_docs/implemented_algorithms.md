@@ -1,6 +1,6 @@
 # Algorithms Implemented and Used in SovereignAI
 
-This document outlines the 25 core algorithms utilized and implemented across the SovereignAI platform, spanning Natural Language Processing (NLP), Vector Retrieval, Neural Network Execution, Memory Management, and Frontend Orchestration.
+This document outlines the 25 core algorithms utilized and implemented across the SovereignAI platform, spanning ==Natural Language Processing (NLP)==, Vector Retrieval, Neural Network Execution, Memory Management, and Frontend Orchestration.
 
 ## Retrieval-Augmented Generation (RAG) & Vector Database
 
@@ -23,7 +23,7 @@ This document outlines the 25 core algorithms utilized and implemented across th
    * **Description**: A fundamental vector metric utilized by the `retriever.py` to calculate the mathematical cosine of the angle between two high-dimensional embedding vectors, thereby gauging their semantic relationship.
 
 7. **L2 (Euclidean) Distance Algorithm**
-   * **Description**: Supported as an alternative spatial metric within the FAISS indices to track the straight-line distance between document vectors and the query vector.
+   * **Description**: Supported as an alternative spatial metric within the ==FAISS== indices to track the straight-line distance between document vectors and the query vector.
 
 8. **Sentence-Transformer Embedding Algorithm (e.g., MiniLM/BERT)**
    * **Description**: Used in `embedding_pipeline.py` to route raw semantic strings continuously through a dense Transformer architecture, translating textual relationships into abstract multi-dimensional math arrays.
@@ -34,7 +34,7 @@ This document outlines the 25 core algorithms utilized and implemented across th
 ## Core Engine & Memory Management
 
 10. **Layer-wise Model Offloading (LayerStream) Algorithm**
-    * **Description**: The cornerstone custom algorithm of SovereignAI's `LayerStreamEngine`. Instead of loading the full LLM into VRAM, it computes transformer layers sequentially, mapping and unmapping layer buffers strictly on demand to support deep models on low-end hardware.
+    * **Description**: The cornerstone custom algorithm of SovereignAI's ==LayerStream Engine==. Instead of loading the full LLM into VRAM, it computes transformer layers sequentially, mapping and unmapping layer buffers strictly on demand to support deep models on low-end hardware.
 
 11. **LRU (Least Recently Used) Cache Eviction Algorithm**
     * **Description**: Residing in `scheduler.py`, this keeps track of layer timestamps (`last_used = time.time()`). Once the maximum active layer threshold is breached, it targets and evicts the sequentially oldest layer residing in active RAM.
@@ -46,7 +46,7 @@ This document outlines the 25 core algorithms utilized and implemented across th
     * **Description**: Found in `mmap_loader.py`, this I/O algorithm allows SovereignAI to map massive neural network weight files directly into addressable memory space. It bypasses the standard OS swap buffer entirely.
 
 14. **Dynamic Hardware Detection Algorithm**
-    * **Description**: Analyzes local system architecture (CPU cores, Available RAM, disk performance, VRAM limits) at initialization to algorithmically route system logic toward either the `FullRAM` or `LayerStream` execution environments.
+    * **Description**: Analyzes local system architecture (CPU cores, Available RAM, disk performance, VRAM limits) at initialization to algorithmically route system logic toward either the ==FullRAM== or ==LayerStream== execution environments.
 
 15. **Transformer Forward Pass Activation Algorithm**
     * **Description**: The matrix-multiplication sequence executed in `_compute_layer`. It systematically passes dynamic token activations over the frozen weight matrices of attention blocks and feed-forward networks (FFN).
@@ -71,7 +71,7 @@ This document outlines the 25 core algorithms utilized and implemented across th
 ## Frontend & Event System Optimizations
 
 21. **Virtual DOM Reconciliation Algorithm**
-    * **Description**: Employed intrinsically by the React framework to batch and calculate the minimal isolated HTML node changes—preventing GUI lockup when dynamically rendering large, complex, and streaming chat logs.
+    * **Description**: Employed intrinsically by the ==React== framework to batch and calculate the minimal isolated HTML node changes—preventing GUI lockup when dynamically rendering large, complex, and streaming chat logs.
 
 22. **Cryptographic UUID Generation Algorithm (RFC 4122)**
     * **Description**: Uses Python's internal random entropy pool (e.g. `uuid.uuid4()`) to universally construct un-collidable identifiers for chunks, RAG documents, and message interactions.
@@ -84,3 +84,9 @@ This document outlines the 25 core algorithms utilized and implemented across th
 
 25. **Asynchronous Token Stream (SSE) Buffering Algorithm**
     * **Description**: Yields partial textual representations from the isolated LLM inference Python process asynchronously. The tokens are funneled through the WebSocket/SSE buffer before actively concatenating onto the UI user state.
+
+## See Also
+- [[Algorithms]] — Core adaptive memory and LayerStream algorithms
+- [[Engine Algorithms]] — Pseudocode for both execution engines
+- [[Pipelines]] — End-to-end inference pipeline
+- [[Engines Overview]] — FullRAM and LayerStream deep-dive

@@ -1,7 +1,7 @@
 # Hierarchical Mindmap
 
 ## 1. Structural Overview
-The mindmap details the vast scale and modular architecture of SovereignAI Edge. Because the platform acts as a monolith, mapping out its components visualizes responsibilities from the presentation layer down to OS-level tensor execution.
+The mindmap details the vast scale and modular architecture of ==SovereignAI Edge==. Because the platform acts as a monolith, mapping out its components visualizes responsibilities from the presentation layer down to OS-level tensor execution.
 
 ## 2. Detailed Mindmap Visual Structure
 ```mermaid
@@ -30,3 +30,7 @@ mindmap
             Privacy["Data Privacy"]
 ```
 
+## See Also
+- [[Technical Architecture]] — System layers and component interactions
+- [[Visuals]] — ASCII architecture and deployment diagrams
+- [[Engines Overview]] — FullRAM and LayerStream engine architecture

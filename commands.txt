@@ -1,0 +1,2 @@
+Remove-Item "$env:LOCALAPPDATA\opencode" -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item "$env:APPDATA\opencode" -Recurse -Force -ErrorAction SilentlyContinue

@@ -55,7 +55,7 @@ A critical feature of the platform is its "Hardware Awareness." Before any infer
                     |
                     v
         +-----------------------+
-        |   Hardware Profiler   | <--- Query psutil / NVML (VRAM)
+        |   ==Hardware Profiler==   | <--- Query psutil / NVML (VRAM)
         +-----------+-----------+
                     |
            +--------v---------+
@@ -65,7 +65,7 @@ A critical feature of the platform is its "Hardware Awareness." Before any infer
                     |
           +---------+-----------+
           |                     |
-    [ YES: FullRAM ]    [ NO: LayerStream ]
+    [ YES: ==FullRAM== ]    [ NO: ==LayerStream== ]
           |                     |
   +-------v---------+   +-------v--------+
   | MAP ALL TENSORS |   | INIT SCAFFOLD  |
@@ -94,7 +94,7 @@ The LayerStream engine enables running massive models (e.g., 70B) on low-memory 
 | +---------------+ |          |           |                            |
 | | ...           | |          |   2.PROCESS HIDDEN STATE               |
 | +---------------+ |          |              |                         |
-| | Layer N (.saf)| |          |   3.UPDATE KV CACHE                    |
+| | Layer N (.saf)| |          |   3.UPDATE ==KV CACHE==                    |
 | +---------------+ |          |              |                         |
 |                   |          |   4.PURGE LAYER N (Free RAM)           |
 +-------------------+          |           |                            |
@@ -131,7 +131,7 @@ This diagram traces the lifecycle of a token from the user's keystroke to the UI
      |                |                       |                       |
      |                |                       |--- Post-Process Plugins
      |                |                       |                       |
-     |                |                       |--- Write SQLite ------|
+     |                |                       |--- Write [[SQLite]] ------|
      |                | <--- {event: "done"} -|                       |
 ```
 
@@ -140,7 +140,6 @@ This diagram traces the lifecycle of a token from the user's keystroke to the UI
 ## 5. Deployment Structure (USB Portability)
 How SovereignAI Edge maintains "Zero-Configuration" portability across different host environments.
 
-```text
 ---
 
 ## 6. LayerStream Double-Buffering (Algorithm 16)
@@ -200,13 +199,13 @@ A summary of how data types move through the different system components.
 
 | Component      | Primary Data Input | Transformation Logic | Primary Data Output |
 | :------------- | :----------------- | :------------------- | :------------------ |
-| **Electron**   | User Keystrokes    | IPC / Process Mgmt   | UI State Updates    |
-| **FastAPI**    | UI JSON Payloads   | Plugin Hook Routing  | WS / SSE Stream     |
+| **[[Electron]]**   | User Keystrokes    | IPC / Process Mgmt   | UI State Updates    |
+| **[[FastAPI]]**    | UI JSON Payloads   | Plugin Hook Routing  | WS / SSE Stream     |
 | **Profiler**   | OS Syscalls        | Comparison Logic     | Engine Choice (ID)  |
 | **Tokenizer**  | UTF-8 String       | Vocabulary Mapping   | Int32 Token Tensors |
 | **Inference**  | Hidden States      | Matrix Dot-Product   | Logit Probability   |
-| **Sampler**    | Logit Tensors      | Temp/Top-P/Top-K     | Scalar Token ID     |
-| **SQLite**     | Chat Chunks        | SQL INSERT / UPDATE  | Chat Search Index   |
+| **Sampler**    | Logit Tensors      | Temp/==Top-P==/Top-K     | Scalar Token ID     |
+| **[[SQLite]]**     | Chat Chunks        | SQL INSERT / UPDATE  | Chat Search Index   |
 
 ---
 
@@ -258,7 +257,12 @@ A structured, stage-by-stage pipeline from user input to saved output.
           |                          |                    | 6) Postprocessor      |
           |                          |                    +-----------------------+
           |                          |                             |
-          |                          |                             v
+
+## See Also
+- [[Engines Overview]] — FullRAM and LayerStream engine architecture
+- [[Engine Algorithms]] — Pseudocode and math for both engines
+- [[Algorithms]] — Core adaptive memory and LayerStream algorithms
+- [[Working]] — State machine and core operational states          |                          |                             v
           |                          |                    +-----------------------+
           |                          |                    | 7) DB Persistence     |
           |                          |                    +-----------------------+

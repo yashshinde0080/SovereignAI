@@ -94,7 +94,7 @@ The LayerStream engine enables running massive models (e.g., 70B) on low-memory 
 | +---------------+ |          |           |                            |
 | | ...           | |          |   2.PROCESS HIDDEN STATE               |
 | +---------------+ |          |              |                         |
-| | Layer N (.saf)| |          |   3.UPDATE ==KV CACHE==                    |
+| | Layer N (.saf)| |          |   3.UPDATE ==KV CACHE==                |
 | +---------------+ |          |              |                         |
 |                   |          |   4.PURGE LAYER N (Free RAM)           |
 +-------------------+          |           |                            |

@@ -29,7 +29,16 @@ SovereignAI/
 │   ├── preload.js     # Security preload script
 │   ├── menu.js        # Application menu
 │   └── tray.js        # System tray
-└── Info_docs/         # Obsidian documentation vault
+├── Info_docs/         # Obsidian documentation vault
+│   ├── project/           # Product requirements, architecture, gaps
+│   ├── engines/           # FullRAM, LayerStream, GGUF, KV Cache
+│   ├── workflow/          # Development flow, pipelines, schedulers
+│   ├── algorithms/        # Core algorithms
+│   ├── tech-stack/        # FastAPI, React, SQLite, etc.
+│   ├── Docs/              # Raw source docs (immutable)
+│   ├── assets/            # Images and attachments
+│   ├── index.md           # Wiki catalog
+│   └── log.md             # Timeline (append-only)
 ```
 
 ## Key Architecture Patterns
@@ -183,3 +192,74 @@ sovereign serve          # Start API server
 **Frontend:** Next.js 16, React 19, Tailwind CSS v4, shadcn/ui, Zustand, framer-motion
 
 **Electron:** Electron 28, electron-builder
+
+---
+
+## Wiki Maintenance (Obsidian → LLM Wiki)
+
+`Info_docs/` is an Obsidian vault and the project wiki. I (Claude) maintain it.
+
+### Structure
+| Layer | Path | Purpose |
+|-------|------|---------|
+| Raw sources | `Info_docs/Docs/` | Immutable source docs — never edit |
+| Assets | `Info_docs/assets/` | Images and attachments |
+| Wiki pages | `Info_docs/{category}/<Title>.md` | LLM-written summaries/synthesis, organized by category |
+| Catalog | `Info_docs/index.md` | Every page listed with link + summary |
+| Timeline | `Info_docs/log.md` | Append-only chronological record |
+
+**Categories:**
+- `project/` — PRD, TRD, Technical Architecture, Gaps, Info Dashboard
+- `engines/` — FullRAM, LayerStream, Engine Algorithms, KV Cache, GGUF, Hardware Profiler
+- `workflow/` — Working, Working Flow, Flowcharts, Pipelines, Schedulers, Visuals, Mindmap
+- `algorithms/` — Algorithms
+- `tech-stack/` — FastAPI, React, SQLite, Pydantic, Zustand, Tailwind CSS, Vite, Electron, Plugin System, Hugging Face
+
+### Wiki Page Format
+```markdown
+---
+tags: [tag1, tag2]
+source: "[[Docs/Original Doc.md]]"
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+---
+
+# Title
+
+Synthesis/summary...
+
+## Key Points
+
+...
+
+## Related
+- [[Related Page]]
+```
+
+### Operations
+
+**Ingest** (new source added to `Docs/`):
+1. Read source
+2. Create/update wiki page with synthesis
+3. Update `index.md` — add entry under correct category
+4. Append to `log.md` — `## [YYYY-MM-DD] ingest | Title`
+5. Cross-link: update "Related" sections on existing affected pages
+
+**Query** (question asked):
+1. Read `index.md` to find relevant pages
+2. Read those pages
+3. Synthesize answer with [[wiki links]] to sources
+
+**Lint** (health-check requested):
+- Find orphans (no inbound links), contradictions, stale claims, missing pages
+- Suggest fixes and new cross-references
+
+### Index Organization
+- Sorted by category (Project, Engines, Tech Stack, etc.)
+- Format: `- [[Page Title]] — one-line summary (updated YYYY-MM-DD)`
+
+### Log Format
+```
+## [2026-07-21] ingest | Article Title
+- Created wiki page, updated index, cross-linked to [[Related]]
+```

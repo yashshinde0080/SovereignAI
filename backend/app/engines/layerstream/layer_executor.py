@@ -57,7 +57,7 @@ class LayerExecutor:
                     parent = getattr(parent, part)
                 attr = parts[-1]
                 # vGPU/CUDA optimization: use non_blocking=True to overlap copy with next disk read
-                dev_tensor = state_dict[name].to(self.device, non_blocking=True)
+                dev_tensor = state_dict[name].to(self.device, dtype=self.compute_dtype, non_blocking=True)
                 parent._parameters[attr] = nn.Parameter(dev_tensor, requires_grad=False)
                 
         for name, buf in module.named_buffers():

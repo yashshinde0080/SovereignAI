@@ -18,16 +18,17 @@ from .sampler import Sampler
 class LayerStreamEngine(BaseEngine):
     """Refactored streaming engine: completely decoupling computation phases dynamically"""
     
-    def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any):
+    def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any, quant_method: str = "none"):
         super().__init__(model_path, hardware, memory_manager)
         self.mode = "layerstream"
-        
+        self.quant_method = quant_method
+
         self.tokenizer = None
         self.model = None
         self.config = None
         self.components = {}
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
+
         self.weights_dir = ""
         self.layer_executor = None
 
@@ -41,7 +42,7 @@ class LayerStreamEngine(BaseEngine):
         
         if not os.path.exists(os.path.join(self.weights_dir, "embed.safetensors")):
             print(f"Components absents. Synchronizing AutoSplitter logic on cpu...")
-            splitter = WeightSplitter(self.model_path, self.weights_dir)
+            splitter = WeightSplitter(self.model_path, self.weights_dir, quant_method=self.quant_method)
             await asyncio.to_thread(splitter.split_and_save, torch.float16)
         else:
             # Maybe it was split but tokenizer wasn't copied (old version)

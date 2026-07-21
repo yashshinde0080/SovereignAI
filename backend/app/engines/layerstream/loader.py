@@ -1,9 +1,12 @@
 import os
 import torch
 import gc
-from typing import Dict
+from typing import Dict, Optional
 from concurrent.futures import ThreadPoolExecutor
 from safetensors.torch import safe_open
+
+from .quant_config import QuantConfig
+
 
 class LayerWeightLoader:
     def __init__(self, weights_dir: str):
@@ -12,15 +15,35 @@ class LayerWeightLoader:
         self.future = None
         self.future_path = None
         self.cpu_cache: Dict[str, Dict[str, torch.Tensor]] = {}
-    
+        self.quant_config = QuantConfig.load(os.path.join(weights_dir, "quant_config.json"))
+
+    @property
+    def is_quantized(self) -> bool:
+        return self.quant_config.quant_method not in ("none",)
+
+    @property
+    def quant_method(self) -> str:
+        return self.quant_config.quant_method
+
     def _load_file(self, path: str) -> Dict[str, torch.Tensor]:
-        """Loads safetensors directly into CPU without hitting GPU memory."""
+        """Loads safetensors to CPU, dequantizing int8 on the fly."""
         if not os.path.exists(path):
             return {}
         state_dict = {}
         with safe_open(path, framework="pt", device="cpu") as f:
             for k in f.keys():
                 state_dict[k] = f.get_tensor(k)
+
+        if self.quant_config.quant_method == "int8":
+            scales = {}
+            for k in list(state_dict.keys()):
+                if k.endswith(".scale"):
+                    scales[k.removesuffix(".scale")] = state_dict.pop(k)
+
+            for k, tensor in state_dict.items():
+                if tensor.dtype == torch.int8 and k in scales:
+                    state_dict[k] = tensor.to(torch.float32) * scales[k]
+
         return state_dict
 
     def prefetch_async(self, path: str):

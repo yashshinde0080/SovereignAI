@@ -1,2 +1,15 @@
-Remove-Item "$env:LOCALAPPDATA\opencode" -Recurse -Force -ErrorAction SilentlyContinue
-Remove-Item "$env:APPDATA\opencode" -Recurse -Force -ErrorAction SilentlyContinue
+# Backend Commands
+cd backend
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Linux/Mac
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+python -m app.cli.main <command>
+pytest
+
+# Frontend Commands
+cd frontend
+pnpm dev
+npm run dev
+pnpm build
+pnpm lint

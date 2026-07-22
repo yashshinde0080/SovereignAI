@@ -1,6 +1,8 @@
 """Engine Factory"""
 from typing import Dict, Any, Optional
 from pathlib import Path
+import json
+import os
 
 from app.core.memory_manager import MemoryManager
 from app.engines.base import BaseEngine
@@ -75,6 +77,18 @@ class EngineFactory:
             if mode == "insufficient":
                 raise RuntimeError("Insufficient memory for any execution mode")
         
+        # Read quant_method from model metadata (set during download).
+        # Maps GGUF quant strings (Q4_K_M, Q5_K_M, Q8_0) to quant_method="gguf".
+        quant_method = "none"
+        metadata_path = model_path / "metadata.json" if isinstance(model_path, Path) else None
+        if metadata_path and metadata_path.exists():
+            try:
+                with open(metadata_path) as f:
+                    metadata = json.load(f)
+                quant_method = metadata.get("quant_method", "none")
+            except Exception:
+                quant_method = "none"
+
         # Create engine
         if mode == "fullram":
             engine = FullRAMEngine(
@@ -86,7 +100,8 @@ class EngineFactory:
             engine = LayerStreamEngine(
                 model_path=engine_model_path_str,
                 hardware=self.hardware,
-                memory_manager=self.memory_manager
+                memory_manager=self.memory_manager,
+                quant_method=quant_method
             )
         elif mode == "manualstream":
             engine = ManualStreamEngine(

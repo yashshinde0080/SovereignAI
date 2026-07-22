@@ -63,7 +63,13 @@ class WeightSplitter:
         components = ModelIntrospector.detect_model_components(model)
 
         quant_method = self.quant_method
-        quant_cfg = QuantConfig(quant_method=quant_method, bits=8 if quant_method in ("int8", "fp8") else 16)
+        # Only int8 is currently implemented; others need dedicated quant/dequant kernels
+        if quant_method not in ("none", "int8"):
+            raise ValueError(
+                f"quant_method '{quant_method}' not yet implemented. "
+                f"Available: none, int8"
+            )
+        quant_cfg = QuantConfig(quant_method=quant_method, bits=8 if quant_method == "int8" else 16)
         quant_cfg.save(os.path.join(self.output_dir, "quant_config.json"))
 
         def _maybe_quant(sd):

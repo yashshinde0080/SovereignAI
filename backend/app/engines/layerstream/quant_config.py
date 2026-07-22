@@ -5,7 +5,7 @@ from typing import Optional
 
 @dataclass
 class QuantConfig:
-    quant_method: str = "none"  # none | int8 | fp8 | awq | gptq | gguf
+    quant_method: str = "none"  # none | int8 | awq | gptq | gguf
     bits: int = 16
     group_size: int = 128
     zero_point: bool = True

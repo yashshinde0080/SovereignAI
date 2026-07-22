@@ -384,13 +384,23 @@ class ModelManager:
             else:
                 total_size_bytes = sum(f.stat().st_size for f in model_path.rglob("*") if f.is_file())
             
+            # Map download quant string to engine quant_method.
+            # GGUF quant variants (Q4_K_M, Q5_K_M, Q8_0, etc.) imply gguf quant_method.
+            # Full model repos imply "none" (LayerStream can later re-quantize to int8).
+            quant_string = file_info.quantization.value if file_info and file_info.quantization else (quant if quant else "none")
+            if quant_string and quant_string not in ("full", "none", ""):
+                quant_method = "gguf"  # All GGUF variants share the same engine quant_method
+            else:
+                quant_method = "none"
+
             # Create metadata
             metadata = {
                 "id": model_name,
                 "name": info.name,
                 "family": info.family or model_name.split(":")[0],
                 "parameters": info.parameters or "",
-                "quant": file_info.quantization.value if file_info and file_info.quantization else (quant if quant else "none"),
+                "quant": quant_string,
+                "quant_method": quant_method,
                 "size_gb": round(total_size_bytes / (1024**3), 2),
                 "path": str(model_path),
                 "checksum": file_info.checksum if file_info else "",

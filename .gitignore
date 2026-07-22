@@ -122,3 +122,5 @@ coverage/
 .agents
 .claude
 Info_docs/.obsidian
+.mcp.json
+crush.json

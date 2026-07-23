@@ -55,6 +55,19 @@ class KVCacheManager:
                     total_bytes += t.nelement() * t.element_size()
         return total_bytes / (1024 ** 2)
 
+    @classmethod
+    def create(cls, mode: str = "standard", **kwargs):
+        """Factory: create a KVCacheManager or TurboQuant variant."""
+        if mode == "turboquant":
+            from app.engines.shared.turboquant import TurboQuantKVCacheManager, TurboQuantConfig
+            config = kwargs.pop('turboquant_config', {})
+            if isinstance(config, dict):
+                cfg = TurboQuantConfig(**config)
+            else:
+                cfg = config
+            return TurboQuantKVCacheManager(cfg, **kwargs)
+        return cls()
+
 
 class ProxyList:
     def __init__(self, manager: KVCacheManager, attr_name: str):

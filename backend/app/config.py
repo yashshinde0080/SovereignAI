@@ -38,7 +38,13 @@ class Settings(BaseSettings):
     # Model Defaults
     default_quant: str = "Q4_K_M"
     default_mode: str = "auto"
-    
+
+    # TurboQuant KV Cache Compression
+    turboquant_enabled: bool = True
+    turboquant_bits: float = 3.5
+    turboquant_qjl_enabled: bool = True
+    turboquant_rotation: str = "random"
+
     class Config:
         env_prefix = "SOVEREIGN_"
         env_file = ".env"

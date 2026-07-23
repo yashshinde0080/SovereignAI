@@ -11,20 +11,45 @@ from .benchmark import BenchmarkTracker
 
 class LayerExecutor:
     """Orchestrates IO, KV, and isolated GPU forward passes safely."""
-    def __init__(self, components: Dict[str, Any], config: Any, weights_dir: str, device: str):
+    def __init__(self, components: Dict[str, Any], config: Any, weights_dir: str, device: str,
+                 turboquant_config: Optional[dict] = None):
         self.components = components
         self.config = config
         self.weights_dir = weights_dir
         self.device = torch.device(device)
         self.num_layers = len(components['layers'])
-        
-        # CPU Optimization: float16 is very slow on many CPUs. 
+
+        # CPU Optimization: float16 is very slow on many CPUs.
         # Use bfloat16 or float32 for CPU-only runs.
         self.compute_dtype = torch.float16 if self.device.type == "cuda" else torch.float32
-        
+
         self.loader = LayerWeightLoader(weights_dir)
         self.tracker = BenchmarkTracker()
-        self.kv_manager = KVCacheManager()
+
+        # TurboQuant or standard KV cache
+        self.turboquant_config = turboquant_config
+        if turboquant_config is not None:
+            from app.engines.shared.turboquant import TurboQuantKVCacheManager, TurboQuantHFProxyCache
+            tq_config = turboquant_config if hasattr(turboquant_config, 'bits_per_coord') else type('obj', (object,), {'bits_per_coord': 3.5, 'qjl_dim': 128, 'enable_polarquant': True, 'enable_qjl': True, 'rotation_type': 'random', 'codebook_type': 'beta_lloyd_max', 'device': device, 'collect_stats': False})()
+            # Use config object
+            from app.engines.shared.turboquant import TurboQuantConfig
+            if isinstance(turboquant_config, dict):
+                tq_cfg = TurboQuantConfig(**turboquant_config)
+            else:
+                tq_cfg = turboquant_config
+            tq_cfg.device = device
+            head_dim = config.hidden_size // config.num_attention_heads
+            self.kv_manager = TurboQuantKVCacheManager(
+                config=tq_cfg,
+                num_layers=self.num_layers,
+                num_heads=config.num_attention_heads,
+                head_dim=head_dim,
+                device=device
+            )
+            self._hf_cache_factory = lambda: TurboQuantHFProxyCache(self.kv_manager)
+        else:
+            self.kv_manager = KVCacheManager()
+            self._hf_cache_factory = lambda: HFProxyCache(self.kv_manager)
         
         self.layer_paths = [os.path.join(weights_dir, f"layer_{i}.safetensors") for i in range(self.num_layers)]
         self.embed_path = os.path.join(weights_dir, "embed.safetensors")
@@ -149,7 +174,7 @@ class LayerExecutor:
              else:
                  position_embeddings = res
         
-        hf_cache = HFProxyCache(self.kv_manager)
+        hf_cache = self._hf_cache_factory()
 
         # Main layer loop
         for i, layer in enumerate(self.components['layers']):

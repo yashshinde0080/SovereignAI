@@ -18,10 +18,12 @@ from .sampler import Sampler
 class LayerStreamEngine(BaseEngine):
     """Refactored streaming engine: completely decoupling computation phases dynamically"""
     
-    def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any, quant_method: str = "none"):
+    def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any, quant_method: str = "none",
+                 turboquant_config: Any = None):
         super().__init__(model_path, hardware, memory_manager)
         self.mode = "layerstream"
         self.quant_method = quant_method
+        self.turboquant_config = turboquant_config
 
         self.tokenizer = None
         self.model = None
@@ -106,7 +108,21 @@ class LayerStreamEngine(BaseEngine):
                 self.model = AutoModel.from_config(self.config, trust_remote_code=True)
             
         self.components = ModelIntrospector.detect_model_components(self.model)
-        self.layer_executor = LayerExecutor(self.components, self.ls_config, self.weights_dir, self.device)
+
+        # Determine TurboQuant config: explicit arg > settings > disabled
+        tq_config = self.turboquant_config
+        if tq_config is None:
+            from app.config import settings as sov_settings
+            if sov_settings.turboquant_enabled:
+                tq_config = {
+                    "bits_per_coord": sov_settings.turboquant_bits,
+                    "enable_qjl": sov_settings.turboquant_qjl_enabled,
+                    "rotation_type": sov_settings.turboquant_rotation,
+                }
+        self.layer_executor = LayerExecutor(
+            self.components, self.ls_config, self.weights_dir, self.device,
+            turboquant_config=tq_config,
+        )
         
         self.loaded = True
         self.stats["load_time"] = time.time() - start_time

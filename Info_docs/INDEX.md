@@ -10,6 +10,7 @@ updated: 2026-07-21
 - [[project/Technical Architecture|Technical Architecture]] — System architecture, micro-layers, engine selectors (updated 2026-07-21)
 - [[project/Gaps|Gaps]] — Known gaps and improvement areas (updated 2026-07-21)
 - [[project/Info Dashboard|Info Dashboard]] — Runtime info dashboard overview (updated 2026-07-21)
+- [[project/Literature Review|Literature Review]] — Research papers on edge AI inference, quantization, RAG (updated 2026-07-24)
 
 ## Engines
 - [[engines/Engines Overview|Engines Overview]] — Dual-engine architecture: FullRAM vs LayerStream (updated 2026-07-21)
@@ -29,6 +30,8 @@ updated: 2026-07-21
 - [[workflow/Schedulers|Schedulers]] — Task scheduling architecture (updated 2026-07-21)
 - [[workflow/Visuals|Visuals]] — Visual diagrams and mindmaps (updated 2026-07-21)
 - [[workflow/Mindmap|Mindmap]] — Project mindmap overview (updated 2026-07-21)
+- [[workflow/Ponytail Review|Ponytail Review]] — Complexity audit, ~3800 lines of unnecessary bloat flagged (updated 2026-07-24)
+- [[workflow/Ponytail Audit|Ponytail Audit]] — Full-project ponytail audit: ~5000 lines removable across backend + frontend (updated 2026-07-24)
 
 ## Algorithms
 - [[algorithms/Algorithms|Algorithms]] — Core algorithms used throughout the system (updated 2026-07-21)

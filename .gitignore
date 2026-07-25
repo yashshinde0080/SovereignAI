@@ -128,4 +128,6 @@ crush.json
 .playwright-mcp
 graphify-out
 .github
-.plugins
+.plugins/understand-anything
+.plugins/
+.ua

@@ -7,7 +7,9 @@ from app.schemas.models import (
     ModelList,
     PullRequest,
     PullStatus,
-    LoadRequest
+    LoadRequest,
+    RecommendRequest,
+    RecommendResult,
 )
 from app.core.engine_factory import EngineFactory
 
@@ -22,7 +24,89 @@ async def list_models(request: Request):
     return ModelList(models=models)
 
 
+@router.post("/recommend", response_model=list[RecommendResult])
+async def recommend_models(
+    request: Request,
+    rec: RecommendRequest,
+):
+    """Recommend models for hardware + use case via llmfit.
 
+    Returns top-N models scored by fit, speed, quality.
+    Falls back to static list if llmfit unavailable.
+    """
+    try:
+        from llmfit import recommend as llmfit_recommend
+        from llmfit.hardware import probe_hardware
+
+        hw = probe_hardware()
+        if rec.max_ram_gb:
+            hw.ram_total_gb = min(hw.ram_total_gb, rec.max_ram_gb)
+
+        results = llmfit_recommend(
+            hardware=hw,
+            use_case=rec.use_case,
+            prefer_speed=rec.prefer_speed,
+            top_n=rec.top_n,
+        )
+        return [
+            RecommendResult(
+                name=r.name,
+                fit_score=r.fit_score,
+                est_tok_s=r.est_tok_s,
+                ram_gb=r.ram_gb,
+                context=r.context,
+                quant=r.quant,
+                quality_score=getattr(r, "quality_score", 0.0),
+                backend=getattr(r, "backend", "llama.cpp"),
+                download_url=getattr(r, "download_url", ""),
+                reasoning=getattr(r, "reasoning", ""),
+            )
+            for r in results
+        ]
+    except ImportError:
+        # llmfit not installed -- return static fallback
+        return _fallback_recommendations(rec)
+    except Exception as e:
+        print(f"llmfit recommend failed: {e}")
+        return _fallback_recommendations(rec)
+
+
+def _fallback_recommendations(rec: RecommendRequest) -> list[RecommendResult]:
+    """Static fallback when llmfit unavailable."""
+    fallback = [
+        RecommendResult(
+            name="Qwen2.5-Coder-7B-Instruct-Q4_K_M",
+            fit_score=0.85, est_tok_s=35, ram_gb=5.2, context=32768,
+            quant="Q4_K_M", quality_score=0.78, backend="llama.cpp",
+            download_url="", reasoning="Well-balanced coding model for most hardware",
+        ),
+        RecommendResult(
+            name="Phi-3.5-mini-instruct-Q4_K_M",
+            fit_score=0.92, est_tok_s=50, ram_gb=2.8, context=131072,
+            quant="Q4_K_M", quality_score=0.72, backend="llama.cpp",
+            download_url="", reasoning="Lightweight, fast, fits nearly any device",
+        ),
+        RecommendResult(
+            name="Llama-3.2-3B-Instruct-Q4_K_M",
+            fit_score=0.90, est_tok_s=55, ram_gb=2.2, context=131072,
+            quant="Q4_K_M", quality_score=0.69, backend="llama.cpp",
+            download_url="", reasoning="Smallest Llama 3, great for low-RAM systems",
+        ),
+        RecommendResult(
+            name="Mistral-7B-Instruct-v0.3-Q4_K_M",
+            fit_score=0.87, est_tok_s=38, ram_gb=4.8, context=32768,
+            quant="Q4_K_M", quality_score=0.80, backend="llama.cpp",
+            download_url="", reasoning="Solid general-purpose 7B with large context",
+        ),
+    ]
+    # Filter by RAM if specified
+    if rec.max_ram_gb:
+        fallback = [m for m in fallback if m.ram_gb <= rec.max_ram_gb]
+    if rec.prefer_speed:
+        fallback.sort(key=lambda m: m.est_tok_s, reverse=True)
+    else:
+        fallback.sort(key=lambda m: m.fit_score, reverse=True)
+    return fallback[: rec.top_n]
 
 
 @router.post("/pull")

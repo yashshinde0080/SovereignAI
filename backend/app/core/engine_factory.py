@@ -21,7 +21,8 @@ class EngineFactory:
     async def create_engine(
         self,
         model_path: str,
-        mode: str = "auto"
+        mode: str = "auto",
+        model_metadata: Optional[Dict[str, Any]] = None,
     ) -> BaseEngine:
         """Create appropriate engine"""
         
@@ -66,8 +67,13 @@ class EngineFactory:
 
         # Determine mode
         if mode == "auto":
-            # Only suggest layerstream for generative causal models
-            suggested = self.memory_manager.suggest_mode(model_size)
+            # Use llmfit scoring when metadata available, else legacy size-based
+            if model_metadata:
+                suggested = self.memory_manager.suggest_mode(
+                    model_size, model_metadata=model_metadata
+                )
+            else:
+                suggested = self.memory_manager.suggest_mode(model_size)
             if suggested == "layerstream" and not is_generative:
                 # Fallback to fullram for non-generative tasks if layerstream suggested
                 mode = "fullram"

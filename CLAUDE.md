@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SovereignAI Edge is a portable offline AI compute platform with dual inference engines (FullRAM/LayerStream), a FastAPI backend, Next.js frontend, and Electron desktop wrapper. It supports GGUF model inference with automatic hardware detection and engine selection.
 
+## Installed Plugins / Skills
+
+- **Understand-Anything** (`.plugins/understand-anything/`) — AI-powered codebase analysis, knowledge graphs, architecture tours, code explainer. Skills linked to `.claude/skills/understand-*`, `.agents/skills/understand-*`, hooks in `.claude/hooks/`, agents in `.agents/`.
+
 ## Project Structure
 
 ```

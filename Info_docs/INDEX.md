@@ -1,5 +1,5 @@
 ---
-updated: 2026-07-21
+updated: 2026-07-25
 ---
 
 # Wiki Index
@@ -47,3 +47,4 @@ updated: 2026-07-21
 - [[tech-stack/Electron|Electron]] — Electron desktop wrapper (updated 2026-07-21)
 - [[tech-stack/Plugin System|Plugin System]] — Plugin architecture and sandbox (updated 2026-07-21)
 - [[tech-stack/Hugging Face|Hugging Face]] — Hugging Face integration (updated 2026-07-21)
+- [[tech-stack/llmfit|llmfit]] — Hardware-aware model recommendation engine (updated 2026-07-25)

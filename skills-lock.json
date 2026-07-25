@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "obsidian-canvas-creator": {
+      "source": "axtonliu/axton-obsidian-visual-skills",
+      "sourceType": "github",
+      "skillPath": "obsidian-canvas-creator/SKILL.md",
+      "computedHash": "8da7f394270c3a4fe3829d54757074b0bb016495325945ea2a2f29f451c266b9"
+    },
     "obsidian-vault": {
       "source": "mattpocock/skills",
       "sourceType": "github",

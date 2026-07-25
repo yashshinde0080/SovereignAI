@@ -41,3 +41,36 @@ class LoadRequest(BaseModel):
         default="auto",
         description="Execution mode: fullram, layerstream, auto"
     )
+
+
+class RecommendRequest(BaseModel):
+    use_case: str = Field(
+        default="chat",
+        description="Use case: coding, chat, rag, reasoning"
+    )
+    max_ram_gb: Optional[float] = Field(
+        default=None,
+        description="Cap RAM (GB) for filtering"
+    )
+    prefer_speed: bool = Field(
+        default=False,
+        description="Prefer speed over quality"
+    )
+    top_n: int = Field(
+        default=10,
+        ge=1, le=50,
+        description="Number of recommendations"
+    )
+
+
+class RecommendResult(BaseModel):
+    name: str
+    fit_score: float
+    est_tok_s: float
+    ram_gb: float
+    context: int
+    quant: str
+    quality_score: float
+    backend: str
+    download_url: str
+    reasoning: str

@@ -13,6 +13,7 @@ from app.config import settings
 from app.services.registry import ModelRegistry
 from app.security.encryption import ModelEncryption
 from app.providers.huggingface import HuggingFaceProvider
+from app.providers.custom_catalog import CustomModelCatalog
 
 
 class ModelManager:
@@ -36,6 +37,12 @@ class ModelManager:
         await self.registry.initialize()
         await self.provider.initialize()
         
+        # Load custom model catalogs (enterprise / USB YAML definitions)
+        catalog = CustomModelCatalog()
+        n = catalog.load_directory(settings.catalog_dir)
+        if n:
+            print(f"Custom model catalog: {n} models loaded from {settings.catalog_dir}")
+
         # Scan for models
         await self.scan_installed()
     
@@ -273,11 +280,12 @@ class ModelManager:
                 print(f"LOAD: Switching to base model {base_model['id']} path for fullram mode")
                 model_path = base_model["path"]
 
-        # Initialize engine
+        # Initialize engine (pass metadata for llmfit scoring)
         factory = EngineFactory(self.app.state.hardware_profile)
         engine = await factory.create_engine(
             model_path=model_path,
-            mode=mode
+            mode=mode,
+            model_metadata=model,
         )
         
         # Update app state

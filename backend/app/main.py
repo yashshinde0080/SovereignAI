@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.api.router import api_router
 from app.websocket.metrics import router as metrics_router
-from app.core.hardware_detector import HardwareDetector
+from app.core.hardware_llmfit import detect_hardware as detect_hardware
 from app.services.model_manager import ModelManager
 from app.plugins.manager import PluginManager
 
@@ -34,9 +34,8 @@ async def lifespan(app: FastAPI):
     app.state.vector_store.initialize()
     
     
-    # Detect hardware
-    hardware = HardwareDetector()
-    app.state.hardware_profile = hardware.detect()
+    # Detect hardware (llmfit-powered, falls back to legacy)
+    app.state.hardware_profile = detect_hardware()
     print(f"Hardware: {app.state.hardware_profile}")
     
     # Initialize model manager

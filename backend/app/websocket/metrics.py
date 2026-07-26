@@ -1,6 +1,7 @@
 """WebSocket Metrics Streaming"""
 import asyncio
 import json
+import os
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Set
 import psutil
@@ -13,7 +14,12 @@ clients: Set[WebSocket] = set()
 
 @router.websocket("/ws/metrics")
 async def metrics_websocket(websocket: WebSocket):
-    """Stream system metrics"""
+    """Stream system metrics. Requires SOVEREIGN_WS_TOKEN query param."""
+    token = websocket.query_params.get("token")
+    expected = os.environ.get("SOVEREIGN_WS_TOKEN", "")
+    if not expected or token != expected:
+        await websocket.close(code=4001)
+        return
     await websocket.accept()
     clients.add(websocket)
     

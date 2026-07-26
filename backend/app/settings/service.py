@@ -1,4 +1,5 @@
 import hashlib
+import bcrypt
 from typing import Optional
 from .database import SettingsDatabase
 from .schemas import (
@@ -76,15 +77,15 @@ class SettingsService:
     def set_password(self, password: str) -> bool:
         security = self.get_security()
         security["require_password"] = True
-        security["password_hash"] = hashlib.sha256(password.encode()).hexdigest()
+        security["password_hash"] = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         return self.db.update_section("security", security)
 
     def verify_password(self, password: str) -> bool:
         security = self.get_security()
         if not security.get("require_password"):
             return True
-        stored_hash = security.get("password_hash", "")
-        return hashlib.sha256(password.encode()).hexdigest() == stored_hash
+        stored_hash = security.get("password_hash", "").encode()
+        return bcrypt.checkpw(password.encode(), stored_hash)
 
     # ── Parental Controls ──
 
@@ -99,7 +100,7 @@ class SettingsService:
 
     def set_parental_pin(self, pin: str) -> bool:
         parental = self.get_parental_controls()
-        parental["pin_hash"] = hashlib.sha256(pin.encode()).hexdigest()
+        parental["pin_hash"] = bcrypt.hashpw(pin.encode(), bcrypt.gensalt()).decode()
         parental["require_pin_for_settings"] = True
         return self.db.update_section("parental_controls", parental)
 
@@ -108,7 +109,7 @@ class SettingsService:
         stored_hash = parental.get("pin_hash", "")
         if not stored_hash:
             return True
-        return hashlib.sha256(pin.encode()).hexdigest() == stored_hash
+        return bcrypt.checkpw(pin.encode(), stored_hash.encode())
 
     # ── Project ──
 

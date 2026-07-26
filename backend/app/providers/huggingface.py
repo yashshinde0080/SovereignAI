@@ -9,7 +9,9 @@ import asyncio
 import aiohttp
 import aiofiles
 import hashlib
+import os
 import re
+import ssl
 import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -79,15 +81,22 @@ class HuggingFaceProvider(BaseProvider):
         self._session: Optional[aiohttp.ClientSession] = None
     
     async def initialize(self) -> bool:
-        """Initialize HTTP session"""
+        """Initialize HTTP session with optional custom CA bundle."""
         headers = {
             "User-Agent": "SovereignAI/1.0"
         }
-        
+
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
-        
-        self._session = aiohttp.ClientSession(headers=headers)
+
+        ca_bundle = os.environ.get("SOVEREIGN_CA_BUNDLE")
+        if ca_bundle:
+            ssl_context = ssl.create_default_context(cafile=ca_bundle)
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+        else:
+            connector = aiohttp.TCPConnector()
+
+        self._session = aiohttp.ClientSession(headers=headers, connector=connector)
         self._initialized = True
         return True
     

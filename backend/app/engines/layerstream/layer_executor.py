@@ -3,7 +3,7 @@ import time
 import inspect
 import torch
 import torch.nn as nn
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from .loader import LayerWeightLoader
 from .kv_cache import KVCacheManager, HFProxyCache

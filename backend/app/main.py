@@ -1,6 +1,8 @@
 """Main FastAPI Application"""
 import asyncio
+import sys
 from contextlib import asynccontextmanager
+from enum import IntEnum
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +18,38 @@ from app.services.model_manager import ModelManager
 from app.plugins.manager import PluginManager
 
 
+def _patch_gguf_quant_types():
+    """Add newer GGML quantization types missing from the installed gguf package.
+
+    The PyPI gguf package (0.19.0 as of 2026-07) doesn't include IQ2_BN (135)
+    and possibly other newer quants. Tensor data is read by offset from the file
+    so only the enum value and size metadata need to exist for the reader to work.
+    """
+    try:
+        import gguf.constants
+        import gguf.gguf_reader
+        import gguf.quants
+    except ImportError:
+        return  # gguf not installed, nothing to patch
+
+    old = gguf.constants.GGMLQuantizationType
+    # Check if IQ2_BN already exists (newer gguf version)
+    if hasattr(old, 'IQ2_BN'):
+        return
+
+    # Build extended enum with IQ2_BN (BitNet b1.58 2-bit block-normalized)
+    members = {m.name: m.value for m in old}
+    members['IQ2_BN'] = 135
+    new = IntEnum('GGMLQuantizationType', members)
+    gguf.constants.GGML_QUANT_SIZES[new.IQ2_BN] = (256, 64)  # block_size, type_size
+
+    # Swap into every gguf submodule that imported the old ref
+    for mod_name, mod in list(sys.modules.items()):
+        if mod and hasattr(mod, 'GGMLQuantizationType') and mod.GGMLQuantizationType is old:
+            mod.GGMLQuantizationType = new
+    print("GGUF: patched IQ2_BN quantization type support")
+
+
 # Rate limiter — per-IP, local-first (falls back to remote_address)
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
@@ -24,6 +58,7 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 async def lifespan(app: FastAPI):
     """Application Lifespan Events"""
     # Startup
+    _patch_gguf_quant_types()
     print(f"Starting {settings.app_name} v{settings.app_version}")
 
     # Initialize database

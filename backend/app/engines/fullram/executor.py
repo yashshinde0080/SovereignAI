@@ -14,6 +14,25 @@ from app.engines.base import BaseEngine
 from app.core.task_resolver import TaskResolver
 from app.core.task_router import TaskRouter
 
+
+class _IkModelWrapper:
+    """Thin wrapper: IkLlama -> llama_cpp.Llama API subset used by FullRAMEngine."""
+    def __init__(self, inner):
+        self._inner = inner
+
+    def create_chat_completion(self, messages, **kwargs):
+        kwargs.pop("stream", None)  # ik_llama.cpp doesn't support stream
+        return self._inner.create_chat_completion(messages=messages, **kwargs)
+
+    def __call__(self, prompt, **kwargs):
+        max_tokens = kwargs.pop("max_tokens", 512)
+        tokens = self._inner.tokenize(prompt)
+        out = self._inner.generate(tokens, max_tokens=max_tokens)
+        text = self._inner.detokenize(out)
+        if isinstance(text, bytes):
+            text = text.decode("utf-8", errors="replace")
+        return {"choices": [{"text": text}], "usage": {"completion_tokens": len(out)}}
+
 class FullRAMEngine(BaseEngine):
     """Full RAM inference engine - loads entire model into memory dynamically"""
     
@@ -113,6 +132,55 @@ class FullRAMEngine(BaseEngine):
             
         except Exception as e:
             self.loaded = False
+            msg = str(e)
+            if "not supported yet" in msg:
+                # Check if this is an ik_llama.cpp-only model (IQ2_BN, etc.)
+                basename = os.path.basename(self.model_path).lower()
+                is_ik_only = any(tag in basename for tag in ("iq2_bn", "iq2_bnr4", "iq2_bn_r4"))
+                
+                # Try ik_llama.cpp first (handles BitNet / IQ2_BN models)
+                try:
+                    from ik_llama_cpp import IkLlama
+                    print(f"ik_llama.cpp: loading {self.model_path}")
+                    self.model = _IkModelWrapper(IkLlama(model_path=self.model_path, n_ctx=2048, verbose=False))
+                    self.is_llama_cpp = True
+                    self.is_ik_backend = True
+                    self.loaded = True
+                    self.task_metadata = {"task_type": "causal_lm", "is_generative": True, "input_modality": "text"}
+                    self.stats["load_time"] = time.time() - start_time
+                    print(f"Loaded {self.model_path} [ik_llama.cpp] in {self.mode}")
+                    return
+                except ImportError:
+                    print("ik_llama.cpp not installed, trying llama_cpp fallback")
+                except Exception as ik_err:
+                    print(f"ik_llama.cpp fallback failed: {ik_err}")
+
+                # Fall back to standard llama_cpp
+                try:
+                    from llama_cpp import Llama
+                    print(f"llama_cpp fallback: loading {self.model_path}")
+                    self.model = Llama(model_path=self.model_path, n_ctx=2048, verbose=False)
+                    self.is_llama_cpp = True
+                    self.loaded = True
+                    self.task_metadata = {"task_type": "causal_lm", "is_generative": True, "input_modality": "text"}
+                    self.stats["load_time"] = time.time() - start_time
+                    print(f"Loaded {self.model_path} [llama_cpp fallback] in {self.mode}")
+                    return
+                except Exception as llama_err:
+                    print(f"llama_cpp fallback failed: {llama_err}")
+
+                # Both backends failed — give a targeted error
+                if is_ik_only:
+                    raise RuntimeError(
+                        f"This model uses IQ2_BN quantization which requires ik_llama.cpp (a fork), "
+                        f"not standard llama.cpp or Transformers. Use a standard GGUF quantization "
+                        f"(Q4_K_M, Q5_K_M, Q8_0) or a supported architecture."
+                    )
+                raise RuntimeError(
+                    f"Model architecture not supported by PyTorch/Transformers or llama-cpp-python. "
+                    f"This GGUF model uses an unsupported architecture. "
+                    f"Try a model with a supported architecture (Qwen2, Llama, Mistral...)."
+                )
             raise RuntimeError(f"Failed to load model dynamically: {e}")
     
     async def unload(self):
@@ -145,6 +213,33 @@ class FullRAMEngine(BaseEngine):
         
         start_time = time.perf_counter()
         
+        if getattr(self, "is_llama_cpp", False):
+            import asyncio
+            if isinstance(input_data, list) or (isinstance(input_data, dict) and "messages" in input_data):
+                msgs = input_data if isinstance(input_data, list) else input_data["messages"]
+                res = await asyncio.to_thread(self.model.create_chat_completion, messages=msgs, max_tokens=kwargs.get("max_tokens", 512))
+                output_res = res["choices"][0]["message"]["content"]
+                tokens = res["usage"]["completion_tokens"]
+            else:
+                prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+                res = await asyncio.to_thread(self.model, prompt, max_tokens=kwargs.get("max_tokens", 512))
+                output_res = res["choices"][0]["text"]
+                tokens = res["usage"]["completion_tokens"]
+                
+            return {
+                "model_name": os.path.basename(self.model_path),
+                "task_type": task_type,
+                "mode": self.mode,
+                "input": "provided inputs", 
+                "output": output_res,
+                "confidence": "1.0000",
+                "metadata": {
+                    "ram_usage": f"{self.get_memory_usage()['ram_used_gb']:.2f}GB",
+                    "latency": f"{time.perf_counter() - start_time:.3f}s",
+                    "tokens_generated": str(tokens)
+                }
+            }
+
         # 1. Process inputs dynamically
         processed_inputs = {}
         prompt_tokens = 0
@@ -281,6 +376,36 @@ class FullRAMEngine(BaseEngine):
         task_type = self.task_metadata["task_type"]
         modality = self.task_metadata["input_modality"]
         
+        if getattr(self, "is_llama_cpp", False):
+            if isinstance(input_data, list) or (isinstance(input_data, dict) and "messages" in input_data):
+                msgs = input_data if isinstance(input_data, list) else input_data["messages"]
+
+                if getattr(self, "is_ik_backend", False):
+                    # ik_llama.cpp doesn't support streaming — yield full output
+                    res = self.model.create_chat_completion(
+                        messages=msgs, max_tokens=kwargs.get("max_tokens", 512)
+                    )
+                    yield {"token": res["choices"][0]["message"]["content"], "finish_reason": None}
+                else:
+                    for chunk in self.model.create_chat_completion(
+                        messages=msgs, max_tokens=kwargs.get("max_tokens", 512), stream=True
+                    ):
+                        delta = chunk["choices"][0].get("delta", {})
+                        if "content" in delta:
+                            yield {"token": delta["content"], "finish_reason": None}
+            else:
+                prompt = input_data if isinstance(input_data, str) else input_data.get("prompt", "")
+                if getattr(self, "is_ik_backend", False):
+                    res = self.model(prompt, max_tokens=kwargs.get("max_tokens", 512))
+                    yield {"token": res["choices"][0]["text"], "finish_reason": None}
+                else:
+                    for chunk in self.model(prompt, max_tokens=kwargs.get("max_tokens", 512), stream=True):
+                        text = chunk["choices"][0].get("text", "")
+                        if text:
+                            yield {"token": text, "finish_reason": None}
+            yield {"token": "", "finish_reason": "stop"}
+            return
+
         # 1. Process inputs
         if not self.tokenizer:
             raise RuntimeError("Model requires a tokenizer but none was loaded.")

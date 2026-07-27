@@ -26,11 +26,11 @@
 - Created [[project/Literature Review|Literature Review]] — 6 high-impact papers on edge AI, quantization, attention, speculative decoding, RAG
 - Cross-linked to FullRAM, LayerStream, Engine Algorithms
 - Updated index, appended to log
-## review | Ponytail Audit (full project)
+## [2026-07-24] review | Ponytail Audit (full project)
 - Scanned all backend (21,813 lines) + frontend (8,303 lines) + root
 - Found ~5000 lines removable across USB bundle provider, enterprise repo, ManualStream, inference.py handlers, settings over-engineering, root clutter, singleton pattern, layerstream executor duplication
 - Created [[workflow/Ponytail Audit|Ponytail Audit]] page, updated index, appended to log
-##  doc | Technical Documentation (.docx)
+## [2026-07-24] doc | Technical Documentation (.docx)
 - Created `create_docs.py` — generates a professional `.docx` technical documentation file for SovereignAI Edge
 - 12 sections covering executive summary, architecture, dual engines, UI, plugins, RAG, model management, API reference, setup, security, system requirements, project structure
 - Styled output with cover page, table of contents, tables, code blocks, color headers
@@ -42,3 +42,13 @@
 - Updated index.md with llmfit entry under Tech Stack
 - Cross-linked to HardwareDetector, ModelManager, EngineRouter, Provider pattern, Benchmark API
 - Updated CLAUDE.md with skills-lock.json update
+
+## [2026-07-26] implement | Ponytail Audit Cleanup & QA Review
+- Removed ~841 lines of dead code: `fullram/loader.py`, `layerstream/eviction.py`, `layer_by_layer_inference.py`
+- Refactored `security/encryption.py` (133 lines changed) — improved encryption implementation
+- Cleaned up `main.py`, `huggingface.py`, `settings/service.py`, `websocket/metrics.py`
+- Updated `layer_executor.py` with minor fix
+- Fixed chat endpoint inconsistencies in `api/chat.py`
+- Updated dependencies (`pyproject.toml`, `requirements.txt`), removed `test_dummy.py`
+- Created QA review docs: `qa.md`, `QA_FIXES_REPORT.md`, `SECURITY_FIXES_REPORT.md`
+- Updated `Sovereign.canvas` Obsidian knowledge graph visualization

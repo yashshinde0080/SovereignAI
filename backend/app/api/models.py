@@ -159,7 +159,13 @@ async def load_model(request: Request, load_request: LoadRequest):
         msg = str(e)
         if "not found" in msg.lower():
             raise HTTPException(status_code=404, detail=msg)
-        raise HTTPException(status_code=500, detail=f"Model configuration error: {msg}")
+        raise HTTPException(status_code=400, detail=f"Model configuration error: {msg}")
+    except RuntimeError as e:
+        msg = str(e)
+        # Unsupported arch/format is a client-side model choice issue, not a server crash
+        if "not supported" in msg.lower() or "architecture" in msg.lower():
+            raise HTTPException(status_code=422, detail=msg)
+        raise HTTPException(status_code=500, detail=f"Failed to load model: {msg}")
     except Exception as e:
         import traceback
         traceback.print_exc()

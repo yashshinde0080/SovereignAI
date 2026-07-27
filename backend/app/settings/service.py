@@ -1,4 +1,3 @@
-import hashlib
 import bcrypt
 from typing import Optional
 from .database import SettingsDatabase

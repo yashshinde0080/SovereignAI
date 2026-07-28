@@ -1,7 +1,5 @@
 # 🛡️ SovereignAI Edge
 
----
-
 ![SovereignAI Edge Hero](./Info_docs/assets/hero.png)
 
 > **The Ultimate Portable, 100% Offline AI Platform.**  

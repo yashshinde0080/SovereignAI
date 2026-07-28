@@ -52,3 +52,15 @@
 - Updated dependencies (`pyproject.toml`, `requirements.txt`), removed `test_dummy.py`
 - Created QA review docs: `qa.md`, `QA_FIXES_REPORT.md`, `SECURITY_FIXES_REPORT.md`
 - Updated `Sovereign.canvas` Obsidian knowledge graph visualization
+
+## [2026-07-27] implement | GGUF Header Reader & BitNet/ik_llama.cpp Support
+- Created `backend/_read_header.py` — standalone GGUF header parser (reads tensor info, metadata, quantization type from `.gguf` files without loading the full model)
+- Added `_IkModelWrapper` and ik_llama.cpp fallback in `fullram/executor.py` — enables FullRAM engine to load BitNet b1.58 / IQ2_BN quantized models via `ik_llama.cpp` with graceful fallback to `llama_cpp`
+- Patched GGUF quantization types in `main.py` — adds IQ2_BN (135) enum entry for older gguf PyPI packages lacking newer quant support
+- Renamed `plugins/init.py` → `__init__.py` for proper Python package convention
+- Cleaned up `settings/service.py` (removed unused import)
+
+## [2026-07-27] doc | Architecture Diagrams
+- Created `diagrams/sovereignai-architecture.mmd` — Mermaid architecture diagram covering data layer, API gateway, inference engines, plugin sandbox, RAG pipeline, hardware monitoring, CLI/Electron frontends
+- Created `Info_docs/Excalidraw/SovereignAI.excalidraw.md` — Excalidraw visual architecture diagram with component relationships
+- Updated `Info_docs/Sovereign.canvas` — refreshed Obsidian knowledge graph visualization

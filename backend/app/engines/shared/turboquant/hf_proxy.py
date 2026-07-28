@@ -19,6 +19,21 @@ class TurboQuantHFProxyCache(_DynamicCache):
         super().__init__()
         self.tq_manager = turboquant_manager
         self._seen_layers = set()
+        # Wrapper for conv_states and recurrent_states to provide sync_back method and list-like behavior
+        class _ProxyListWithSync:
+            def __init__(self, lst):
+                self._list = lst
+            def __getitem__(self, index):
+                return self._list[index]
+            def __setitem__(self, index, value):
+                self._list[index] = value
+            def __len__(self):
+                return len(self._list)
+            def sync_back(self):
+                # No-op because we don't use these lists for anything in the turboquant path.
+                pass
+        self.conv_states = _ProxyListWithSync(self.tq_manager.conv_states)
+        self.recurrent_states = _ProxyListWithSync(self.tq_manager.recurrent_states)
 
     def update(
         self,
@@ -34,6 +49,11 @@ class TurboQuantHFProxyCache(_DynamicCache):
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         return self.tq_manager.get_seq_length(layer_idx)
+
+    @property
+    def has_previous_state(self):
+        # We consider that we have a previous state if the sequence length is at least 1.
+        return self.get_seq_length() > 0
 
     def get_max_length(self) -> Optional[int]:
         return None  # No hard limit

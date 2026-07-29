@@ -119,9 +119,16 @@ class LayerStreamEngine(BaseEngine):
                     "enable_qjl": sov_settings.turboquant_qjl_enabled,
                     "rotation_type": sov_settings.turboquant_rotation,
                 }
+
+        # Detect hybrid architecture (e.g. Qwen3.5 linear_attention + full_attention)
+        # Check both the full config and text_config — layer_types may live on either
+        layer_types = getattr(self.config, 'layer_types', None)
+        if layer_types is None:
+            layer_types = getattr(self.ls_config, 'layer_types', None)
+
         self.layer_executor = LayerExecutor(
             self.components, self.ls_config, self.weights_dir, self.device,
-            turboquant_config=tq_config,
+            turboquant_config=tq_config, layer_types=layer_types,
         )
         
         self.loaded = True
@@ -139,7 +146,10 @@ class LayerStreamEngine(BaseEngine):
             self.tokenizer = None
         if self.layer_executor:
             self.layer_executor.loader.clear_cache()
-            self.layer_executor.kv_manager.clear()
+            if self.layer_executor._is_hybrid:
+                self.layer_executor.cache.clear()
+            else:
+                self.layer_executor.kv_manager.clear()
             self.layer_executor = None
         self.components = {}
         
@@ -168,7 +178,10 @@ class LayerStreamEngine(BaseEngine):
             raise RuntimeError("Engine dependencies have been unloaded.")
             
         # Wipe residual memory structures safely
-        executor.kv_manager.clear()
+        if executor._is_hybrid:
+            executor.cache.clear()
+        else:
+            executor.kv_manager.clear()
         
         # Support Chat Template
         if isinstance(input_data, list):
@@ -258,7 +271,10 @@ class LayerStreamEngine(BaseEngine):
         temperature = kwargs.get("temperature", 0.7)
         top_p = kwargs.get("top_p", 0.9)
             
-        executor.kv_manager.clear()
+        if executor._is_hybrid:
+            executor.cache.clear()
+        else:
+            executor.kv_manager.clear()
         inputs = tokenizer(prompt, return_tensors="pt")
         input_ids = inputs["input_ids"].to(self.device)
         

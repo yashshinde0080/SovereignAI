@@ -178,8 +178,9 @@ class FullRAMEngine(BaseEngine):
                     )
                 raise RuntimeError(
                     f"Model architecture not supported by PyTorch/Transformers or llama-cpp-python. "
-                    f"This GGUF model uses an unsupported architecture. "
-                    f"Try a model with a supported architecture (Qwen2, Llama, Mistral...)."
+                    f"Use a GGUF model quantized from a standard architecture (Llama, Mistral, "
+                    f"Qwen2, Gemma, Phi-3, Falcon, DeepSeek, etc.). Check the error above for "
+                    f"the specific architecture name that failed."
                 )
             raise RuntimeError(f"Failed to load model dynamically: {e}")
     

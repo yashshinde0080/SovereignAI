@@ -83,4 +83,11 @@
 - Updated `readme.md` — minor cleanup and project overview improvements
 - Updated `Info_docs/Sovereign.canvas` — refreshed Obsidian knowledge graph visualization
 
-
+## [2026-07-29] implement | Model Architecture Expansion & Hybrid Cache
+- Created `backend/APP_ARCH_COMPATIBILITY.md` — comprehensive architecture compatibility matrix documenting all 85+ supported HuggingFace model architectures across FullRAM/LayerStream engines
+- Expanded `model_manager/config.py` — added ~35 new model architectures to `ARCHITECTURE_TASK_MAP` (DeepSeek v2-v4, Qwen3/Qwen3.5, Mixtral, Ministral, Granite, Nemotron, BitNet, Mamba/Mamba2, etc.)
+- Expanded `model_manager/detector.py` — broadened model type coverage across generative, encoder, seq2seq, and vision categories (Gemma3-4, Qwen3, Mamba2, DINOv2, ModernBERT, etc.)
+- Created `StatefulCache` in `layerstream/kv_cache.py` — hybrid cache supporting both `full_attention` (K/V cache) and `linear_attention` (conv/recurrent states) for Qwen3.5 and similar hybrid architecture models
+- Updated `layerstream/layer_executor.py` — hybrid model detection with automatic routing: StatefulCache for hybrid models, standard KV cache or TurboQuant for traditional models
+- Updated `layerstream/executor.py` — hybrid architecture detection from config layer_types, cleanup logic for both cache paths
+- Updated `fullram/executor.py` — improved error messaging for unsupported model architectures

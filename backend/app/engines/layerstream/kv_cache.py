@@ -2,6 +2,93 @@ import torch
 from typing import Optional, Tuple, List
 from transformers.cache_utils import DynamicCache
 
+
+class StatefulCache:
+    """Cache for stateful/hybrid models with both full_attention and linear_attention layers.
+
+    Supports:
+    - Standard K/V cache (full_attention): key_cache/value_cache
+    - Stateful cache (linear_attention/GatedDeltaNet): conv_states/recurrent_states
+    - .update() protocol used by Qwen3_5Attention and similar
+    - Direct list access used by Qwen3_5GatedDeltaNet and similar
+
+    ponytail: cache lives on GPU (where layers run), no CPU offloading.
+    Add device management if GPU memory pressure becomes a problem.
+    """
+    def __init__(self, config=None, num_layers: int = 0, layer_types: list = None):
+        if layer_types is None and config is not None:
+            layer_types = getattr(config, 'layer_types', None)
+        if layer_types is None:
+            layer_types = ['full_attention'] * num_layers
+
+        self.layer_types = layer_types
+        self.num_layers = len(layer_types)
+
+        linear_indices = [i for i, t in enumerate(layer_types) if t == 'linear_attention']
+        self.last_linear_layer = max(linear_indices) if linear_indices else -1
+        self.transformer_layers = [i for i, t in enumerate(layer_types) if t == 'full_attention']
+
+        self.key_cache = [None] * self.num_layers
+        self.value_cache = [None] * self.num_layers
+        self.conv_states = [None] * self.num_layers
+        self.recurrent_states = [None] * self.num_layers
+        self._seq_length = 0
+
+    def update(self, key_states, value_states, layer_idx, cache_kwargs=None):
+        if self.key_cache[layer_idx] is None:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    @property
+    def has_previous_state(self):
+        if self.last_linear_layer >= 0:
+            return self.conv_states[self.last_linear_layer] is not None
+        return any(k is not None for k in self.key_cache)
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        if self.transformer_layers and layer_idx not in self.transformer_layers:
+            layer_idx = self.transformer_layers[0]
+        if layer_idx < len(self.key_cache) and self.key_cache[layer_idx] is not None:
+            return self.key_cache[layer_idx].shape[2]
+        for k in self.key_cache:
+            if k is not None:
+                return k.shape[2]
+        return self._seq_length
+
+    def clear(self):
+        self.key_cache = [None] * self.num_layers
+        self.value_cache = [None] * self.num_layers
+        self.conv_states = [None] * self.num_layers
+        self.recurrent_states = [None] * self.num_layers
+        self._seq_length = 0
+
+    def get_size_mb(self) -> float:
+        total = 0
+        for lst in (self.key_cache, self.value_cache, self.conv_states, self.recurrent_states):
+            for t in lst:
+                if t is not None:
+                    total += t.nelement() * t.element_size()
+        return total / (1024 ** 2)
+
+    def get_max_length(self):
+        return None
+
+    def __len__(self):
+        return self.num_layers
+
+    def __getitem__(self, layer_idx):
+        if layer_idx < len(self.key_cache) and self.key_cache[layer_idx] is not None:
+            return self.key_cache[layer_idx], self.value_cache[layer_idx]
+        return None
+
+    def reorder_cache(self, beam_idx):
+        pass  # ponytail: no beam search support, add if needed
+
+
 class KVCacheManager:
     """Manages KV cache strictly on CPU with O(1 layer) GPU footprint."""
     def __init__(self):

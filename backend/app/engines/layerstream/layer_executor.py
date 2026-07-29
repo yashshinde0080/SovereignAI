@@ -6,13 +6,13 @@ import torch.nn as nn
 from typing import Dict, Any, List, Optional
 
 from .loader import LayerWeightLoader
-from .kv_cache import KVCacheManager, HFProxyCache
+from .kv_cache import KVCacheManager, HFProxyCache, StatefulCache
 from .benchmark import BenchmarkTracker
 
 class LayerExecutor:
     """Orchestrates IO, KV, and isolated GPU forward passes safely."""
     def __init__(self, components: Dict[str, Any], config: Any, weights_dir: str, device: str,
-                 turboquant_config: Optional[dict] = None):
+                 turboquant_config: Optional[dict] = None, layer_types: Optional[list] = None):
         self.components = components
         self.config = config
         self.weights_dir = weights_dir
@@ -26,9 +26,23 @@ class LayerExecutor:
         self.loader = LayerWeightLoader(weights_dir)
         self.tracker = BenchmarkTracker()
 
+        # Detect hybrid/stateful models (e.g. Qwen3.5 with linear_attention + full_attention)
+        # layer_types is passed from executor.py which checks both full config and text_config
+        if layer_types is None:
+            layer_types = getattr(config, 'layer_types', None)
+        self._is_hybrid = layer_types is not None and 'linear_attention' in layer_types
+
         # TurboQuant or standard KV cache
         self.turboquant_config = turboquant_config
-        if turboquant_config is not None:
+        if self._is_hybrid:
+            # Hybrid models use StatefulCache that lives on GPU — handles both
+            # full_attention (key_cache/value_cache) and linear_attention (conv_states/recurrent_states)
+            self.cache = StatefulCache(config=config, num_layers=self.num_layers, layer_types=layer_types)
+            self.kv_manager = None
+            if turboquant_config is not None:
+                print("TurboQuant skipped: hybrid/stateful model uses StatefulCache instead")
+            self._hf_cache_factory = lambda: self.cache
+        elif turboquant_config is not None:
             from app.engines.shared.turboquant import TurboQuantKVCacheManager, TurboQuantHFProxyCache
             tq_config = turboquant_config if hasattr(turboquant_config, 'bits_per_coord') else type('obj', (object,), {'bits_per_coord': 3.5, 'qjl_dim': 128, 'enable_polarquant': True, 'enable_qjl': True, 'rotation_type': 'random', 'codebook_type': 'beta_lloyd_max', 'device': device, 'collect_stats': False})()
             # Use config object
@@ -131,7 +145,11 @@ class LayerExecutor:
         """Executes full discrete unspooling: modes are prefill / decode."""
         compute_start = time.perf_counter()
         batch_size, seq_length = input_ids.shape
-        past_length = 0 if mode == "prefill" else self.kv_manager.get_seq_length(0)
+
+        if self._is_hybrid:
+            past_length = self.cache.get_seq_length(0)
+        else:
+            past_length = 0 if mode == "prefill" else self.kv_manager.get_seq_length(0)
             
         max_context = getattr(self.config, "max_position_embeddings", 4096)
         if past_length + seq_length > max_context:
@@ -174,7 +192,10 @@ class LayerExecutor:
              else:
                  position_embeddings = res
         
-        hf_cache = self._hf_cache_factory()
+        if self._is_hybrid:
+            hf_cache = self.cache
+        else:
+            hf_cache = self._hf_cache_factory()
 
         # Main layer loop
         for i, layer in enumerate(self.components['layers']):
@@ -211,8 +232,10 @@ class LayerExecutor:
                 
             layer_outputs = layer(hidden_states, **kwargs)
             
-            hf_cache.conv_states.sync_back()
-            hf_cache.recurrent_states.sync_back()
+            # sync_back only needed for HFProxyCache (standard model with CPU offloading)
+            if not self._is_hybrid:
+                hf_cache.conv_states.sync_back()
+                hf_cache.recurrent_states.sync_back()
             
             if isinstance(layer_outputs, tuple):
                 hidden_states = layer_outputs[0]
@@ -250,6 +273,10 @@ class LayerExecutor:
         self.tracker.update_vram()
         
         self.tracker.record_compute(time.perf_counter() - compute_start)
-        self.tracker.set_kv_cache_size(self.kv_manager.get_size_mb())
-        self.kv_manager.seq_length = past_length + seq_length
+        if self._is_hybrid:
+            self.tracker.set_kv_cache_size(self.cache.get_size_mb())
+            self.cache._seq_length = past_length + seq_length
+        else:
+            self.tracker.set_kv_cache_size(self.kv_manager.get_size_mb())
+            self.kv_manager.seq_length = past_length + seq_length
         return logits

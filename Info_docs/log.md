@@ -67,9 +67,18 @@
 - Created `Info_docs/Excalidraw/SovereignAI.excalidraw.md` — Excalidraw visual architecture diagram with component relationships
 - Updated `Info_docs/Sovereign.canvas` — refreshed Obsidian knowledge graph visualization
 
+## [2026-07-28] implement | TurboQuant KV Cache Refactoring
+- Refactored `turboquant/codebook.py` — simplified codebook logic (61 lines changed)
+- Enhanced `turboquant/hf_proxy.py` — improved HF model proxy handling (22 lines added)
+- Optimized `turboquant/kv_cache.py` — major KV cache refactoring (120 lines changed, +117/-86)
+
 ## [2026-07-28] ingest | Codebase Analysis with graphify
-- Ran /graphify skill to analyze SovereignAI codebase structure
-- Generated knowledge graph with nodes, edges, and communities
-- Created interactive HTML visualization, GraphRAG-ready JSON, and audit report
-- Updated Obsidian knowledge vault (if --obsidian flag was used)
+- Ran `/graphify` skill to analyze SovereignAI codebase structure (651 files, ~2.5M words)
+- Generated interactive HTML visualization (`graphify-out/graph.html`)
+- Created GraphRAG-ready JSON detection file (`.graphify_detect.json`)
+- Produced audit report (`graphify-out/GRAPH_REPORT.md`)
 - Added insights to project knowledge base
+
+## [2026-07-28] doc | README and Knowledge Graph Updates
+- Updated `readme.md` — minor cleanup and project overview improvements
+- Updated `Info_docs/Sovereign.canvas` — refreshed Obsidian knowledge graph visualization

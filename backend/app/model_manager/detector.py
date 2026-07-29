@@ -168,24 +168,49 @@ class ModelDetector:
         """
         generative_types = {
             "llama", "mistral", "gpt2", "gpt_neo", "gpt_neox",
-            "gptj", "phi", "phi3", "gemma", "gemma2", "falcon",
-            "bloom", "opt", "qwen2", "cohere", "stablelm",
-            "starcoder2", "codellama", "deepseek",
+            "gptj", "phi", "phi3", "gemma", "gemma2", "gemma3",
+            "gemma4", "falcon", "bloom", "opt", "qwen2", "qwen3",
+            "qwen2_moe", "qwen2_5", "cohere", "stablelm",
+            "starcoder2", "codellama", "deepseek", "deepseek_v2",
+            "deepseek_v3", "deepseek_v4", "dbrx", "jamba",
+            "exaone4", "exaone_moe", "olmo", "olmo2", "olmo3",
+            "bitnet", "mpt", "mamba", "mamba2", "mixtral",
+            "ministral", "granite", "granitemoe", "nemotron",
+            "persimmon", "recurrent_gemma", "jetmoe", "bamba",
+            "minicpm3", "glm", "glm4", "zamba", "zamba2",
+            "internlm2", "xglm", "rwkv", "biogpt", "git",
+            "codegen", "gpt_bigcode", "gpt_neox_japanese",
+            "nanochat", "solar_open", "arcee", "apertus",
+            "smollm3", "helium", "diffllama", "blt",
         }
         
         encoder_types = {
             "bert", "roberta", "albert", "deberta", "electra",
-            "distilbert", "xlm-roberta",
+            "distilbert", "xlm-roberta", "modernbert", "canine",
+            "camembert", "flaubert", "layoutlm", "longformer",
+            "luke", "mpnet", "nomic_bert", "rembert", "splinter",
+            "squeezebert", "xlm", "xmod", "yoso", "ernie",
+            "mobilebert", "big_bird", "funnel", "ibert",
+            "megatron-bert", "nystromformer", "reformer",
+            "roformer", "data2vec-text",
         }
         
         seq2seq_types = {
             "t5", "bart", "mbart", "pegasus", "marian", "mt5",
-            "flan-t5",
+            "flan-t5", "longt5", "m2m_100", "bigbird_pegasus",
+            "blenderbot", "fsmt", "led", "mvp", "nllb-moe",
+            "plbart", "prophetnet", "seamless_m4t", "speech_to_text",
+            "speecht5", "switch_transformers", "umt5", "whisper",
         }
         
         vision_types = {
             "vit", "swin", "deit", "beit", "convnext",
-            "resnet", "efficientnet",
+            "resnet", "efficientnet", "convnextv2", "dinov2",
+            "bit", "cvt", "focalnet", "imagegpt", "levit",
+            "mobilevit", "mobilevitv2", "nat", "poolformer",
+            "pvt", "regnet", "segformer", "swinv2",
+            "timesformer", "vit_mae", "vit_msn", "yolos",
+            "dinat", "hiera", "maskformer", "depth_pro",
         }
         
         mt = model_type.lower().replace("-", "_")

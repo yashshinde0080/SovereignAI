@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useStore } from '@/store';
 import { api } from '@/lib/api';
-import { Cpu, HardDrive, MemoryStick, Zap, ArrowRight, Gauge } from 'lucide-react';
+import { Cpu, HardDrive, MemoryStick, Zap, ArrowRight, Gauge, Sparkles, Rocket } from 'lucide-react';
 import Link from 'next/link';
 import { ModelControlPanel } from '@/components/models/ModelControlPanel';
-
 
 export default function HomePage() {
   const { systemStatus, setSystemStatus, hardware, setHardware } = useStore();
@@ -46,6 +45,8 @@ export default function HomePage() {
     );
   }
 
+  const noModelLoaded = !systemStatus?.model_loaded;
+
   return (
     <div className="space-y-6">
       <div>
@@ -54,6 +55,38 @@ export default function HomePage() {
           Portable, offline AI compute platform
         </p>
       </div>
+
+      {/* First-run hardware suggestions banner */}
+      {noModelLoaded && recommendations.length > 0 && (
+        <Card className="border-primary/30 bg-gradient-to-r from-primary/5 to-primary/10 overflow-hidden relative">
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 h-32 w-32 rounded-full bg-primary/10 blur-[80px]" />
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <span className="text-xs font-bold uppercase tracking-widest text-primary">Hardware Optimized</span>
+            </div>
+            <h2 className="text-lg font-bold mb-1">Models Recommended for Your System</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Based on {hardware?.cpu_name || 'your hardware'} with {hardware?.ram_total_gb}GB RAM
+            </p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {recommendations.slice(0, 4).map((rec, i) => (
+                <Badge key={i} variant="outline" className="px-3 py-1 text-xs flex items-center gap-1">
+                  <Rocket className="h-3 w-3" />
+                  {rec.model}
+                  <span className="text-muted-foreground ml-1">({rec.mode})</span>
+                </Badge>
+              ))}
+            </div>
+            <Link href="/models">
+              <Button size="sm">
+                Browse Models
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Core Control Panel */}
       <ModelControlPanel />

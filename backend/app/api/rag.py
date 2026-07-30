@@ -15,6 +15,9 @@ from app.vectorstore.manager import VectorStoreManager
 router = APIRouter()
 
 
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+
+
 @router.post("/upload")
 async def upload_document(
     request: Request,
@@ -23,17 +26,26 @@ async def upload_document(
     """Upload document for RAG"""
     vector_store: VectorStoreManager = request.app.state.vector_store
     
+    # Check Content-Length before reading body (fail fast)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="File too large. Max: 50MB")
+    
+    # Validate file type before reading body
+    filename = (file.filename or "").lower()
+    if not filename.endswith(('.txt', '.pdf')):
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.filename}. Only .txt and .pdf files are accepted.")
+    
     # Save file
     content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="File too large. Max: 50MB")
     
     # Process based on file type
-    filename = file.filename.lower()
-    
     try:
         if filename.endswith('.txt'):
             text = content.decode('utf-8')
         elif filename.endswith('.pdf'):
-            # Use plugin if available
             pdf_plugin = request.app.state.plugin_manager.get_plugin('pdf_ingestion')
             if pdf_plugin:
                 text = await pdf_plugin.extract_text(content)
@@ -43,10 +55,7 @@ async def upload_document(
                     detail="PDF plugin not available"
                 )
         else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported file type: {filename}"
-            )
+            raise HTTPException(status_code=400, detail=f"Unhandled file type: {filename}")
         
         # Add to vector store
         doc_id = vector_store.ingest_text(

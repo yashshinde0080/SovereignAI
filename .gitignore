@@ -132,3 +132,4 @@ graphify-out
 .plugins/
 .ua
 .gstack
+opencode.jsonc

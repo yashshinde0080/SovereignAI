@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, Notification } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const { createMenu } = require('./menu');
@@ -128,6 +128,20 @@ function stopBackend() {
 // IPC Handlers
 ipcMain.handle('get-app-path', () => {
   return app.getAppPath();
+});
+
+ipcMain.handle('show-notification', (event, { title, body }) => {
+  if (Notification.isSupported()) {
+    // ponytail: native Electron notification, no library needed
+    const n = new Notification({ title, body });
+    n.onclick = () => {
+      if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    };
+  }
+  return { success: true };
 });
 
 ipcMain.handle('get-version', () => {

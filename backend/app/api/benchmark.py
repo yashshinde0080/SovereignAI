@@ -1,6 +1,6 @@
 """Benchmark API Endpoints"""
-import time
 import asyncio
+import time
 from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas.benchmark import BenchmarkRequest, BenchmarkResult
@@ -152,9 +152,35 @@ async def compare_modes(request: Request):
     if not app.state.active_model:
         raise HTTPException(status_code=400, detail="No model loaded")
     
-    # This would require loading in both modes
-    # Return cached comparison if available
+    model_name = app.state.active_model
+    engine = app.state.active_engine
+    current_mode = app.state.active_mode
+    
+    # ponytail: compares current mode, the other mode shows how to switch
+    # ponytail: to compare both, reload model in each mode separately
+    test_prompt = "Hello, how are you?"
+    results = {}
+    
+    for mode in ["fullram", "layerstream"]:
+        if mode == current_mode:
+            start = time.perf_counter()
+            response = await engine.generate(
+                input_data=test_prompt,
+                max_tokens=50,
+            )
+            elapsed = time.perf_counter() - start
+            tokens = response.get("completion_tokens", 0) or len(response.get("text", "").split())
+            results[mode] = {
+                "tokens": tokens,
+                "time_s": round(elapsed, 3),
+                "tps": round(tokens / elapsed, 2) if elapsed > 0 else 0,
+                "ram_gb": engine.get_memory_usage().get("ram_used_gb", 0),
+            }
+        else:
+            results[mode] = {"available": False, "reason": f"Model loaded in {current_mode}. Switch to {mode} to benchmark."}
+    
     return {
-        "status": "not_implemented",
-        "message": "Mode comparison requires model reload"
+        "model": model_name,
+        "current_mode": current_mode,
+        "results": results,
     }

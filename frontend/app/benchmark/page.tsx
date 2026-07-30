@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useStore } from '@/store';
 import { api } from '@/lib/api';
-import { Play, AlertCircle } from 'lucide-react';
+import { Play, AlertCircle, GitCompare } from 'lucide-react';
 import Link from 'next/link';
 
 interface BenchmarkResult {
@@ -37,6 +37,19 @@ export default function BenchmarkPage() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BenchmarkResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  interface ModeResult {
+    tokens: number;
+    time_s: number;
+    tps: number;
+    ram_gb: number;
+  }
+  interface CompareResponse {
+    model: string;
+    current_mode: string;
+    results: Record<string, ModeResult | { available: false; reason: string }>;
+  }
+  const [comparing, setComparing] = useState(false);
+  const [compareResult, setCompareResult] = useState<CompareResponse | null>(null);
 
   const runBenchmark = async () => {
     setRunning(true);
@@ -143,9 +156,62 @@ export default function BenchmarkPage() {
       {/* Results */}
       {result && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Results</CardTitle>
+        {/* Model Comparison */}
+      {systemStatus?.model_loaded && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GitCompare className="h-5 w-5" />
+              Mode Comparison
+            </CardTitle>
+            <CardDescription>
+              Compare FullRAM vs LayerStream performance
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={async () => {
+                setComparing(true);
+                try {
+                  const res = await api.compareModes() as CompareResponse;
+                  setCompareResult(res);
+                } catch (err: any) {
+                  setError(err.message);
+                }
+                setComparing(false);
+              }}
+              disabled={comparing}
+              variant="outline"
+            >
+              {comparing ? 'Comparing...' : 'Run Comparison'}
+            </Button>
+
+            {compareResult && (
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {Object.entries(compareResult.results || {}).map(([mode, data]) => (
+                  <div key={mode} className="p-4 rounded-lg border bg-card">
+                    <h3 className="text-sm font-bold uppercase tracking-wider mb-2">{mode}</h3>
+                    {'available' in data ? (
+                      <p className="text-xs text-muted-foreground">{data.reason}</p>
+                    ) : (
+                      <div className="space-y-1 text-sm">
+                        <p>TPS: <span className="font-mono font-bold text-green-500">{data.tps}</span></p>
+                        <p>Time: <span className="font-mono">{data.time_s}s</span></p>
+                        <p>Tokens: <span className="font-mono">{data.tokens}</span></p>
+                        <p>RAM: <span className="font-mono">{data.ram_gb} GB</span></p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+          <CardHeader>
+            <CardTitle>Results</CardTitle>
               <CardDescription>
                 {result.iterations} iterations completed
               </CardDescription>

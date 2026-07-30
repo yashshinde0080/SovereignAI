@@ -155,6 +155,28 @@ class ApiClient {
     return this.request(`/v1/plugins/${pluginId}/disable`, { method: 'POST' });
   }
 
+  // Workspace Snapshots
+  async saveWorkspace() {
+    return this.request('/v1/workspace/save', { method: 'POST' });
+  }
+
+  async listWorkspaces() {
+    return this.request<{ snapshots: any[] }>('/v1/workspace/');
+  }
+
+  async loadWorkspace(snapId: string) {
+    return this.request(`/v1/workspace/${snapId}`);
+  }
+
+  async deleteWorkspace(snapId: string) {
+    return this.request(`/v1/workspace/${snapId}`, { method: 'DELETE' });
+  }
+
+  // Benchmark Compare
+  async compareModes() {
+    return this.request('/v1/benchmark/compare');
+  }
+
   // Settings
   async getAllSettings() {
     return this.request('/v1/settings');

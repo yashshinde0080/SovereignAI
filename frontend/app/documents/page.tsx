@@ -1,13 +1,25 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { api } from '@/lib/api';
-import { Upload, Trash2, Search, FileText } from 'lucide-react';
+import { Upload, Trash2, Search, FileText, UploadCloud } from 'lucide-react';
+
+const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
+const VALID_TYPES = ['.txt', '.pdf'];
+
+function fileTooBig(file: File): boolean {
+  return file.size > MAX_UPLOAD_SIZE;
+}
+
+function badFileType(file: File): boolean {
+  const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+  return !VALID_TYPES.includes(ext);
+}
 
 interface Document {
   id: string;
@@ -19,6 +31,7 @@ interface Document {
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [query, setQuery] = useState('');
   const [queryResult, setQueryResult] = useState<any>(null);
   const [querying, setQuerying] = useState(false);
@@ -32,14 +45,65 @@ export default function DocumentsPage() {
     }
   };
 
-  useState(() => {
+  useEffect(() => {
     loadDocuments();
-  });
+  }, []);
+
+  const dropRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+
+  // ponytail: native HTML5 drag-drop, no library needed
+  useEffect(() => {
+    const el = dropRef.current;
+    if (!el) return;
+    const onDragEnter = (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragging(true); };
+    const onDragOver = (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); setDragging(true); };
+    const onDragLeave = (e: DragEvent) => {
+      e.preventDefault(); e.stopPropagation();
+      if (!el.contains(e.relatedTarget as Node)) setDragging(false);
+    };
+    const onDrop = async (e: DragEvent) => {
+      e.preventDefault(); e.stopPropagation(); setDragging(false);
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      if (badFileType(file)) {
+        setUploadError(`Unsupported file type. Only .txt and .pdf files are accepted.`);
+        return;
+      }
+      if (fileTooBig(file)) {
+        setUploadError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max: 50MB.`);
+        return;
+      }
+      setUploadError('');
+      setUploading(true);
+      try { await api.uploadDocument(file); await loadDocuments(); }
+      catch (e) { console.error('Upload failed:', e); }
+      finally { setUploading(false); }
+    };
+    el.addEventListener('dragenter', onDragEnter);
+    el.addEventListener('dragover', onDragOver);
+    el.addEventListener('dragleave', onDragLeave);
+    el.addEventListener('drop', onDrop);
+    return () => {
+      el.removeEventListener('dragenter', onDragEnter);
+      el.removeEventListener('dragover', onDragOver);
+      el.removeEventListener('dragleave', onDragLeave);
+      el.removeEventListener('drop', onDrop);
+    };
+  }, []);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    if (badFileType(file)) {
+      setUploadError(`Unsupported file type. Only .txt and .pdf files are accepted.`);
+      return;
+    }
+    if (fileTooBig(file)) {
+      setUploadError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max: 50MB.`);
+      return;
+    }
+    setUploadError('');
     setUploading(true);
     try {
       await api.uploadDocument(file);
@@ -100,6 +164,21 @@ export default function DocumentsPage() {
             </Button>
           </label>
         </div>
+      </div>
+
+      {/* Drop Zone */}
+      <div
+        ref={dropRef}
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+          dragging ? 'border-primary bg-primary/10' : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+        }`}
+      >
+        <UploadCloud className={`h-10 w-10 mx-auto mb-3 ${dragging ? 'text-primary' : 'text-muted-foreground'}`} />
+        <p className="text-sm font-medium">Drop files here</p>
+        <p className="text-xs text-muted-foreground mt-1">or use the Upload button above</p>
+        {uploadError && (
+          <p className="text-xs text-destructive mt-2">{uploadError}</p>
+        )}
       </div>
 
       {/* Query Section */}

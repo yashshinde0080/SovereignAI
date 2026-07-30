@@ -11,7 +11,8 @@ import {
   FileText,
   Puzzle,
   Home,
-  Gauge
+  Gauge,
+  Save
 } from 'lucide-react';
 import { useStore } from '@/store';
 
@@ -22,6 +23,7 @@ const navItems = [
   { href: '/documents', icon: FileText, label: 'Documents' },
   { href: '/benchmark', icon: Gauge, label: 'Benchmark' },
   { href: '/system', icon: Activity, label: 'System' },
+  { href: '/workspace', icon: Save, label: 'Workspace' },
   { href: '/plugins', icon: Puzzle, label: 'Plugins' },
 ];
 

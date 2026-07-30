@@ -30,6 +30,12 @@ export function useModels() {
     }
   }, [toast]);
 
+  function notify(title: string, body: string) {
+    if (typeof window !== 'undefined' && (window as any).electronAPI?.showNotification) {
+      (window as any).electronAPI.showNotification({ title, body });
+    }
+  }
+
   const loadModel = useCallback(async (model: string) => {
     setLoading(true);
     setLoadingId(model);
@@ -50,12 +56,14 @@ export function useModels() {
         title: 'Model loaded',
         description: `${model} is ready for ${current.task_type?.replace(/_/g, ' ')}`,
       });
+      notify('Model loaded', `${model} is ready for inference.`);
     } catch (error: any) {
       toast({
         title: 'Failed to load model',
         description: error.message,
         variant: 'destructive',
       });
+      notify('Model load failed', error.message);
     } finally {
       setLoading(false);
       setLoadingId(null);
@@ -78,6 +86,7 @@ export function useModels() {
         title: 'Model unloaded',
         description: 'System is ready',
       });
+      if (activeId) notify('Model unloaded', `${activeId} has been unloaded.`);
     } catch (error: any) {
       toast({
         title: 'Failed to unload model',

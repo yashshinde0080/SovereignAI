@@ -6,13 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useStore } from '@/store';
 import { api } from '@/lib/api';
-import { Cpu, HardDrive, MemoryStick, Zap, ArrowRight, Gauge, Sparkles, Rocket } from 'lucide-react';
+import { Cpu, HardDrive, ArrowRight, Gauge, Sparkles, Rocket } from 'lucide-react';
 import Link from 'next/link';
 import { ModelControlPanel } from '@/components/models/ModelControlPanel';
+import type { Recommendation } from '@/types';
 
 export default function HomePage() {
   const { systemStatus, setSystemStatus, hardware, setHardware } = useStore();
-  const [recommendations, setRecommendations] = useState<any[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -24,9 +25,9 @@ export default function HomePage() {
           api.getRecommendations()
         ]);
         
-        setSystemStatus(statusRes as any);
-        setHardware(hwRes as any);
-        setRecommendations((recRes as any).recommendations || []);
+        setSystemStatus(statusRes);
+        setHardware(hwRes);
+        setRecommendations(recRes.recommendations || []);
       } catch (error) {
         console.error('Failed to fetch data:', error);
       } finally {

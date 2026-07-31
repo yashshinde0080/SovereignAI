@@ -1,38 +1,40 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/store';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
+import { errMsg } from '@/lib/utils';
+import type { WorkspaceSnapshot } from '@/types';
 import { Save, FolderOpen, Trash2, Clock, Cpu } from 'lucide-react';
-
-interface WorkspaceSnapshot {
-  id: string;
-  model: string | null;
-  mode: string | null;
-  timestamp: number;
-  created: string;
-}
 
 export default function WorkspacePage() {
   const { currentModel, executionMode, setCurrentModel, setExecutionMode } = useStore();
   const { toast } = useToast();
   const [snapshots, setSnapshots] = useState<WorkspaceSnapshot[]>([]);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  const loadSnapshots = async () => {
+  const loadSnapshots = useCallback(async () => {
     try {
       const res = await api.listWorkspaces();
       setSnapshots(res.snapshots || []);
-    } catch (e: any) {
-      toast({ title: 'Failed to load snapshots', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Failed to load snapshots', description: errMsg(e), variant: 'destructive' });
     }
-  };
+  }, [toast]);
 
-  useEffect(() => { loadSnapshots(); }, []);
+  useEffect(() => {
+    // ponytail: loading only gates the initial mount, refreshes stay silent
+    (async () => {
+      setLoading(true);
+      await loadSnapshots();
+      setLoading(false);
+    })();
+  }, [loadSnapshots]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -40,8 +42,8 @@ export default function WorkspacePage() {
       await api.saveWorkspace();
       await loadSnapshots();
       toast({ title: 'Snapshot saved', description: 'Current workspace saved.' });
-    } catch (e: any) {
-      toast({ title: 'Failed to save snapshot', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Failed to save snapshot', description: errMsg(e), variant: 'destructive' });
     }
     setSaving(false);
   };
@@ -49,26 +51,28 @@ export default function WorkspacePage() {
   const handleLoad = async (id: string) => {
     setLoadingId(id);
     try {
-      const snap: any = await api.loadWorkspace(id);
+      const snap = await api.loadWorkspace(id);
       if (snap.model) {
         await api.loadModel(snap.model, snap.mode || 'auto');
         setCurrentModel(snap.model);
-        if (snap.mode) setExecutionMode(snap.mode);
+        if (snap.mode) setExecutionMode(snap.mode as "fullram" | "layerstream" | "auto");
         toast({ title: 'Model loaded', description: `${snap.model} restored from snapshot.` });
       }
       await loadSnapshots();
-    } catch (e: any) {
-      toast({ title: 'Failed to load snapshot', description: e.message, variant: 'destructive' });
+    } catch (e) {
+      toast({ title: 'Failed to load snapshot', description: errMsg(e), variant: 'destructive' });
     }
     setLoadingId(null);
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm('Delete this snapshot? This cannot be undone.')) return;
     try {
       await api.deleteWorkspace(id);
       await loadSnapshots();
-    } catch (e: any) {
-      toast({ title: 'Failed to delete snapshot', description: e.message, variant: 'destructive' });
+      toast({ title: 'Snapshot deleted' });
+    } catch (e) {
+      toast({ title: 'Failed to delete snapshot', description: errMsg(e), variant: 'destructive' });
     }
   };
 
@@ -107,10 +111,15 @@ export default function WorkspacePage() {
       <Card>
         <CardHeader>
           <CardTitle>Saved Snapshots</CardTitle>
-          <CardDescription>{snapshots.length} snapshot(s)</CardDescription>
+          <CardDescription>{loading ? 'Loading...' : `${snapshots.length} snapshot(s)`}</CardDescription>
         </CardHeader>
         <CardContent>
-          {snapshots.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Clock className="h-12 w-12 mx-auto mb-4 opacity-50 animate-pulse" />
+              <p>Loading snapshots...</p>
+            </div>
+          ) : snapshots.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No snapshots saved yet</p>
@@ -118,7 +127,7 @@ export default function WorkspacePage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {snapshots.map((snap: WorkspaceSnapshot) => (
+              {snapshots.map((snap) => (
                 <div key={snap.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                   <div>
                     <p className="text-sm font-medium">{snap.model || 'no model'}</p>
@@ -130,7 +139,12 @@ export default function WorkspacePage() {
                     <Button variant="outline" size="sm" onClick={() => handleLoad(snap.id)} disabled={loadingId === snap.id}>
                       {loadingId === snap.id ? 'Loading...' : 'Load'}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(snap.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(snap.id)}
+                      aria-label={`Delete snapshot ${snap.model || 'without model'}`}
+                    >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>

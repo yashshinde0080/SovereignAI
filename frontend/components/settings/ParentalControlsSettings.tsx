@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,9 @@ import { Save, Lock, ShieldAlert } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { api } from "@/lib/api";
 
-const API_BASE = "http://127.0.0.1:8000/v1/settings";
-
 interface ParentalControlsSettingsProps {
-  data: Record<string, any>;
-  onSave: (data: Record<string, any>) => void;
+  data: Record<string, unknown>;
+  onSave: (data: Record<string, unknown>) => void;
 }
 
 export function ParentalControlsSettings({
@@ -46,12 +44,16 @@ export function ParentalControlsSettings({
   const [modelInput, setModelInput] = useState("");
   const { toast } = useToast();
 
-  useEffect(() => {
+  // ponytail: React-blessed "adjust state during render" — replaces the old
+  // useEffect(() => setForm(...), [data]) sync without the set-state-in-effect rule hit
+  const [prevData, setPrevData] = useState(data);
+  if (prevData !== data) {
+    setPrevData(data);
     setForm((prev) => ({ ...prev, ...data }));
-  }, [data]);
+  }
 
-  const update = (key: string, value: any) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const update = (key: string, value: unknown) => {
+    setForm((prev) => ({ ...prev, [key]: value }) as typeof form);
   };
 
   const handleSetPin = async () => {

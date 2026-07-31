@@ -5,12 +5,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
+import type { TaskResult } from '@/types';
 import { Loader2, Fingerprint } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function EmbeddingModule() {
   const [input, setInput] = useState('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TaskResult | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleRun = async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,8 @@ import { Slider } from "@/components/ui/slider";
 import { Save } from "lucide-react";
 
 interface GeneralSettingsProps {
-  data: Record<string, any>;
-  onSave: (data: Record<string, any>) => void;
+  data: Record<string, unknown>;
+  onSave: (data: Record<string, unknown>) => void;
 }
 
 export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
@@ -40,12 +40,16 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
     ...data,
   });
 
-  useEffect(() => {
+  // ponytail: React-blessed "adjust state during render" — replaces the old
+  // useEffect(() => setForm(...), [data]) sync without the set-state-in-effect rule hit
+  const [prevData, setPrevData] = useState(data);
+  if (prevData !== data) {
+    setPrevData(data);
     setForm((prev) => ({ ...prev, ...data }));
-  }, [data]);
+  }
 
-  const update = (key: string, value: any) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const update = (key: string, value: unknown) => {
+    setForm((prev) => ({ ...prev, [key]: value }) as typeof form);
   };
 
   return (
@@ -223,7 +227,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
               <p className="text-xs text-slate-500">{desc}</p>
             </div>
             <Switch
-              checked={(form as any)[key] as boolean}
+              checked={form[key as keyof typeof form] as boolean}
               onCheckedChange={(v) => update(key, v)}
             />
           </div>

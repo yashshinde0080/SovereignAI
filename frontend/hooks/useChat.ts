@@ -2,8 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { Message } from '@/types';
+import { errMsg } from '@/lib/utils';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+
+interface RagSource {
+  filename: string;
+}
 
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -11,7 +16,7 @@ export function useChat() {
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim()) return;
-    
+
     const userMessage: Message = { role: 'user', content };
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
@@ -60,19 +65,19 @@ export function useChat() {
 
               try {
                 const chunk = JSON.parse(data);
-                
+
                 // Handle Stream Metadata (Sources / RAG)
                 if (chunk.choices?.[0]?.delta?.rag_metadata) {
-                  const sources = chunk.choices[0].delta.rag_metadata;
+                  const sources = chunk.choices[0].delta.rag_metadata as RagSource[];
                   if (sources && sources.length > 0) {
                     const seen = new Set();
-                    const uniqueSources = sources.filter((s: any) => {
+                    const uniqueSources = sources.filter((s: RagSource) => {
                       if (seen.has(s.filename)) return false;
                       seen.add(s.filename);
                       return true;
                     });
-                    assistantContent += '\n\n**Sources Used:**\n' + uniqueSources.map((s: any) => `- ${s.filename}`).join('\n');
-                    
+                    assistantContent += '\n\n**Sources Used:**\n' + uniqueSources.map((s: RagSource) => `- ${s.filename}`).join('\n');
+
                     setMessages((prev) => {
                       const newMessages = [...prev];
                       newMessages[newMessages.length - 1] = {
@@ -110,11 +115,11 @@ export function useChat() {
         const content = data.choices?.[0]?.message?.content || "";
         setMessages((prev) => [...prev, { role: 'assistant', content }]);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Chat error:', error);
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: `**Error:** ${error.message || 'Sorry, an error occurred.'}` },
+        { role: 'assistant', content: `**Error:** ${errMsg(error) || 'Sorry, an error occurred.'}` },
       ]);
     } finally {
       setIsLoading(false);

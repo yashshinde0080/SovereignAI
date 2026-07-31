@@ -21,12 +21,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Power, PowerOff, FlaskConical } from "lucide-react";
+import { Plus, PowerOff } from "lucide-react";
 
 import { AgentCard } from "./AgentCard";
 
 import { useToast } from "@/components/ui/use-toast";
 import { api } from "@/lib/api";
+import type { Agent } from "@/types";
 
 const ROLES = [
   { value: "doctor", label: "Doctor" },
@@ -69,13 +70,13 @@ const ICONS = [
 ];
 
 interface AgentSettingsProps {
-  agents: any[];
+  agents: Agent[];
   onRefresh: () => void;
 }
 
 export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
   const [createOpen, setCreateOpen] = useState(false);
-  const [editAgent, setEditAgent] = useState<any>(null);
+  const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const { toast } = useToast();
 
   const [form, setForm] = useState({
@@ -106,8 +107,8 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
     });
   };
 
-  const updateForm = (key: string, value: any) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const updateForm = (key: string, value: unknown) => {
+    setForm((prev) => ({ ...prev, [key]: value }) as typeof form);
   };
 
   const handleCreate = async () => {
@@ -188,7 +189,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
     }
   };
 
-  const openEdit = (agent: any) => {
+  const openEdit = (agent: Agent) => {
     setForm({ ...agent });
     setEditAgent(agent);
   };

@@ -12,7 +12,7 @@ interface MessageListProps {
   messages: Message[];
 }
 
-const CodeBlock = ({ inline, className, children, ...props }: any) => {
+const CodeBlock = ({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
   const [copied, setCopied] = useState(false);
   const match = /language-(\w+)/.exec(className || '');
   const isBlock = !inline && match;
@@ -37,7 +37,7 @@ const CodeBlock = ({ inline, className, children, ...props }: any) => {
           </button>
         </div>
         <div className="p-4 overflow-x-auto">
-          <code className={cn("text-sm text-zinc-100 font-mono", className)} {...props}>
+          <code className={cn("text-sm text-zinc-100 font-mono", className)}>
             {children}
           </code>
         </div>
@@ -46,7 +46,7 @@ const CodeBlock = ({ inline, className, children, ...props }: any) => {
   }
 
   return (
-    <code className={cn("bg-muted/50 rounded-md px-1.5 py-0.5 text-sm font-mono text-primary", className)} {...props}>
+    <code className={cn("bg-muted/50 rounded-md px-1.5 py-0.5 text-sm font-mono text-primary", className)}>
       {children}
     </code>
   );

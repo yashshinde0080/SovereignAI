@@ -21,12 +21,13 @@ import {
 } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { Download } from 'lucide-react';
+import type { DownloadStatus } from '@/types';
 
 interface DownloadModalProps {
   open: boolean;
   onClose: () => void;
   onDownload: (model: string, quant: string) => Promise<void>;
-  downloadStatus: any;
+  downloadStatus: DownloadStatus | null;
 }
 
 const popularModels = [

@@ -4,13 +4,24 @@ import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useStore } from '@/store';
 import { useToast } from '@/components/ui/use-toast';
-import { Model } from '@/types';
+import { errMsg } from '@/lib/utils';
+import type { CurrentModel, DownloadStatus, Model, SystemStatus } from '@/types';
+
+interface ElectronAPI {
+  showNotification?: (opts: { title: string; body: string }) => void;
+}
+
+declare global {
+  interface Window {
+    electronAPI?: ElectronAPI;
+  }
+}
 
 export function useModels() {
   const [models, setModels] = useState<Model[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [downloadStatus, setDownloadStatus] = useState<any>(null);
+  const [downloadStatus, setDownloadStatus] = useState<DownloadStatus | null>(null);
   const { setSystemStatus, setCurrentModel, setTaskType, setIsGenerative, setExecutionMode } = useStore();
   const { toast } = useToast();
 
@@ -19,10 +30,10 @@ export function useModels() {
     try {
       const res = await api.listModels();
       setModels(res.models || []);
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to load models',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     } finally {
@@ -31,8 +42,8 @@ export function useModels() {
   }, [toast]);
 
   function notify(title: string, body: string) {
-    if (typeof window !== 'undefined' && (window as any).electronAPI?.showNotification) {
-      (window as any).electronAPI.showNotification({ title, body });
+    if (typeof window !== 'undefined' && window.electronAPI?.showNotification) {
+      window.electronAPI.showNotification({ title, body });
     }
   }
 
@@ -40,30 +51,30 @@ export function useModels() {
     setLoading(true);
     setLoadingId(model);
     try {
-      const result = await api.loadModel(model);
-      const status = await api.getSystemStatus();
-      setSystemStatus(status as any);
-      
-      const current = await api.getCurrentModel() as any;
+      await api.loadModel(model);
+      const status: SystemStatus = await api.getSystemStatus();
+      setSystemStatus(status);
+
+      const current: CurrentModel = await api.getCurrentModel();
       if (current.loaded) {
         setCurrentModel(current.model);
         setTaskType(current.task_type);
-        setExecutionMode(current.mode);
+        setExecutionMode(current.mode as "fullram" | "layerstream" | "auto");
         setIsGenerative(current.is_generative);
       }
-      
+
       toast({
         title: 'Model loaded',
         description: `${model} is ready for ${current.task_type?.replace(/_/g, ' ')}`,
       });
       notify('Model loaded', `${model} is ready for inference.`);
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to load model',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
-      notify('Model load failed', error.message);
+      notify('Model load failed', errMsg(error));
     } finally {
       setLoading(false);
       setLoadingId(null);
@@ -76,21 +87,21 @@ export function useModels() {
     if (activeId) setLoadingId(activeId);
     try {
       await api.unloadModel();
-      const status = await api.getSystemStatus();
-      setSystemStatus(status as any);
+      const status: SystemStatus = await api.getSystemStatus();
+      setSystemStatus(status);
       setCurrentModel('');
       setTaskType('');
       setIsGenerative(false);
-      
+
       toast({
         title: 'Model unloaded',
         description: 'System is ready',
       });
       if (activeId) notify('Model unloaded', `${activeId} has been unloaded.`);
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to unload model',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     } finally {
@@ -107,10 +118,10 @@ export function useModels() {
         title: 'Model deleted',
         description: `${model} has been removed`,
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to delete model',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     }
@@ -119,13 +130,13 @@ export function useModels() {
   const downloadModel = useCallback(async (model: string, quant: string) => {
     try {
       await api.pullModel(model, quant);
-      
+
       // Poll for status
       const pollStatus = async () => {
         try {
-          const status = await api.getPullStatus(model) as any;
+          const status = await api.getPullStatus(model);
           setDownloadStatus(status);
-          
+
           if (status.status === 'downloading' || status.status === 'verifying' || status.status === 'encrypting') {
             setTimeout(pollStatus, 1000);
           } else if (status.status === 'complete') {
@@ -147,12 +158,12 @@ export function useModels() {
           console.error('Poll error:', error);
         }
       };
-      
+
       pollStatus();
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to start download',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     }
@@ -162,18 +173,18 @@ export function useModels() {
     setLoading(true);
     try {
       await api.switchMode(mode);
-      const current = await api.getCurrentModel() as any;
+      const current: CurrentModel = await api.getCurrentModel();
       if (current.loaded) {
-        setExecutionMode(current.mode);
+        setExecutionMode(current.mode as "fullram" | "layerstream" | "auto");
       }
       toast({
         title: 'Mode switched',
         description: `Now using ${mode} mode`,
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to switch mode',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     } finally {

@@ -1,3 +1,21 @@
+import type {
+  Agent,
+  BenchmarkResult,
+  CurrentModel,
+  Document,
+  DownloadStatus,
+  Hardware,
+  Message,
+  Model,
+  Plugin,
+  QueryResult,
+  Recommendation,
+  SettingsMap,
+  SystemStatus,
+  TaskResult,
+  WorkspaceSnapshot,
+} from '@/types';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 class ApiClient {
@@ -12,7 +30,7 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -30,15 +48,15 @@ class ApiClient {
   }
 
   // System
-  async getSystemStatus() {
+  async getSystemStatus(): Promise<SystemStatus> {
     return this.request('/v1/system/status');
   }
 
-  async getHardware() {
+  async getHardware(): Promise<Hardware> {
     return this.request('/v1/system/hardware');
   }
 
-  async getRecommendations() {
+  async getRecommendations(): Promise<{ recommendations: Recommendation[] }> {
     return this.request('/v1/system/recommendation');
   }
 
@@ -47,8 +65,8 @@ class ApiClient {
   }
 
   // Models
-  async listModels() {
-    return this.request<{ models: any[] }>('/v1/models/');
+  async listModels(): Promise<{ models: Model[] }> {
+    return this.request('/v1/models/');
   }
 
   async loadModel(model: string, mode: string = 'auto') {
@@ -69,7 +87,7 @@ class ApiClient {
     });
   }
 
-  async getPullStatus(model: string) {
+  async getPullStatus(model: string): Promise<DownloadStatus> {
     return this.request(`/v1/models/pull/status/${model}`);
   }
 
@@ -77,33 +95,33 @@ class ApiClient {
     return this.request(`/v1/models/${model}`, { method: 'DELETE' });
   }
 
-  async getCurrentModel() {
+  async getCurrentModel(): Promise<CurrentModel> {
     return this.request('/v1/models/current');
   }
 
   // Chat / Execute
-  async chat(messages: any[], stream: boolean = false) {
+  async chat(messages: Message[], stream: boolean = false) {
     return this.request('/v1/chat/completions', {
       method: 'POST',
       body: JSON.stringify({ messages, stream }),
     });
   }
 
-  async executeTask(data: any) {
-    return this.request('/v1/chat/execute', {
+  async executeTask(data: Record<string, unknown>): Promise<TaskResult> {
+    return this.request<TaskResult>('/v1/chat/execute', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async switchMode(mode: string) {
+  async switchMode(mode: string): Promise<{ mode: string }> {
     return this.request(`/v1/chat/mode/switch?mode=${mode}`, {
       method: 'POST',
     });
   }
 
   // Benchmark
-  async runBenchmark(iterations: number, maxTokens: number) {
+  async runBenchmark(iterations: number, maxTokens: number): Promise<BenchmarkResult> {
     return this.request('/v1/benchmark/run', {
       method: 'POST',
       body: JSON.stringify({ iterations, max_tokens: maxTokens }),
@@ -111,8 +129,8 @@ class ApiClient {
   }
 
   // Documents
-  async listDocuments() {
-    return this.request<{ documents: any[] }>('/v1/rag/documents');
+  async listDocuments(): Promise<{ documents: Document[] }> {
+    return this.request('/v1/rag/documents');
   }
 
   async uploadDocument(file: File) {
@@ -131,7 +149,7 @@ class ApiClient {
     return response.json();
   }
 
-  async queryDocuments(query: string, topK: number = 5) {
+  async queryDocuments(query: string, topK: number = 5): Promise<QueryResult> {
     return this.request('/v1/rag/query', {
       method: 'POST',
       body: JSON.stringify({ query, top_k: topK, generate_response: true }),
@@ -143,8 +161,8 @@ class ApiClient {
   }
 
   // Plugins
-  async listPlugins() {
-    return this.request<any[]>('/v1/plugins/');
+  async listPlugins(): Promise<Plugin[]> {
+    return this.request('/v1/plugins/');
   }
 
   async enablePlugin(pluginId: string) {
@@ -160,11 +178,11 @@ class ApiClient {
     return this.request('/v1/workspace/save', { method: 'POST' });
   }
 
-  async listWorkspaces() {
-    return this.request<{ snapshots: any[] }>('/v1/workspace/');
+  async listWorkspaces(): Promise<{ snapshots: WorkspaceSnapshot[] }> {
+    return this.request('/v1/workspace/');
   }
 
-  async loadWorkspace(snapId: string) {
+  async loadWorkspace(snapId: string): Promise<WorkspaceSnapshot> {
     return this.request(`/v1/workspace/${snapId}`);
   }
 
@@ -178,11 +196,11 @@ class ApiClient {
   }
 
   // Settings
-  async getAllSettings() {
+  async getAllSettings(): Promise<SettingsMap> {
     return this.request('/v1/settings');
   }
 
-  async updateSettingsSection(section: string, data: any) {
+  async updateSettingsSection(section: string, data: Record<string, unknown>): Promise<{ message?: string }> {
     return this.request(`/v1/settings/${section.replace(/_/g, '-')}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -206,18 +224,18 @@ class ApiClient {
   }
 
   // Agents
-  async listAgents() {
-    return this.request<any[]>('/v1/settings/agents');
+  async listAgents(): Promise<Agent[]> {
+    return this.request('/v1/settings/agents');
   }
 
-  async createAgent(agent: any) {
+  async createAgent(agent: Agent) {
     return this.request('/v1/settings/agents', {
       method: 'POST',
       body: JSON.stringify(agent),
     });
   }
 
-  async updateAgent(agentId: string, agent: any) {
+  async updateAgent(agentId: string, agent: Agent) {
     return this.request(`/v1/settings/agents/${agentId}`, {
       method: 'PUT',
       body: JSON.stringify(agent),
@@ -240,5 +258,3 @@ class ApiClient {
 }
 
 export const api = new ApiClient(API_BASE);
-
-

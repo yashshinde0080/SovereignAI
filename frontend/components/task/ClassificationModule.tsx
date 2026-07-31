@@ -5,13 +5,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
+import type { TaskResult } from '@/types';
 import { Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 
 export function ClassificationModule({ taskType }: { taskType: string }) {
   const [input, setInput] = useState('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TaskResult | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleRun = async () => {
@@ -56,9 +57,9 @@ export function ClassificationModule({ taskType }: { taskType: string }) {
                     <div>
                         <div className="flex justify-between text-sm mb-1">
                             <span className="font-medium">Confidence Score</span>
-                            <span>{(parseFloat(result.confidence) * 100).toFixed(1)}%</span>
+                            <span>{(parseFloat(result.confidence ?? "0") * 100).toFixed(1)}%</span>
                         </div>
-                        <Progress value={parseFloat(result.confidence) * 100} className="h-2" />
+                        <Progress value={parseFloat(result.confidence ?? "0") * 100} className="h-2" />
                     </div>
                 </CardContent>
             </Card>

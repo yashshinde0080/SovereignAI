@@ -25,8 +25,8 @@ export default function SystemPage() {
         ]);
         console.log('Hardware:', hw);
         console.log('Status:', status);
-        setHardware(hw as any);
-        setSystemStatus(status as any);
+        setHardware(hw);
+        setSystemStatus(status);
       } catch (e) {
         console.error('Failed to fetch system data:', e);
       }

@@ -33,14 +33,14 @@ export default function ConsolePage() {
       try {
         const [status, current] = await Promise.all([
           api.getSystemStatus(),
-          api.getCurrentModel() as any
+          api.getCurrentModel()
         ]);
         
-        setSystemStatus(status as any);
+        setSystemStatus(status);
         if (current.loaded) {
           setCurrentModel(current.model);
           setTaskType(current.task_type);
-          setExecutionMode(current.mode);
+          setExecutionMode(current.mode as "fullram" | "layerstream" | "auto");
           setIsGenerative(current.is_generative || current.task_type === 'causal_lm');
         }
       } catch (e) {

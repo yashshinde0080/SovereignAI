@@ -30,6 +30,21 @@ interface BenchmarkResult {
   };
 }
 
+interface ModeResult {
+  tokens: number;
+  time_s: number;
+  tps: number;
+  ram_gb: number;
+}
+
+interface CompareResponse {
+  model: string;
+  current_mode: string;
+  results: Record<string, ModeResult | { available: false; reason: string }>;
+}
+
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
 export default function BenchmarkPage() {
   const { systemStatus } = useStore();
   const [iterations, setIterations] = useState(3);
@@ -37,17 +52,6 @@ export default function BenchmarkPage() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BenchmarkResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  interface ModeResult {
-    tokens: number;
-    time_s: number;
-    tps: number;
-    ram_gb: number;
-  }
-  interface CompareResponse {
-    model: string;
-    current_mode: string;
-    results: Record<string, ModeResult | { available: false; reason: string }>;
-  }
   const [comparing, setComparing] = useState(false);
   const [compareResult, setCompareResult] = useState<CompareResponse | null>(null);
 
@@ -59,8 +63,8 @@ export default function BenchmarkPage() {
     try {
       const res = (await api.runBenchmark(iterations, maxTokens)) as BenchmarkResult;
       setResult(res);
-    } catch (err: any) {
-      setError(err.message || 'Benchmark failed');
+    } catch (err) {
+      setError(errMsg(err) || 'Benchmark failed');
     } finally {
       setRunning(false);
     }
@@ -131,7 +135,10 @@ export default function BenchmarkPage() {
               <Button onClick={runBenchmark} disabled={running} className="w-full">
                 {running ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    <div
+                      className="animate-spin rounded-full h-4 w-4 border-2 border-primary-foreground border-t-transparent mr-2"
+                      aria-hidden="true"
+                    ></div>
                     Running...
                   </>
                 ) : (
@@ -146,6 +153,57 @@ export default function BenchmarkPage() {
         </CardContent>
       </Card>
 
+      {/* Mode Comparison */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <GitCompare className="h-5 w-5" />
+            Mode Comparison
+          </CardTitle>
+          <CardDescription>
+            Compare FullRAM vs LayerStream performance
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={async () => {
+              setComparing(true);
+              try {
+                const res = await api.compareModes() as CompareResponse;
+                setCompareResult(res);
+              } catch (err) {
+                setError(errMsg(err) || 'Comparison failed');
+              }
+              setComparing(false);
+            }}
+            disabled={comparing}
+            variant="outline"
+          >
+            {comparing ? 'Comparing...' : 'Run Comparison'}
+          </Button>
+
+          {compareResult && (
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.entries(compareResult.results || {}).map(([mode, data]) => (
+                <div key={mode} className="p-4 rounded-lg border bg-card">
+                  <h3 className="text-sm font-bold uppercase tracking-wider mb-2">{mode}</h3>
+                  {'available' in data ? (
+                    <p className="text-xs text-muted-foreground">{data.reason}</p>
+                  ) : (
+                    <div className="space-y-1 text-sm">
+                      <p>TPS: <span className="font-mono font-bold text-success">{data.tps.toFixed(2)}</span></p>
+                      <p>Time: <span className="font-mono">{data.time_s.toFixed(2)}s</span></p>
+                      <p>Tokens: <span className="font-mono">{data.tokens}</span></p>
+                      <p>RAM: <span className="font-mono">{data.ram_gb.toFixed(2)} GB</span></p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -156,62 +214,9 @@ export default function BenchmarkPage() {
       {/* Results */}
       {result && (
         <>
-        {/* Model Comparison */}
-      {systemStatus?.model_loaded && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <GitCompare className="h-5 w-5" />
-              Mode Comparison
-            </CardTitle>
-            <CardDescription>
-              Compare FullRAM vs LayerStream performance
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              onClick={async () => {
-                setComparing(true);
-                try {
-                  const res = await api.compareModes() as CompareResponse;
-                  setCompareResult(res);
-                } catch (err: any) {
-                  setError(err.message);
-                }
-                setComparing(false);
-              }}
-              disabled={comparing}
-              variant="outline"
-            >
-              {comparing ? 'Comparing...' : 'Run Comparison'}
-            </Button>
-
-            {compareResult && (
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Object.entries(compareResult.results || {}).map(([mode, data]) => (
-                  <div key={mode} className="p-4 rounded-lg border bg-card">
-                    <h3 className="text-sm font-bold uppercase tracking-wider mb-2">{mode}</h3>
-                    {'available' in data ? (
-                      <p className="text-xs text-muted-foreground">{data.reason}</p>
-                    ) : (
-                      <div className="space-y-1 text-sm">
-                        <p>TPS: <span className="font-mono font-bold text-green-500">{data.tps}</span></p>
-                        <p>Time: <span className="font-mono">{data.time_s}s</span></p>
-                        <p>Tokens: <span className="font-mono">{data.tokens}</span></p>
-                        <p>RAM: <span className="font-mono">{data.ram_gb} GB</span></p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-          <CardHeader>
-            <CardTitle>Results</CardTitle>
+          <Card>
+            <CardHeader>
+              <CardTitle>Results</CardTitle>
               <CardDescription>
                 {result.iterations} iterations completed
               </CardDescription>
@@ -232,7 +237,7 @@ export default function BenchmarkPage() {
                       <TableCell>{run.iteration}</TableCell>
                       <TableCell className="text-right">{run.tokens}</TableCell>
                       <TableCell className="text-right">{run.time_seconds.toFixed(3)}</TableCell>
-                      <TableCell className="text-right font-medium text-green-500">
+                      <TableCell className="text-right font-medium text-success">
                         {run.tokens_per_second.toFixed(2)}
                       </TableCell>
                     </TableRow>
@@ -258,7 +263,7 @@ export default function BenchmarkPage() {
                 </div>
                 <div className="p-4 bg-muted rounded-lg">
                   <p className="text-sm text-muted-foreground">Avg TPS</p>
-                  <p className="text-2xl font-bold text-green-500">
+                  <p className="text-2xl font-bold text-success">
                     {result.summary.average_tokens_per_second.toFixed(2)}
                   </p>
                 </div>

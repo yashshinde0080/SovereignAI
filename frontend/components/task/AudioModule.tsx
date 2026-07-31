@@ -4,12 +4,13 @@ import { useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import type { TaskResult } from '@/types';
 import { Loader2, Music, Mic } from 'lucide-react';
 
 export function AudioModule({ taskType }: { taskType: string }) {
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [audioBase64, setAudioBase64] = useState<string>('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TaskResult | null>(null);
   const [loading, setLoading] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);

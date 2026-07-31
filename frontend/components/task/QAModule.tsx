@@ -6,12 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
+import type { TaskResult } from '@/types';
 import { Loader2 } from 'lucide-react';
 
 export function QAModule() {
   const [context, setContext] = useState('');
   const [question, setQuestion] = useState('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TaskResult | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleRun = async () => {

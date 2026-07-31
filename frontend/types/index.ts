@@ -39,7 +39,7 @@ export interface SystemStatus {
   disk_total_gb: number;
   disk_used_gb: number;
   disk_free_gb: number;
-  engine_stats: Record<string, any>;
+  engine_stats: Record<string, unknown>;
 }
 
 export interface Hardware {
@@ -67,7 +67,16 @@ export interface Metrics {
   mode: string | null;
   task_type: string | null;
   is_generative: boolean;
-  engine_stats: Record<string, any>;
+  engine_stats: Record<string, unknown>;
+}
+
+export interface HistoryPoint {
+  time: string;
+  cpu: number;
+  gpu?: number;
+  ram: number;
+  diskRead?: number;
+  diskWrite?: number;
 }
 
 export interface BenchmarkResult {
@@ -108,6 +117,66 @@ export interface QueryResult {
 export interface SearchResult {
   text: string;
   score: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   document_id: string;
+}
+
+export interface Recommendation {
+  model: string;
+  mode: string;
+  confidence: string;
+}
+
+export interface CurrentModel {
+  loaded: boolean;
+  model: string;
+  task_type: string;
+  mode: string;
+  is_generative: boolean;
+}
+
+export interface Agent {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  system_instruction: string;
+  is_active: boolean;
+  icon: string;
+  temperature: number;
+  max_tokens: number;
+  enabled: boolean;
+}
+
+export interface WorkspaceSnapshot {
+  id: string;
+  model: string | null;
+  mode: string | null;
+  timestamp: number;
+  created: string;
+}
+
+export interface TaskResult {
+  output?: string;
+  confidence?: string;
+  shape?: unknown;
+}
+
+export interface DownloadStatus {
+  status?: string;
+  progress?: number;
+  downloaded_gb?: number;
+  total_gb?: number;
+  error?: string;
+}
+
+export interface SettingsMap {
+  agents?: Agent[];
+  general?: Record<string, unknown>;
+  project?: Record<string, unknown>;
+  personalization?: Record<string, unknown>;
+  data_controls?: Record<string, unknown>;
+  security?: Record<string, unknown>;
+  parental_controls?: Record<string, unknown>;
+  [key: string]: unknown;
 }

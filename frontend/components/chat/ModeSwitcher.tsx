@@ -12,6 +12,7 @@ import { useStore } from '@/store';
 import { api } from '@/lib/api';
 import { ChevronDown, Cpu, Layers, Sparkles } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { errMsg } from '@/lib/utils';
 
 const modes = [
   { id: 'fullram', label: 'Full RAM', icon: Cpu, description: 'Fastest, uses more memory' },
@@ -34,16 +35,16 @@ export function ModeSwitcher() {
       const result = await api.switchMode(mode);
       setSystemStatus({
         ...systemStatus!,
-        current_mode: (result as any).mode
+        current_mode: result.mode
       });
       toast({
         title: 'Mode switched',
         description: `Now using ${mode} mode`,
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to switch mode',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     } finally {

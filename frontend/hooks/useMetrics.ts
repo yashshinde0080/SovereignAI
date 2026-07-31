@@ -1,23 +1,15 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useStore } from '@/store';
 import { metricsWs } from '@/lib/websocket';
 import { api } from '@/lib/api';
-
-interface MetricPoint {
-  time: string;
-  cpu: number;
-  gpu: number;
-  ram: number;
-  diskRead: number;
-  diskWrite: number;
-}
+import type { SystemStatus } from '@/types';
 
 export function useMetrics() {
-  const { 
-    metrics, setMetrics, 
-    systemStatus, setSystemStatus, 
+  const {
+    metrics, setMetrics,
+    systemStatus, setSystemStatus,
     setCurrentModel, setExecutionMode,
     setTaskType, setIsGenerative,
     connected, setConnected,
@@ -34,11 +26,11 @@ export function useMetrics() {
     // Initial system status sync
     const syncStatus = async () => {
       try {
-        const status = await api.getSystemStatus() as any;
+        const status = await api.getSystemStatus();
         setSystemStatus(status);
         if (status.model_loaded) {
           setCurrentModel(status.current_model || "");
-          setExecutionMode(status.current_mode || "auto");
+          setExecutionMode((status.current_mode as "fullram" | "layerstream" | "auto") || "auto");
           setTaskType(status.task_type || "");
           setIsGenerative(status.is_generative || false);
         }
@@ -46,7 +38,7 @@ export function useMetrics() {
         console.error('Failed to sync system status:', e);
       }
     };
-    
+
     syncStatus();
 
     metricsWs.connect();
@@ -58,14 +50,14 @@ export function useMetrics() {
       // Sync model state if it changed
       if (data.model_loaded !== undefined) {
         setCurrentModel(data.model_loaded || "");
-        setExecutionMode(data.mode || "auto");
+        setExecutionMode((data.mode as "fullram" | "layerstream" | "auto") || "auto");
         setTaskType(data.task_type || "");
         setIsGenerative(data.is_generative || false);
-        
+
         // Update top-level systemStatus model_loaded boolean if needed
         const currentStatus = statusRef.current;
         if (currentStatus && (
-            currentStatus.current_model !== data.model_loaded || 
+            currentStatus.current_model !== data.model_loaded ||
             currentStatus.current_mode !== data.mode ||
             currentStatus.task_type !== data.task_type
         )) {
@@ -81,12 +73,12 @@ export function useMetrics() {
       }
 
       const now = new Date().toLocaleTimeString();
-      setHistory((prev: any[]) => {
+      setHistory((prev) => {
         const newHistory = [
           ...prev,
-          { 
-            time: now, 
-            cpu: data.cpu_percent, 
+          {
+            time: now,
+            cpu: data.cpu_percent,
             gpu: data.gpu_percent,
             ram: data.ram_percent,
             diskRead: data.disk_read_mb,

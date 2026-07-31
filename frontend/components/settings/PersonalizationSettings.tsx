@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +16,8 @@ import { Save } from "lucide-react";
 import { CharacteristicChip } from "./CharacteristicChip";
 
 interface PersonalizationSettingsProps {
-  data: Record<string, any>;
-  onSave: (data: Record<string, any>) => void;
+  data: Record<string, unknown>;
+  onSave: (data: Record<string, unknown>) => void;
 }
 
 const STYLES = [
@@ -78,12 +78,16 @@ export function PersonalizationSettings({
 
   const [interestInput, setInterestInput] = useState("");
 
-  useEffect(() => {
+  // ponytail: React-blessed "adjust state during render" — replaces the old
+  // useEffect(() => setForm(...), [data]) sync without the set-state-in-effect rule hit
+  const [prevData, setPrevData] = useState(data);
+  if (prevData !== data) {
+    setPrevData(data);
     setForm((prev) => ({ ...prev, ...data }));
-  }, [data]);
+  }
 
-  const update = (key: string, value: any) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const update = (key: string, value: unknown) => {
+    setForm((prev) => ({ ...prev, [key]: value }) as typeof form);
   };
 
   const toggleCharacteristic = (char: string) => {
@@ -123,7 +127,7 @@ export function PersonalizationSettings({
           Base Style & Tone
         </h3>
         <p className="text-xs text-slate-500">
-          Set the style and tone of how the AI responds to you. This doesn't
+          Set the style and tone of how the AI responds to you. This doesn&apos;t
           impact capabilities.
         </p>
 

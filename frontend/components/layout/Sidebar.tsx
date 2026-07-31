@@ -34,9 +34,17 @@ export function Sidebar() {
   return (
     <aside className="w-64 border-r bg-card flex flex-col">
       {/* Logo */}
-      <div className="p-6 border-b">
-        <h1 className="text-xl font-bold text-primary">SovereignAI</h1>
-        <p className="text-xs text-muted-foreground">Edge Platform</p>
+      <div className="p-6 border-b flex items-center gap-3">
+        <div
+          aria-hidden="true"
+          className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand to-brand-accent flex items-center justify-center text-white text-sm font-bold shrink-0"
+        >
+          S
+        </div>
+        <div>
+          <h1 className="text-xl font-bold text-primary">SovereignAI</h1>
+          <p className="text-xs text-muted-foreground">Edge Platform</p>
+        </div>
       </div>
 
       {/* Navigation */}
@@ -50,7 +58,7 @@ export function Sidebar() {
               className={cn(
                 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-primary-foreground dark:bg-brand dark:text-white'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               )}
             >
@@ -77,4 +85,4 @@ export function Sidebar() {
       </div>
     </aside>
   );
-}
+}

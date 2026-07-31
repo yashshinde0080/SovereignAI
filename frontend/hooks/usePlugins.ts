@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
+import { errMsg } from '@/lib/utils';
 import { Plugin } from '@/types';
 
 export function usePlugins() {
@@ -15,10 +16,10 @@ export function usePlugins() {
     try {
       const res = await api.listPlugins();
       setPlugins(res || []);
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to load plugins',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     } finally {
@@ -34,10 +35,10 @@ export function usePlugins() {
         title: 'Plugin enabled',
         description: `${pluginId} is now active`,
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to enable plugin',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     }
@@ -51,10 +52,10 @@ export function usePlugins() {
         title: 'Plugin disabled',
         description: `${pluginId} is now inactive`,
       });
-    } catch (error: any) {
+    } catch (error) {
       toast({
         title: 'Failed to disable plugin',
-        description: error.message,
+        description: errMsg(error),
         variant: 'destructive',
       });
     }

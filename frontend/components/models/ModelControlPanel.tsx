@@ -6,11 +6,9 @@ import { Card, CardContent } from '@/components/ui/card';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { useStore } from '@/store';
 import { useModels } from '@/hooks/useModels';
 import { 
-  Cpu, 
   Zap, 
   Power, 
   Activity, 
@@ -20,7 +18,7 @@ import {
   ShieldCheck,
   Microchip
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 export function ModelControlPanel() {
   const { systemStatus, currentModel, executionMode } = useStore();

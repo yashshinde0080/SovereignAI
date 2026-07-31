@@ -1,8 +1,10 @@
+import type { Metrics } from '@/types';
+
 export class MetricsWebSocket {
   private ws: WebSocket | null = null;
   private url: string;
   private reconnectInterval: number = 3000;
-  private listeners: Set<(data: any) => void> = new Set();
+  private listeners: Set<(data: Metrics) => void> = new Set();
 
   constructor(url: string = 'ws://127.0.0.1:8000/ws/metrics') {
     this.url = url;
@@ -43,7 +45,7 @@ export class MetricsWebSocket {
     }
   }
 
-  subscribe(listener: (data: any) => void) {
+  subscribe(listener: (data: Metrics) => void) {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }

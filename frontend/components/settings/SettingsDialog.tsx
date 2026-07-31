@@ -31,6 +31,7 @@ import { SecuritySettings } from "./SecuritySettings";
 import { ParentalControlsSettings } from "./ParentalControlsSettings";
 import { useToast } from "@/components/ui/use-toast";
 import { api } from "@/lib/api";
+import type { Agent, SettingsMap } from "@/types";
 
 type Section =
   | "general"
@@ -41,6 +42,8 @@ type Section =
   | "security"
   | "parental_controls";
 
+
+const EMPTY: Record<string, unknown> = {};
 
 const sections: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "general", label: "General", icon: Settings },
@@ -60,8 +63,8 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [activeSection, setActiveSection] = useState<Section>("general");
-  const [settings, setSettings] = useState<Record<string, any>>({});
-  const [agents, setAgents] = useState<any[]>([]);
+  const [settings, setSettings] = useState<SettingsMap>({});
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -69,10 +72,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     try {
       setLoading(true);
       const data = await api.getAllSettings();
-      const { agents: agentList, ...rest } = data as any;
+      const { agents: agentList, ...rest } = data;
       setSettings(rest);
       setAgents(agentList || []);
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load settings",
@@ -89,17 +92,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   }, [open, fetchAllSettings]);
 
-  const updateSection = async (section: string, data: any) => {
+  const updateSection = async (section: string, data: Record<string, unknown>) => {
     try {
       const result = await api.updateSettingsSection(section, data);
- 
+
       setSettings((prev) => ({ ...prev, [section]: data }));
- 
+
       toast({
         title: "Saved",
-        description: (result as any).message || "Settings updated successfully",
+        description: result.message || "Settings updated successfully",
       });
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to save settings",
@@ -113,7 +116,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       await api.resetSettings();
       await fetchAllSettings();
       toast({ title: "Reset", description: "All settings restored to defaults" });
-    } catch (err) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to reset settings",
@@ -184,13 +187,13 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <>
                   {activeSection === "general" && (
                     <GeneralSettings
-                      data={settings.general || {}}
+                      data={settings.general ?? EMPTY}
                       onSave={(data) => updateSection("general", data)}
                     />
                   )}
                   {activeSection === "project" && (
                     <ProjectSettings
-                      data={settings.project || {}}
+                      data={settings.project ?? EMPTY}
                       onSave={(data) => updateSection("project", data)}
                     />
                   )}
@@ -203,25 +206,25 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   )}
                   {activeSection === "personalization" && (
                     <PersonalizationSettings
-                      data={settings.personalization || {}}
+                      data={settings.personalization ?? EMPTY}
                       onSave={(data) => updateSection("personalization", data)}
                     />
                   )}
                   {activeSection === "data_controls" && (
                     <DataControlsSettings
-                      data={settings.data_controls || {}}
+                      data={settings.data_controls ?? EMPTY}
                       onSave={(data) => updateSection("data_controls", data)}
                     />
                   )}
                   {activeSection === "security" && (
                     <SecuritySettings
-                      data={settings.security || {}}
+                      data={settings.security ?? EMPTY}
                       onSave={(data) => updateSection("security", data)}
                     />
                   )}
                   {activeSection === "parental_controls" && (
                     <ParentalControlsSettings
-                      data={settings.parental_controls || {}}
+                      data={settings.parental_controls ?? EMPTY}
                       onSave={(data) =>
                         updateSection("parental_controls", data)
                       }

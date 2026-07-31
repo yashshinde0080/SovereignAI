@@ -4,13 +4,14 @@ import { useState, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
+import type { TaskResult } from '@/types';
 import { Loader2, UploadCloud, ImageIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export function VisionModule({ taskType }: { taskType: string }) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string>('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<TaskResult | null>(null);
   const [loading, setLoading] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);

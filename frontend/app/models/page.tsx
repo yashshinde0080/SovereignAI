@@ -11,12 +11,12 @@ import { Plus, RefreshCw } from 'lucide-react';
 
 export default function ModelsPage() {
   const { models, loading, loadingId, refresh, loadModel, unloadModel, deleteModel, downloadModel, downloadStatus } = useModels();
-  const { systemStatus, currentModel } = useStore();
+  const { currentModel } = useStore();
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   return (
     <div className="space-y-6">

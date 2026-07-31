@@ -1,16 +1,20 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { api } from '@/lib/api';
+import { useToast } from '@/components/ui/use-toast';
+import type { QueryResult, SearchResult } from '@/types';
 import { Upload, Trash2, Search, FileText, UploadCloud } from 'lucide-react';
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 const VALID_TYPES = ['.txt', '.pdf'];
+
+const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 function fileTooBig(file: File): boolean {
   return file.size > MAX_UPLOAD_SIZE;
@@ -30,23 +34,30 @@ interface Document {
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [query, setQuery] = useState('');
-  const [queryResult, setQueryResult] = useState<any>(null);
+  const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [querying, setQuerying] = useState(false);
+  const { toast } = useToast();
 
   const loadDocuments = async () => {
     try {
       const res = await api.listDocuments();
       setDocuments(res.documents || []);
     } catch (error) {
-      console.error('Failed to load documents:', error);
+      toast({ title: 'Failed to load documents', description: errMsg(error), variant: 'destructive' });
     }
   };
 
   useEffect(() => {
-    loadDocuments();
+    // ponytail: loading only gates the initial mount, refreshes stay silent
+    (async () => {
+      setLoading(true);
+      await loadDocuments();
+      setLoading(false);
+    })();
   }, []);
 
   const dropRef = useRef<HTMLDivElement>(null);
@@ -76,9 +87,15 @@ export default function DocumentsPage() {
       }
       setUploadError('');
       setUploading(true);
-      try { await api.uploadDocument(file); await loadDocuments(); }
-      catch (e) { console.error('Upload failed:', e); }
-      finally { setUploading(false); }
+      try {
+        await api.uploadDocument(file);
+        await loadDocuments();
+        toast({ title: 'Document uploaded', description: file.name });
+      } catch (error) {
+        toast({ title: 'Upload failed', description: errMsg(error), variant: 'destructive' });
+      } finally {
+        setUploading(false);
+      }
     };
     el.addEventListener('dragenter', onDragEnter);
     el.addEventListener('dragover', onDragOver);
@@ -108,19 +125,22 @@ export default function DocumentsPage() {
     try {
       await api.uploadDocument(file);
       await loadDocuments();
+      toast({ title: 'Document uploaded', description: file.name });
     } catch (error) {
-      console.error('Upload failed:', error);
+      toast({ title: 'Upload failed', description: errMsg(error), variant: 'destructive' });
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDelete = async (docId: string) => {
+  const handleDelete = async (docId: string, filename: string) => {
+    if (!window.confirm(`Delete "${filename}"? This cannot be undone.`)) return;
     try {
       await api.deleteDocument(docId);
       await loadDocuments();
+      toast({ title: 'Document deleted', description: filename });
     } catch (error) {
-      console.error('Delete failed:', error);
+      toast({ title: 'Delete failed', description: errMsg(error), variant: 'destructive' });
     }
   };
 
@@ -132,7 +152,7 @@ export default function DocumentsPage() {
       const res = await api.queryDocuments(query);
       setQueryResult(res);
     } catch (error) {
-      console.error('Query failed:', error);
+      toast({ title: 'Query failed', description: errMsg(error), variant: 'destructive' });
     } finally {
       setQuerying(false);
     }
@@ -195,7 +215,7 @@ export default function DocumentsPage() {
               placeholder="Enter your question..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleQuery()}
+              onKeyDown={(e) => e.key === 'Enter' && handleQuery()}
             />
             <Button onClick={handleQuery} disabled={querying}>
               <Search className="h-4 w-4 mr-2" />
@@ -217,7 +237,7 @@ export default function DocumentsPage() {
               <div>
                 <p className="text-sm font-semibold mb-2">Sources:</p>
                 <div className="space-y-2">
-                  {queryResult.results?.map((result: any, i: number) => (
+                  {queryResult.results?.map((result: SearchResult, i: number) => (
                     <div key={i} className="p-3 bg-muted rounded-lg">
                       <p className="text-sm">{result.text}</p>
                       <p className="text-xs text-muted-foreground mt-1">
@@ -237,11 +257,16 @@ export default function DocumentsPage() {
         <CardHeader>
           <CardTitle>Uploaded Documents</CardTitle>
           <CardDescription>
-            {documents.length} document{documents.length !== 1 ? 's' : ''} indexed
+            {loading ? 'Loading...' : `${documents.length} document${documents.length !== 1 ? 's' : ''} indexed`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {documents.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50 animate-pulse" />
+              <p>Loading documents...</p>
+            </div>
+          ) : documents.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No documents uploaded yet</p>
@@ -269,7 +294,8 @@ export default function DocumentsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(doc.id)}
+                        onClick={() => handleDelete(doc.id, doc.filename)}
+                        aria-label={`Delete document ${doc.filename}`}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

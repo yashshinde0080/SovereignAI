@@ -143,6 +143,13 @@ class TaskRouter:
                     "end_logits": outputs.end_logits
                 }
                 
+            elif task_type == "masked_lm":
+                # BERT-style [MASK] prediction — return logits, engine decodes top-k
+                device_inputs = cls._to_device(inputs, device)
+                with torch.no_grad():
+                    outputs = model(**device_inputs)
+                return {"logits": outputs.logits}
+                
             else:
                 # Base forward pass
                 device_inputs = cls._to_device(inputs, device)

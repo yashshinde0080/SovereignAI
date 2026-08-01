@@ -1,15 +1,30 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Message } from '@/types';
+import { Message, RagSource } from '@/types';
 import { errMsg } from '@/lib/utils';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 const SESSION_KEY = 'sovereignai.chat.sessionId';
 const LEGACY_STORAGE_KEY = 'sovereignai.chat.messages.v1';
 
-interface RagSource {
-  filename: string;
+// Normalize persisted sources — older chats stored plain string filenames.
+function normalizeSources(sources: unknown): RagSource[] | undefined {
+  if (!Array.isArray(sources)) return undefined;
+  const normalized = sources
+    .map((s): RagSource | null => {
+      if (typeof s === 'string') return { filename: s };
+      if (s && typeof s === 'object' && typeof (s as Record<string, unknown>).filename === 'string') {
+        const docId = (s as Record<string, unknown>).document_id;
+        return {
+          filename: (s as Record<string, unknown>).filename as string,
+          document_id: typeof docId === 'string' ? docId : undefined,
+        };
+      }
+      return null;
+    })
+    .filter((s): s is RagSource => s !== null);
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 // One session ID per browser tab (sessionStorage is per-tab), so concurrent
@@ -38,14 +53,15 @@ function sanitizeMessages(parsed: unknown): Message[] {
   const validSources = (sources: unknown): sources is string[] =>
     sources === undefined ||
     (Array.isArray(sources) && sources.every((s): s is string => typeof s === 'string'));
-  return parsed.filter(
-    (m: unknown): m is Message =>
-      m !== null &&
-      typeof m === 'object' &&
-      (m as Record<string, unknown>).role === 'user' &&
-      typeof (m as Record<string, unknown>).content === 'string' &&
-      validSources((m as Record<string, unknown>).sources)
-  );
+  return parsed
+    .filter(
+      (m: unknown): m is Message =>
+        m !== null &&
+        typeof m === 'object' &&
+        (m as Record<string, unknown>).role === 'user' &&
+        typeof (m as Record<string, unknown>).content === 'string'
+    )
+    .map((m) => ({ ...m, sources: normalizeSources((m as Record<string, unknown>).sources) }));
 }
 
 // Restore any persisted history for this session. Browser only; SSR-safe.

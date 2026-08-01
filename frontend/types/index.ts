@@ -1,8 +1,17 @@
 import type { MaskPrediction } from '@/lib/maskedLm';
 
+export interface RagSource {
+  /** Display name of the cited document. */
+  filename: string;
+  /** Vector-store document id, used to fetch chunk previews. Absent on legacy messages. */
+  document_id?: string;
+}
+
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  /** RAG sources cited by an assistant reply (from stream rag_metadata). */
+  sources?: RagSource[];
 }
 
 export interface Model {

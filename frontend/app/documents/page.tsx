@@ -10,8 +10,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { api } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import type { QueryResult, SearchResult } from '@/types';
-import { Upload, Trash2, Search, FileText, UploadCloud } from 'lucide-react';
+import { Upload, Trash2, Search, FileText, UploadCloud, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 const VALID_TYPES = ['.txt', '.pdf'];
@@ -335,14 +336,25 @@ function DocumentsContent() {
                       {new Date(doc.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(doc.id, doc.filename)}
-                        aria-label={`Delete document ${doc.filename}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Link
+                          href={`/console?ask=${encodeURIComponent(doc.filename)}`}
+                          title={`Ask about ${doc.filename} in chat`}
+                          aria-label={`Ask about ${doc.filename} in chat`}
+                        >
+                          <Button variant="ghost" size="sm">
+                            <MessageSquare className="h-4 w-4 text-primary" />
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDelete(doc.id, doc.filename)}
+                          aria-label={`Delete document ${doc.filename}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

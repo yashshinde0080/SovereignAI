@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { PromptInput } from '@/components/chat/PromptInput';
 import { Button } from '@/components/ui/button';
@@ -32,9 +32,12 @@ interface RAGDoc {
 interface ChatModuleProps {
   taskType: string;
   model: string;
+  /** Deep-link from Documents: auto-sends an ask-about query once on mount. */
+  initialAsk?: string;
 }
 
-export function ChatModule({ taskType, model }: ChatModuleProps) {
+export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
+  const autoAskSent = useRef(false);
   const { messages, isLoading, sendMessage, editAndResend, regenerate, clearMessages, exportChat } = useChat();
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [docs, setDocs] = useState<RAGDoc[]>([]);
@@ -55,7 +58,17 @@ export function ChatModule({ taskType, model }: ChatModuleProps) {
     refreshDocs();
   }, [refreshDocs]);
 
-  // A freshly uploaded document gets a one-shot 'ask about it' suggestion chip.
+  // Deep-link from Documents (/console?ask=<file>): send the question once
+  // when the chat mounts. Ref-guarded so React StrictMode's double-mount can't
+  // fire it twice.
+  useEffect(() => {
+    if (initialAsk && !autoAskSent.current) {
+      autoAskSent.current = true;
+      sendMessage(`Ask about '${initialAsk}'`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleUploadSuggestion = (filename: string) => {
     setSuggestion(filename);
   };

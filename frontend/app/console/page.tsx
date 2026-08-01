@@ -17,10 +17,21 @@ import { EmbeddingModule } from '@/components/task/EmbeddingModule';
 import { MaskedLMModule } from '@/components/task/MaskedLMModule';
 import { ModeSwitcher } from '@/components/chat/ModeSwitcher';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 
+// useSearchParams needs a Suspense boundary or `next build` fails prerendering
+// (CSR bailout) — same pattern as the Documents page.
 export default function ConsolePage() {
+  return (
+    <Suspense fallback={<div className="py-12 text-center text-muted-foreground">Loading console...</div>}>
+      <ConsoleContent />
+    </Suspense>
+  );
+}
+
+function ConsoleContent() {
   const { 
     systemStatus, setSystemStatus,
     taskType, setTaskType,
@@ -28,6 +39,10 @@ export default function ConsolePage() {
     executionMode, setExecutionMode,
     currentModel, setCurrentModel 
   } = useStore();
+
+  // Deep-link from Documents: /console?ask=<file> prefills the chat prompt.
+  const searchParams = useSearchParams();
+  const initialAsk = searchParams.get('ask');
 
   useEffect(() => {
     const syncStatus = async () => {
@@ -116,6 +131,7 @@ export default function ConsolePage() {
             <ChatModule 
                 taskType={activeTask} 
                 model={activeModel} 
+                initialAsk={initialAsk ?? undefined}
             />
          }
          {!activeIsGen && activeTask.includes('classification') && !activeTask.includes('vision') && !activeTask.includes('audio') && !activeTask.includes('image') &&

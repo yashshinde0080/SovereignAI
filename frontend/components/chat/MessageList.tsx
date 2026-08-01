@@ -1,13 +1,13 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Message } from '@/types';
+import { Message, RagSource } from '@/types';
 import { User, Bot, Copy, Check, Pencil, RefreshCw, FileText } from 'lucide-react';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'framer-motion';
-import Link from 'next/link';
+import { DocumentViewerModal } from './DocumentViewerModal';
 
 interface MessageListProps {
   messages: Message[];
@@ -82,6 +82,8 @@ const CopyMessageButton = ({ text, className }: { text: string; className?: stri
 };
 
 export function MessageList({ messages, onEditMessage, onRegenerate, editingIndex, isLoading }: MessageListProps) {
+  const [viewSource, setViewSource] = useState<RagSource | null>(null);
+
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
@@ -116,6 +118,11 @@ export function MessageList({ messages, onEditMessage, onRegenerate, editingInde
 
   return (
     <div className="space-y-6 pb-2">
+      <DocumentViewerModal
+        source={viewSource}
+        open={viewSource !== null}
+        onOpenChange={(open) => !open && setViewSource(null)}
+      />
       <AnimatePresence initial={false}>
         {messages.map((message, index) => (
           <motion.div
@@ -194,15 +201,15 @@ export function MessageList({ messages, onEditMessage, onRegenerate, editingInde
                     Sources
                   </span>
                   {message.sources.map((source) => (
-                    <Link
-                      key={source}
-                      href={`/documents?file=${encodeURIComponent(source)}`}
+                    <button
+                      key={source.filename}
+                      onClick={() => setViewSource(source)}
                       className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 pl-2 pr-2.5 py-0.5 text-xs text-primary hover:bg-primary/20 hover:border-primary/40 transition-colors"
-                      title={`Open ${source} in Documents`}
+                      title={`View ${source.filename}`}
                     >
                       <FileText className="h-3 w-3 shrink-0" />
-                      <span className="max-w-[180px] truncate font-medium">{source}</span>
-                    </Link>
+                      <span className="max-w-[180px] truncate font-medium">{source.filename}</span>
+                    </button>
                   ))}
                 </div>
               )}

@@ -312,6 +312,12 @@ class VectorStoreManager:
             f"Index rebuilt: {self.index_builder.total_vectors} vectors"
         )
 
+    def get_document_chunks(self, document_id: str) -> List[dict]:
+        """Get all chunks (content + metadata) for a document, in order."""
+        if not self._initialized:
+            raise RuntimeError("Vector store not initialized")
+        return self.metadata_store.get_chunks_by_document(document_id)
+
     def get_stats(self) -> dict:
         """Get vector store statistics."""
         return {

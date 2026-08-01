@@ -190,6 +190,7 @@ class ManualStreamEngine(BaseEngine):
         
         generated_ids = []
         past_key_values = None
+        eos_id = self.tokenizer.eos_token_id  # may be None for some tokenizers
         
         def _generate_loop():
             nonlocal input_ids, past_key_values
@@ -212,7 +213,7 @@ class ManualStreamEngine(BaseEngine):
                 generated_ids.append(next_token.item())
                 input_ids = next_token # Pass only the newly generated token
                 
-                if next_token.item() == self.tokenizer.eos_token_id:
+                if eos_id is not None and next_token.item() == eos_id:
                     break
                     
             return generated_ids

@@ -70,10 +70,10 @@ class FullRAMEngine(BaseEngine):
             
             if self.device == "cuda":
                 model_kwargs["device_map"] = "auto"
-                model_kwargs["torch_dtype"] = torch.float16
+                model_kwargs["dtype"] = torch.float16
             else:
                 model_kwargs["device_map"] = "cpu"
-                model_kwargs["torch_dtype"] = torch.float32
+                model_kwargs["dtype"] = torch.float32
                 
             if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
                 model_dir = os.path.dirname(self.model_path)
@@ -81,6 +81,9 @@ class FullRAMEngine(BaseEngine):
                 # GGUF loading relies heavily on AutoConfig dynamic bridging locally
                 self.model = model_class.from_pretrained(model_dir, **model_kwargs)
             else:
+                # torch < 2.6 refuses .bin checkpoints (CVE-2025-32434); convert to safetensors first
+                from app.engines.shared.safetensors import ensure_safetensors
+                ensure_safetensors(self.model_path)
                 self.model = model_class.from_pretrained(
                     self.model_path,
                     **model_kwargs
@@ -328,6 +331,8 @@ class FullRAMEngine(BaseEngine):
         output_res = result.get("output")
         confidence = result.get("confidence", 1.0)
         completion_tokens = 0
+        predictions = []  # structured top-k candidates (masked_lm)
+        message = None  # plain-text note for non-generative tasks (masked_lm)
         
         if is_generative:
             output_ids = output_res # TaskRouter returns output_ids for generative
@@ -349,6 +354,30 @@ class FullRAMEngine(BaseEngine):
             answer_tokens = processed_inputs["input_ids"][0][answer_start:answer_end]
             output_res = self.tokenizer.decode(answer_tokens)
             completion_tokens = len(answer_tokens)
+            
+        elif task_type == "masked_lm":
+            # BERT-style [MASK] prediction — structured top-k candidates per mask position.
+            # Plain-text cases go to the dedicated 'message' field; 'output' stays empty.
+            output_res = ""
+            mask_token_id = getattr(self.tokenizer, "mask_token_id", None)
+            input_ids = processed_inputs["input_ids"][0]
+            if mask_token_id is None:
+                message = "Tokenizer has no mask_token_id; cannot predict [MASK]."
+            else:
+                mask_positions = (input_ids == mask_token_id).nonzero(as_tuple=True)[0]
+                if len(mask_positions) == 0:
+                    message = "No [MASK] tokens found in input."
+                else:
+                    logits = result["logits"][0]  # [seq_len, vocab]
+                    probs = logits.softmax(dim=-1)
+                    for pos in mask_positions:
+                        topk_vals, topk_ids = probs[pos].topk(5)
+                        tokens = self.tokenizer.convert_ids_to_tokens(topk_ids.tolist())
+                        candidates = [
+                            {"token": t, "probability": round(float(p), 4)}
+                            for t, p in zip(tokens, topk_vals.tolist())
+                        ]
+                        predictions.append({"position": int(pos.item()), "candidates": candidates})
 
         elapsed = time.perf_counter() - start_time
         
@@ -359,6 +388,8 @@ class FullRAMEngine(BaseEngine):
             "input": "provided inputs", 
             "output": output_res,
             "confidence": f"{confidence:.4f}",
+            "predictions": predictions,
+            "message": message,
             "metadata": {
                 "ram_usage": f"{self.get_memory_usage()['ram_used_gb']:.2f}GB",
                 "latency": f"{elapsed:.3f}s",

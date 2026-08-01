@@ -15,6 +15,40 @@ from .splitter import WeightSplitter
 from .layer_executor import LayerExecutor
 from .sampler import Sampler
 
+_STREAM_WINDOW = 8  # tokens; BPE subword merges stay local to a few tokens
+
+
+def _stream_delta(tokenizer, all_tokens, emitted, window=_STREAM_WINDOW) -> str:
+    """Return the newly decodable text for the latest token.
+
+    ``tokenizer.decode`` of a growing token list is not prefix-stable for BPE
+    tokenizers: a space/subword can be absorbed into a merge once more tokens
+    arrive (e.g. "\u2581wor" + "ld" -> " world"), so ``full[len(prev):]`` slicing
+    can drop or duplicate deltas. Instead decode a rolling window (merges stay
+    inside it) and strip the already-emitted text via longest-overlap matching.
+    """
+    recent = tokenizer.decode(all_tokens[-window:], skip_special_tokens=True)
+    if not emitted:
+        return recent
+    limit = min(len(recent), len(emitted))
+    # Overlap can never exceed len(recent); match against the emitted tail only
+    # so per-token cost stays O(window), not O(len(emitted)).
+    tail = emitted[-limit:]
+    overlap = 0
+    for i in range(1, limit + 1):
+        # Full scan, no early break: ``endswith`` is NOT monotone in ``i`` (e.g.
+        # recent = ", won't, can't, I" matches emitted's tail only at i=1 and
+        # i=10), so breaking at the first miss under-reports the overlap and
+        # re-emits already-sent text. Keep the true maximum instead.
+        if tail.endswith(recent[:i]):
+            overlap = i
+    if overlap:
+        return recent[overlap:]
+    # No stable overlap (e.g. byte-fallback rewrites): emit just the newest
+    # token rather than re-emitting the whole window.
+    new_text = tokenizer.decode(all_tokens[-1:], skip_special_tokens=True)
+    return new_text if new_text and not emitted.endswith(new_text) else ""
+
 class LayerStreamEngine(BaseEngine):
     """Refactored streaming engine: completely decoupling computation phases dynamically"""
     
@@ -176,6 +210,7 @@ class LayerStreamEngine(BaseEngine):
         executor = self.layer_executor
         if not tokenizer or not executor:
             raise RuntimeError("Engine dependencies have been unloaded.")
+        eos_id = tokenizer.eos_token_id  # may be None for some tokenizers
             
         # Wipe residual memory structures safely
         if executor._is_hybrid:
@@ -209,7 +244,7 @@ class LayerStreamEngine(BaseEngine):
                 # Avoid disk IO exclusively polling RAM tensors onto active layer execution
                 current_input = next_token
                 for _ in range(max_tokens - 1):
-                    if next_token.item() == tokenizer.eos_token_id:
+                    if eos_id is not None and next_token.item() == eos_id:
                         break
                         
                     logits = executor.execute_forward(current_input, mode="decode")
@@ -257,6 +292,7 @@ class LayerStreamEngine(BaseEngine):
         if not tokenizer or not executor:
             yield {"token": "", "finish_reason": "error"}
             return
+        eos_id = tokenizer.eos_token_id  # may be None for some tokenizers
             
         # Support Chat Template
         if isinstance(input_data, list):
@@ -293,34 +329,38 @@ class LayerStreamEngine(BaseEngine):
             }
             
             current_input = next_token
+            truncated = False
             for _ in range(max_tokens - 1):
                 if not self.tokenizer or not self.layer_executor:
                     break   # Stop generation cleanly if engine gets unloaded externally
                     
-                if next_token.item() == tokenizer.eos_token_id:
+                if eos_id is not None and next_token.item() == eos_id:
                     break
                     
                 logits = await asyncio.to_thread(executor.execute_forward, current_input, mode="decode")
                 next_token = Sampler.sample(logits, temperature, top_p)
                 
                 all_tokens.append(next_token.item())
-                full_text = tokenizer.decode(all_tokens, skip_special_tokens=True)
                 
-                # Extract the new part of the text
-                token_text = full_text[len(decoded_text):]
-                decoded_text = full_text
-                
+                # Rolling-window overlap delta — robust to subword merges that
+                # would otherwise drop/duplicate text with prefix slicing.
+                token_text = _stream_delta(tokenizer, all_tokens, decoded_text)
                 if token_text:
+                    decoded_text += token_text
                     yield {
                         "token": token_text,
                         "finish_reason": None,
                         "layers_loaded": executor.num_layers
                     }
                 current_input = next_token
+            else:
+                # Loop exhausted all max_tokens iterations without EOS — the
+                # generation was truncated, so report "length" not "stop".
+                truncated = True
                 
         yield {
             "token": "",
-            "finish_reason": "stop"
+            "finish_reason": "length" if truncated else "stop"
         }
 
     def get_memory_usage(self) -> Dict[str, Any]:

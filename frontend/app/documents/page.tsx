@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import type { QueryResult, SearchResult } from '@/types';
 import { Upload, Trash2, Search, FileText, UploadCloud } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 const VALID_TYPES = ['.txt', '.pdf'];
@@ -32,7 +34,18 @@ interface Document {
   created_at: string;
 }
 
+// useSearchParams needs a Suspense boundary or `next build` fails prerendering
+// this client page (CSR bailout). The page itself is client-rendered, so a
+// minimal fallback is all that's required.
 export default function DocumentsPage() {
+  return (
+    <Suspense fallback={<div className="py-12 text-center text-muted-foreground">Loading documents...</div>}>
+      <DocumentsContent />
+    </Suspense>
+  );
+}
+
+function DocumentsContent() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -40,7 +53,30 @@ export default function DocumentsPage() {
   const [query, setQuery] = useState('');
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [querying, setQuerying] = useState(false);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+  const highlightRef = useRef<HTMLTableRowElement | null>(null);
   const { toast } = useToast();
+
+  // Deep-link support: /documents?file=<name> scrolls to and flashes the row.
+  const searchParams = useSearchParams();
+  const targetFile = searchParams.get('file');
+
+  // Once documents load, jump to the targeted row and flash its highlight,
+  // then fade it out so it doesn't stay painted. One-shot per target, gated
+  // AFTER the ref check: if the row isn't rendered yet (async load), the
+  // effect returns without marking handled and retries on the next documents
+  // change; once it actually scrolls, later changes stop re-firing.
+  const handledTarget = useRef<string | null>(null);
+  useEffect(() => {
+    if (!targetFile || handledTarget.current === targetFile) return;
+    const row = highlightRef.current;
+    if (!row) return; // docs still loading — retry on the next change
+    handledTarget.current = targetFile;
+    setHighlighted(targetFile);
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const timer = setTimeout(() => setHighlighted(null), 4000);
+    return () => clearTimeout(timer);
+  }, [targetFile, documents]);
 
   const loadDocuments = async () => {
     try {
@@ -284,7 +320,15 @@ export default function DocumentsPage() {
               </TableHeader>
               <TableBody>
                 {documents.map((doc) => (
-                  <TableRow key={doc.id}>
+                  <TableRow
+                    key={doc.id}
+                    ref={doc.filename === targetFile ? highlightRef : undefined}
+                    className={cn(
+                      'transition-colors',
+                      doc.filename === highlighted &&
+                        'bg-brand-accent/15 ring-2 ring-brand-accent/60 ring-inset'
+                    )}
+                  >
                     <TableCell className="font-medium">{doc.filename}</TableCell>
                     <TableCell className="text-right">{doc.chunks}</TableCell>
                     <TableCell className="text-right">

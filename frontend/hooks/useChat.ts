@@ -175,13 +175,11 @@ export function useChat() {
                   const sources = chunk.choices[0].delta.rag_metadata as RagSource[];
                   if (sources && sources.length > 0) {
                     const seen = new Set();
-                    const uniqueSources = sources
-                      .filter((s: RagSource) => {
-                        if (seen.has(s.filename)) return false;
-                        seen.add(s.filename);
-                        return true;
-                      })
-                      .map((s: RagSource) => s.filename);
+                    const uniqueSources = sources.filter((s: RagSource) => {
+                      if (seen.has(s.filename)) return false;
+                      seen.add(s.filename);
+                      return true;
+                    });
 
                     setMessages((prev) => {
                       const newMessages = [...prev];
@@ -279,7 +277,7 @@ export function useChat() {
       if (!m.content.trim()) continue;
       lines.push(`## ${m.role === 'user' ? 'User' : 'Assistant'}`, '', m.content, '');
       if (m.sources?.length) {
-        lines.push('**Sources Used:**', ...m.sources.map((s) => `- ${s}`), '');
+        lines.push('**Sources Used:**', ...m.sources.map((s) => `- ${s.filename}`), '');
       }
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });

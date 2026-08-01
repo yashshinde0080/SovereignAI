@@ -54,3 +54,27 @@ def test_stream_delta_reconstruction_matches_full_decode(tokenizer):
         assert _stream_reconstruct(tokenizer, ids) == tokenizer.decode(
             ids, skip_special_tokens=True
         )
+
+
+def test_stream_delta_byte_fallback_style_edges(tokenizer):
+    """Byte-fallback-style edge cases that stress the overlap matcher.
+
+    Highly repetitive text can trick a longest-overlap matcher into over-
+    reporting the overlap (matching more than the truly shared text), which
+    would silently drop the newest token. Runs of identical words, punctuation
+    and spaces are the classic triggers — SentencePiece tokenizers emit them
+    as repeated pieces whose decoded text re-matches the emitted tail.
+    """
+    sentences = [
+        "a  b   c    d     e      f",  # growing space runs
+        "x" + " " * 12 + "y",  # long single space run
+        ", , , , , , ,",  # punctuation run
+        "??? ... !!! ... ???",  # mixed punctuation
+        "word " * 12,  # repeated word run
+        "the the the the the the the the the the",  # repeated word, no trailing space
+    ]
+    for sentence in sentences:
+        ids = tokenizer.encode(sentence)
+        assert _stream_reconstruct(tokenizer, ids) == tokenizer.decode(
+            ids, skip_special_tokens=True
+        ), f"sentence: {sentence!r}"

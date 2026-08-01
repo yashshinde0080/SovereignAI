@@ -31,6 +31,12 @@ def _stream_delta(tokenizer, all_tokens, emitted, window=_STREAM_WINDOW) -> str:
     if not emitted:
         return recent
     limit = min(len(recent), len(emitted))
+    # Cap the overlap at the decode length of the window's earlier tokens: the
+    # newest token's text can only be a suffix of ``emitted`` by coincidence
+    # (repeated words like "yes yes yes" emit identical pieces), so absorbing
+    # it would silently drop the delta. Earlier-token text is always emitted.
+    earlier = tokenizer.decode(all_tokens[-window:-1], skip_special_tokens=True)
+    limit = min(limit, len(earlier))
     # Overlap can never exceed len(recent); match against the emitted tail only
     # so per-token cost stays O(window), not O(len(emitted)).
     tail = emitted[-limit:]

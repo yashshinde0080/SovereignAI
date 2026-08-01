@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "agent-kanban": {
+      "source": "saltbo/agent-kanban",
+      "sourceType": "github",
+      "skillPath": "skills/agent-kanban/SKILL.md",
+      "computedHash": "13d25397db72aa4923679f370da18858701edbab1a1f584ead42b18e7a729b45"
+    },
     "obsidian-canvas-creator": {
       "source": "axtonliu/axton-obsidian-visual-skills",
       "sourceType": "github",

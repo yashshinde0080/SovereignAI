@@ -156,6 +156,13 @@ class ApiClient {
     });
   }
 
+  async getDocumentChunks(docId: string): Promise<{
+    document_id: string;
+    chunks: { chunk_index: number; content: string; metadata: Record<string, unknown> }[];
+  }> {
+    return this.request(`/v1/rag/documents/${encodeURIComponent(docId)}/chunks`);
+  }
+
   async deleteDocument(docId: string) {
     return this.request(`/v1/rag/documents/${docId}`, { method: 'DELETE' });
   }

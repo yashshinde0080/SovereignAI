@@ -50,12 +50,9 @@ const STORAGE_KEY = `sovereignai.chat.messages.${getSessionId()}`;
 // Validate parsed JSON into a Message[] (shared by load + legacy migration).
 function sanitizeMessages(parsed: unknown): Message[] {
   if (!Array.isArray(parsed)) return [];
-  const validSources = (sources: unknown): sources is string[] =>
-    sources === undefined ||
-    (Array.isArray(sources) && sources.every((s): s is string => typeof s === 'string'));
   return parsed
     .filter(
-      (m: unknown): m is Message =>
+      (m: unknown) =>
         m !== null &&
         typeof m === 'object' &&
         (m as Record<string, unknown>).role === 'user' &&

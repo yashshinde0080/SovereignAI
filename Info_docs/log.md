@@ -21,15 +21,15 @@
 - Batch-ingested 31 Docs/ sources into wiki pages with frontmatter, synthesis, and [[wikilinks]]
 - Cross-linked related pages: PRD↔TRD, FullRAM↔LayerStream, tech-stack↔Technical Architecture, etc.
 
-## [2026-07-24] ingest | Literature Review
-- Created [[project/Literature Review|Literature Review]] — 6 high-impact papers on edge AI, quantization, attention, speculative decoding, RAG
-- Cross-linked to FullRAM, LayerStream, Engine Algorithms
-- Updated index, appended to log
-
 ## [2026-07-24] review | Ponytail Audit (full project)
 - Scanned all backend (21,813 lines) + frontend (8,303 lines) + root
 - Found ~5000 lines removable across USB bundle provider, enterprise repo, ManualStream, inference.py handlers, settings over-engineering, root clutter, singleton pattern, layerstream executor duplication
 - Created [[workflow/Ponytail Audit|Ponytail Audit]] page, updated index, appended to log
+
+## [2026-07-24] ingest | Literature Review
+- Created [[project/Literature Review|Literature Review]] — 6 high-impact papers on edge AI, quantization, attention, speculative decoding, RAG
+- Cross-linked to FullRAM, LayerStream, Engine Algorithms
+- Updated index, appended to log
 
 ## [2026-07-30] implement | Workspace Snapshots + Mode Comparison + RAG Hardening + Plugin Marketplace
 - **Backend — Workspace API** (`backend/app/api/workspace.py`): Full CRUD for workspace snapshots (save/list/load/delete) with JSON file persistence. Registered at `/v1/workspace/`
@@ -50,20 +50,43 @@
 - **Root** (`.gitignore`): Added `opencode.jsonc`
 
 ## [2026-07-31] refactor | TypeScript Type Safety + UI Polish Sweep
-- **Root — Commit analysis**: 5 commits touching 39 files across frontend (678 insertions, 490 deletions)
-- **Types** (`frontend/types/index.ts`): Defined 8 new interfaces replacing `any` usage: `Agent`, `CurrentModel`, `DownloadStatus`, `HistoryPoint`, `Model`, `Recommendation`, `TaskResult`, `WorkspaceSnapshot`. Replaced 3 `Record<string, any>` with `Record<string, unknown>` across `SystemStatus`, `Metrics`, `SearchResult`
-- **API client** (`frontend/lib/api.ts`): Added typed imports for all 14 response types. Added explicit return types to 12 API methods. Downgraded `any`-based `listModels`/`getRecommendations` calls. Removed all `as any` casts from API responses
-- **Store** (`frontend/store/index.ts`): Collapsed boilerplate — replaced 79-line dual interface+store with compact 71-line direct `create` with inline type argument. Removed `setHistory` function-argument overloading pattern. All `any` metrics/history setter types downgraded to inferred from interface
-- **Hooks** (`frontend/hooks/`): Hook-level type safety — `useModels` now imports and casts `SystemStatus`, `CurrentModel`, `DownloadStatus` from `@/types`. `useMetrics`, `useChat`, `usePlugins` similarly typed. All catch blocks use `errMsg()` utility instead of `error.message`/`String(error)`. `useModels.notify()` drops `(window as any)` cast in favor of declared `electronAPI` interface
-- **Utilities** (`frontend/lib/utils.ts`): Exported shared `errMsg()` helper for safe error message extraction across all hooks and pages
-- **Components — Build repair**: Fixed 4 pages dropping `Block`/`Element` implicit type dependencies: benchmark (removed `GitCompare` dependency), console (removed `as any` on `api.getCurrentModel`), documents (native `SearchResult`/`QueryResult`), models (`DownloadStatus`)
-- **Sidebar** (`frontend/components/layout/Sidebar.tsx`): Complete rewrite — ordered nav items list, added cn/link hover styles, keyboard accessible settings button, versioned footer. Removed `TopBar` component
-- **Settings** (`frontend/components/settings/`): 7-file TypeScript diet — `SettingsMap` + `Agent` typed imports, `EMPTY` constant replaces empty-object inline literals, `Record<string, any>` → `Record<string, unknown>` in section-update signatures
-- **Blanket pattern removal**: `as any` on all state setter calls (`setSystemStatus`, `setHardware`, `setExecutionMode`), `catch (err: any)` → `catch (err)`, `useEffect(..., [])` → `useEffect(..., [dep])` for exhaustive deps
-- **Design tokens** (`frontend/app/globals.css`): 4 new CSS custom properties — `brand`, `brand-accent`, `success` — in both light and dark themes. `animate-pulse` spinner reworked with `border-t-transparent` for accessible loading states
-- **Workspace page** (`frontend/app/workspace/page.tsx`): `useCallback` wrapping for `loadSnapshots`, delete confirmation via native `window.confirm()`, loading skeleton state, `errMsg()` integration. Inline types migrated to imported `WorkspaceSnapshot`
-- **Documents page** (`frontend/app/documents/page.tsx`): `useToast` added for all operations (upload success/fail, load fail, delete). Upload error state via `toast` not just console. `QueryResult` type from `@/types` replaces inline `any`
-- **Home page** (`frontend/app/page.tsx`): `Recommendation` type import replaces inline `any[]`. Unused `MemoryStick` and `Zap` icon imports removed
-- **Plugins page** (`frontend/app/plugins/page.tsx`): `Puzzle` placeholder icon for empty marketplace state. `useEffect` dep array `[refresh]` instead of `[]`. Badge sizes: `text-[10px]` → `text-xs`
-- **Benchmark page** (`frontend/app/benchmark/page.tsx`): Mode comparison card added with new foreign-key lite compareBinderUnion wrapping. `errMsg()` in all catch blocks. Loading spinners use `aria-hidden="true"` for accessibility. Mode result interface extracted to module scope
-- **Overall**: 100+ TypeScript strict-type breadcrumbs, full `any`→typed migration for all 21 primary data shapes, zero `as any` casts in production paths
+- Types: new interfaces replacing any
+- API client: typed imports and return types
+- Store: simplified create
+- Hooks: type safety and errMsg utility
+- Utilities: errMsg helper
+- Components: build repair (remove any casts)
+- Sidebar: rewrite with nav list, styles
+- Settings: TypeScript diet
+- Design tokens: new CSS custom properties
+- Workspace page: useCallback, delete confirmation, loading skeleton
+- Documents page: useToast, error state
+- Home page: Recommendation type import
+- Plugins page: badge sizes, useEffect dep
+- Benchmark page: mode comparison card, errMsg, loading spinners
+- Overall: 100+ TypeScript strict-type breadcrumbs
+
+## [2026-08-01] implement | Masked LM Support + Stream Delta Fix + Safetensors Compatibility + TypeScript Polish
+- Task router: masked_lm task type routing
+- Memory manager: silenced llmfit fallback logging
+- Engine: safetensors compatibility module
+- FullRAM executor: ensure_safetensors, masked_lm handling
+- LayerStream executor: _stream_delta function, EOS handling
+- LayerStream splitter: ensure_safetensors
+- ManualStream executor: EOS check guard
+- Model manager: inference.py softmax probabilities, loader.py dtype migration
+- Tests: stream delta regression tests
+- Frontend: MaskedLMModule component
+- Frontend: console page wired for masked_lm
+- Types: TaskResult extended with MaskPrediction
+- Frontend: lib/maskedLm helper and tests
+- Root: freebuff.txt timestamp update
+- Frontend: package.json test script
+- Frontend: tsconfig.json allowImportingTsExtensions
+
+## [2026-08-01] kanban | Complete remaining backlog items
+- Marked TurboQuant KV Cache Compression (July 23) as done
+- Marked Ponytail Review (July 24) as done
+- Marked Ponytail Audit (full project) (July 24) as done
+- Marked Literature Review (July 24) as done
+- All backlog items now completed and moved to Done section

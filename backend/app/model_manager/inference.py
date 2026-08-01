@@ -167,21 +167,25 @@ class InferenceEngine:
         logits = outputs.logits
         
         # Find mask positions
-        mask_token_id = tokenizer.mask_token_id
+        mask_token_id = getattr(tokenizer, "mask_token_id", None)
+        if mask_token_id is None:
+            return {
+                "predictions": [],
+                "message": "Tokenizer has no mask_token_id; cannot predict [MASK].",
+            }, None
         mask_positions = (
             inputs["input_ids"] == mask_token_id
         ).nonzero(as_tuple=True)
         
         predictions = []
+        probs = logits.softmax(dim=-1)  # true marginals over the full vocabulary
         for pos in mask_positions[1]:
-            top_k = torch.topk(logits[0, pos], k=5)
-            for score, idx in zip(
-                top_k.values, top_k.indices
-            ):
+            topk_vals, topk_ids = probs[0, pos].topk(5)
+            for prob, idx in zip(topk_vals.tolist(), topk_ids.tolist()):
                 token = tokenizer.decode([idx])
                 predictions.append({
                     "token": token.strip(),
-                    "score": round(score.item(), 4),
+                    "score": round(prob, 4),
                 })
         
         return {"predictions": predictions}, None

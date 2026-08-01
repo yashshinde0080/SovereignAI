@@ -445,9 +445,9 @@ class ModelLoader:
         }
         
         if dtype in dtype_map:
-            kwargs["torch_dtype"] = dtype_map[dtype]
+            kwargs["dtype"] = dtype_map[dtype]
         elif dtype == "auto":
-            kwargs["torch_dtype"] = "auto"
+            kwargs["dtype"] = "auto"
         elif dtype == "int8":
             kwargs["quantization_config"] = BitsAndBytesConfig(
                 load_in_8bit=True,
@@ -462,7 +462,7 @@ class ModelLoader:
             )
             kwargs["device_map"] = "auto"
         else:
-            kwargs["torch_dtype"] = torch.float16
+            kwargs["dtype"] = torch.float16
         
         # Device map for CUDA
         if device.startswith("cuda") and "device_map" not in kwargs:

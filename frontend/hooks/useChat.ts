@@ -1,25 +1,112 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Message } from '@/types';
 import { errMsg } from '@/lib/utils';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const SESSION_KEY = 'sovereignai.chat.sessionId';
+const LEGACY_STORAGE_KEY = 'sovereignai.chat.messages.v1';
 
 interface RagSource {
   filename: string;
+}
+
+// One session ID per browser tab (sessionStorage is per-tab), so concurrent
+// tabs persist under separate localStorage keys and never overwrite each
+// other. Survives refresh within the tab; closing the tab starts a fresh
+// session.
+function getSessionId(): string {
+  if (typeof window === 'undefined') return ''; // SSR placeholder, never stored
+  try {
+    let id = window.sessionStorage.getItem(SESSION_KEY);
+    if (!id) {
+      id = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      window.sessionStorage.setItem(SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    return '';
+  }
+}
+
+const STORAGE_KEY = `sovereignai.chat.messages.${getSessionId()}`;
+
+// Validate parsed JSON into a Message[] (shared by load + legacy migration).
+function sanitizeMessages(parsed: unknown): Message[] {
+  if (!Array.isArray(parsed)) return [];
+  const validSources = (sources: unknown): sources is string[] =>
+    sources === undefined ||
+    (Array.isArray(sources) && sources.every((s): s is string => typeof s === 'string'));
+  return parsed.filter(
+    (m: unknown): m is Message =>
+      m !== null &&
+      typeof m === 'object' &&
+      (m as Record<string, unknown>).role === 'user' &&
+      typeof (m as Record<string, unknown>).content === 'string' &&
+      validSources((m as Record<string, unknown>).sources)
+  );
+}
+
+// Restore any persisted history for this session. Browser only; SSR-safe.
+function loadMessages(): Message[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    return sanitizeMessages(JSON.parse(raw));
+  } catch {
+    return [];
+  }
 }
 
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim()) return;
+  // Restore persisted history once on mount, after hydration, so SSR and the
+  // first client render agree (avoids a hydration mismatch from localStorage).
+  useEffect(() => {
+    const restored = loadMessages();
+    if (restored.length > 0) {
+      setMessages(restored);
+      return;
+    }
+    // One-time migration: the pre-multi-session single key. Load it, then the
+    // persist effect writes it under this session's key; drop the legacy key.
+    try {
+      const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        const migrated = sanitizeMessages(JSON.parse(legacy));
+        if (migrated.length > 0) {
+          window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+          setMessages(migrated);
+          return;
+        }
+      }
+    } catch {
+      // ignore migration failures — fresh session is fine
+    }
+  }, []);
 
-    const userMessage: Message = { role: 'user', content };
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
+  // Persist so the chat survives a page refresh. Skipped while streaming (one
+  // synchronous localStorage write per token would jank long generations); the
+  // final write happens when the stream completes and isLoading flips false.
+  // Empty-content entries (streaming placeholders) are skipped regardless.
+  useEffect(() => {
+    if (typeof window === 'undefined' || isLoading) return;
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(messages.filter((m) => m.content.trim()))
+      );
+    } catch {
+      // storage unavailable (private mode, quota) — non-fatal
+    }
+  }, [messages, isLoading]);
+
+  const runCompletion = useCallback(async (messagesToSend: Message[]) => {
+    setMessages(messagesToSend);
     setIsLoading(true);
 
     try {
@@ -27,7 +114,7 @@ export function useChat() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: updatedMessages,
+          messages: messagesToSend,
           stream: true,
           use_rag: true,
         }),
@@ -66,23 +153,26 @@ export function useChat() {
               try {
                 const chunk = JSON.parse(data);
 
-                // Handle Stream Metadata (Sources / RAG)
+                // Handle Stream Metadata (Sources / RAG). Sources become
+                // structured chips on the assistant message, not appended text.
                 if (chunk.choices?.[0]?.delta?.rag_metadata) {
                   const sources = chunk.choices[0].delta.rag_metadata as RagSource[];
                   if (sources && sources.length > 0) {
                     const seen = new Set();
-                    const uniqueSources = sources.filter((s: RagSource) => {
-                      if (seen.has(s.filename)) return false;
-                      seen.add(s.filename);
-                      return true;
-                    });
-                    assistantContent += '\n\n**Sources Used:**\n' + uniqueSources.map((s: RagSource) => `- ${s.filename}`).join('\n');
+                    const uniqueSources = sources
+                      .filter((s: RagSource) => {
+                        if (seen.has(s.filename)) return false;
+                        seen.add(s.filename);
+                        return true;
+                      })
+                      .map((s: RagSource) => s.filename);
 
                     setMessages((prev) => {
                       const newMessages = [...prev];
                       newMessages[newMessages.length - 1] = {
-                        role: 'assistant',
+                        ...newMessages[newMessages.length - 1],
                         content: assistantContent,
+                        sources: uniqueSources,
                       };
                       return newMessages;
                     });
@@ -124,12 +214,68 @@ export function useChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [messages]);
+  }, []);
 
+  const sendMessage = useCallback((content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    runCompletion([...messages, { role: 'user', content: trimmed }]);
+  }, [messages, runCompletion]);
+
+  // Replace the user message at `index`, drop everything after it, re-run.
+  const editAndResend = useCallback((index: number, content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) return;
+    runCompletion([...messages.slice(0, index), { role: 'user', content: trimmed }]);
+  }, [messages, runCompletion]);
+
+  // Re-run the last exchange: keep history up to the last user message,
+  // drop the trailing assistant reply, and re-run the completion.
+  const regenerate = useCallback(() => {
+    let lastUserIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+    if (lastUserIndex === -1) return;
+    runCompletion(messages.slice(0, lastUserIndex + 1));
+  }, [messages, runCompletion]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
   }, []);
 
-  return { messages, isLoading, sendMessage, clearMessages };
+  // Download the conversation as a markdown file.
+  const exportChat = useCallback(() => {
+    const date = new Date();
+    const stamp = date.toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const lines: string[] = [
+      '# SovereignAI Chat Export',
+      '',
+      `*Exported ${date.toLocaleString()}*`,
+      '',
+      '---',
+      '',
+    ];
+    for (const m of messages) {
+      if (!m.content.trim()) continue;
+      lines.push(`## ${m.role === 'user' ? 'User' : 'Assistant'}`, '', m.content, '');
+      if (m.sources?.length) {
+        lines.push('**Sources Used:**', ...m.sources.map((s) => `- ${s}`), '');
+      }
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sovereignai-chat-${stamp}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [messages]);
+
+  return { messages, isLoading, sendMessage, editAndResend, regenerate, clearMessages, exportChat };
 }

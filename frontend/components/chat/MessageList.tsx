@@ -2,14 +2,19 @@
 
 import { cn } from '@/lib/utils';
 import { Message } from '@/types';
-import { User, Bot, Copy, Check } from 'lucide-react';
+import { User, Bot, Copy, Check, Pencil, RefreshCw, FileText } from 'lucide-react';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
 
 interface MessageListProps {
   messages: Message[];
+  onEditMessage?: (index: number) => void;
+  onRegenerate?: () => void;
+  editingIndex?: number | null;
+  isLoading?: boolean;
 }
 
 const CodeBlock = ({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
@@ -52,7 +57,31 @@ const CodeBlock = ({ inline, className, children }: { inline?: boolean; classNam
   );
 };
 
-export function MessageList({ messages }: MessageListProps) {
+const CopyMessageButton = ({ text, className }: { text: string; className?: string }) => {
+  const [copied, setCopied] = useState(false);
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <button
+      onClick={copyToClipboard}
+      className={cn(
+        "absolute bottom-2 right-2 p-1.5 rounded-md transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100",
+        className
+      )}
+      title={copied ? 'Copied!' : 'Copy message'}
+      aria-label="Copy message"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+    </button>
+  );
+};
+
+export function MessageList({ messages, onEditMessage, onRegenerate, editingIndex, isLoading }: MessageListProps) {
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
@@ -107,12 +136,38 @@ export function MessageList({ messages }: MessageListProps) {
             
             <div
               className={cn(
-                'rounded-2xl px-5 py-3.5 shadow-sm text-[15px] leading-relaxed',
+                'rounded-2xl px-5 py-3.5 shadow-sm text-[15px] leading-relaxed relative group transition-shadow duration-300',
                 message.role === 'user'
                   ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                  : 'bg-card border border-border/50 text-foreground rounded-tl-sm w-full prose prose-sm md:prose-base prose-zinc dark:prose-invert max-w-none'
+                  : 'bg-card border border-border/50 text-foreground rounded-tl-sm w-full prose prose-sm md:prose-base prose-zinc dark:prose-invert max-w-none',
+                index === editingIndex && message.role === 'user' &&
+                  'ring-2 ring-brand-accent/50 ring-offset-2 ring-offset-background shadow-md'
               )}
             >
+              <CopyMessageButton
+                text={message.content}
+                className={
+                  message.role === 'user'
+                    ? 'text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/15'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/60'
+                }
+              />
+              {message.role === 'user' && onEditMessage && (
+                <button
+                  onClick={() => onEditMessage(index)}
+                  disabled={isLoading}
+                  className={cn(
+                    'absolute bottom-2 right-9 p-1.5 rounded-md text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/15 transition-colors disabled:opacity-0',
+                    index === editingIndex
+                      ? 'opacity-100'
+                      : 'opacity-0 group-hover:opacity-100 focus:opacity-100'
+                  )}
+                  title="Edit message"
+                  aria-label="Edit message"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
               {message.role === 'user' ? (
                 <p className="whitespace-pre-wrap">{message.content}</p>
               ) : (
@@ -131,6 +186,39 @@ export function MessageList({ messages }: MessageListProps) {
                 >
                   {message.content}
                 </ReactMarkdown>
+              )}
+
+              {message.role === 'assistant' && message.sources && message.sources.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-border/60 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Sources
+                  </span>
+                  {message.sources.map((source) => (
+                    <Link
+                      key={source}
+                      href={`/documents?file=${encodeURIComponent(source)}`}
+                      className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 pl-2 pr-2.5 py-0.5 text-xs text-primary hover:bg-primary/20 hover:border-primary/40 transition-colors"
+                      title={`Open ${source} in Documents`}
+                    >
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="max-w-[180px] truncate font-medium">{source}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+
+              {message.role === 'assistant' &&
+                index === messages.length - 1 &&
+                onRegenerate && (
+                <button
+                  onClick={onRegenerate}
+                  disabled={isLoading}
+                  className="absolute bottom-2 right-9 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  title="Regenerate response"
+                  aria-label="Regenerate response"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </button>
               )}
             </div>
 

@@ -146,6 +146,26 @@ async def list_documents(request: Request):
     return DocumentList(documents=documents)
 
 
+@router.get("/documents/{doc_id}/chunks")
+async def get_document_chunks(request: Request, doc_id: str):
+    """Get all chunks (content previews) for a document."""
+    vector_store: VectorStoreManager = request.app.state.vector_store
+    chunks = vector_store.get_document_chunks(doc_id)
+    if not chunks:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {
+        "document_id": doc_id,
+        "chunks": [
+            {
+                "chunk_index": c.get("chunk_index", 0),
+                "content": c.get("content", ""),
+                "metadata": c.get("metadata", {}),
+            }
+            for c in chunks
+        ]
+    }
+
+
 @router.delete("/documents/{doc_id}")
 async def delete_document(request: Request, doc_id: str):
     """Delete document from index"""

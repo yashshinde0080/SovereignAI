@@ -117,8 +117,8 @@ class MemoryManager:
                     return "layerstream"
                 else:
                     return "insufficient"
-            except (ImportError, Exception) as exc:
-                print(f"llmfit scoring unavailable, fallback: {exc}")
+            except (ImportError, Exception):
+                pass
 
         # Legacy threshold-based selection
         if torch.cuda.is_available():

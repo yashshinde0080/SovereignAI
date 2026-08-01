@@ -46,7 +46,7 @@ class WeightSplitter:
         # Load full model to CPU
         kwargs = {
             "device_map": "cpu",
-            "torch_dtype": dtype,
+            "dtype": dtype,
             "low_cpu_mem_usage": True,
             "trust_remote_code": True,
             "ignore_mismatched_sizes": True
@@ -58,6 +58,9 @@ class WeightSplitter:
             kwargs["gguf_file"] = os.path.basename(self.model_id)
             model = AutoModelForCausalLM.from_pretrained(model_dir, **kwargs)
         else:
+            # torch < 2.6 refuses .bin checkpoints (CVE-2025-32434); convert to safetensors first
+            from app.engines.shared.safetensors import ensure_safetensors
+            ensure_safetensors(self.model_id)
             model = AutoModelForCausalLM.from_pretrained(self.model_id, **kwargs)
         
         components = ModelIntrospector.detect_model_components(model)

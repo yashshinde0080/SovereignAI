@@ -14,6 +14,7 @@ import { QAModule } from '@/components/task/QAModule';
 import { VisionModule } from '@/components/task/VisionModule';
 import { AudioModule } from '@/components/task/AudioModule';
 import { EmbeddingModule } from '@/components/task/EmbeddingModule';
+import { MaskedLMModule } from '@/components/task/MaskedLMModule';
 import { ModeSwitcher } from '@/components/chat/ModeSwitcher';
 
 import { useEffect } from 'react';
@@ -123,6 +124,9 @@ export default function ConsolePage() {
          {!activeIsGen && activeTask === 'question_answering' &&
             <QAModule />
          }
+         {!activeIsGen && activeTask === 'masked_lm' &&
+            <MaskedLMModule />
+         }
          {!activeIsGen && (activeTask.includes('image') || activeTask.includes('vision') || activeTask === 'object_detection') &&
             <VisionModule taskType={activeTask} />
          }
@@ -133,7 +137,7 @@ export default function ConsolePage() {
             <EmbeddingModule />
          }
          
-         {!activeIsGen && activeTask !== 'unknown' && !activeTask.includes('classification') && activeTask !== 'question_answering' && !activeTask.includes('vision') && !activeTask.includes('audio') && !activeTask.includes('image') && activeTask !== 'text_encoding' &&
+         {!activeIsGen && activeTask !== 'unknown' && !activeTask.includes('classification') && activeTask !== 'question_answering' && activeTask !== 'masked_lm' && !activeTask.includes('vision') && !activeTask.includes('audio') && !activeTask.includes('image') && activeTask !== 'text_encoding' &&
             <div className="flex-1 flex flex-col justify-center items-center">
                 <h2>No UI module exists for this explicit task yet ({activeTask}). However, you can still execute via API.</h2>
             </div>

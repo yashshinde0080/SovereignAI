@@ -1,3 +1,5 @@
+import type { MaskPrediction } from '@/lib/maskedLm';
+
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -160,6 +162,9 @@ export interface TaskResult {
   output?: string;
   confidence?: string;
   shape?: unknown;
+  metadata?: Record<string, unknown>;
+  predictions?: MaskPrediction[];
+  message?: string;
 }
 
 export interface DownloadStatus {

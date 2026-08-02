@@ -5,12 +5,14 @@ from pathlib import Path
 from typing import Optional
 from .schemas import FullSettings, AgentConfig
 from .defaults import DEFAULT_AGENTS
+from app.config import settings
 
 
 class SettingsDatabase:
-    def __init__(self, db_path: str = "database/sovereign_settings.db"):
-        self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    def __init__(self, db_path: Optional[str] = None):
+        # Project-relative (portable USB): <project>/workspace/database/sovereign_settings.db
+        self.db_path = db_path or str(settings.workspace_dir / "database" / "sovereign_settings.db")
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self._init_db()
 
     def _get_connection(self) -> sqlite3.Connection:

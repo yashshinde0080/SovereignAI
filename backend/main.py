@@ -2,10 +2,11 @@ import uvicorn
 import sqlite3
 import json
 import os
+from pathlib import Path
 
 def get_server_config():
     """Read server config directly from the settings DB if it exists"""
-    db_path = "database/sovereign_settings.db"
+    db_path = str(Path(__file__).parent.parent / "workspace" / "database" / "sovereign_settings.db")
     
     # Defaults
     host = "0.0.0.0"

@@ -1,10 +1,10 @@
 # SovereignAI Edge — Architecture Compatibility Matrix
 
 > **Last updated**: 2026-07-29  
-> **Source**: `model_manager/config.py` (`ARCHITECTURE_TASK_MAP`) + `model_manager/detector.py` (`_match_model_type`)  
+> **Source**: `app/core/task_resolver.py` (task detection; legacy `model_manager/` package deleted)  
 > **Transformers version**: v4.46+
 
-This document lists every HuggingFace model architecture supported by SovereignAI's architecture detection layer. The `_match_architecture()` suffix‑match handles **any** `*ForCausalLM`, `*ForMaskedLM`, etc. automatically — explicit entries here are for documentation + the `_match_model_type()` fallback.
+This document lists every HuggingFace model architecture supported by SovereignAI's architecture detection layer. `app/core/task_resolver.py` suffix‑matches **any** `*ForCausalLM`, `*ForMaskedLM`, etc. automatically — explicit entries here are for documentation + the `model_type` fallback.
 
 **Detection priority**: `config.json` `architectures[]` → suffix match → `model_type` fallback → default `CAUSAL_LM`.
 
@@ -18,7 +18,7 @@ This document lists every HuggingFace model architecture supported by SovereignA
 | ✅ LS | Works in LayerStream engine (manual layer loading) |
 | ⚠️ | Known limitation or requires testing |
 | ❌ | Not supported |
-| ✓ | Architecture class name used in `_match_model_type()` fallback |
+| ✓ | Architecture class name used in `TaskResolver` fallback |
 | - | Not applicable or untested |
 
 ---
@@ -199,13 +199,13 @@ All architectures auto‑detected via suffix `*ForCausalLM` / `*LMHeadModel`. Fu
 ## FAQ
 
 **Q: How does detection actually work?**  
-A: Three‑step priority: (1) `config.json` `architectures[0]` → direct match in `ARCHITECTURE_TASK_MAP` → suffix match (any `*ForCausalLM` → `CAUSAL_LM`). (2) `model_type` field → set membership in `_match_model_type()`. (3) Default `CAUSAL_LM`.
+A: `app/core/task_resolver.py` reads `config.json`: (1) architecture suffix match (any `*ForCausalLM` → `CAUSAL_LM`, etc.), (2) `model_type` heuristics, (3) default `CAUSAL_LM` for raw GGUF.
 
 **Q: My architecture isn't listed — will it work?**  
-A: Probably! If its class name ends with `ForCausalLM`, `ForMaskedLM`, `ForSequenceClassification`, etc., the suffix match catches it automatically. File an issue if `_match_model_type()` fails for a new `model_type`.
+A: Probably! If its class name ends with `ForCausalLM`, `ForMaskedLM`, `ForSequenceClassification`, etc., the suffix match in `app/core/task_resolver.py` catches it automatically.
 
 **Q: What does "LayerStream: ⚠️" mean?**  
 A: The architecture is not yet tested with LayerStream's manual layer‑loading loop. Non‑standard layer internals (SSM, MoE hierachies, ALiBi, custom norms) may need minor `layer_executor.py` adjustments. These generally work but haven't been validated.
 
 **Q: Can I add a missing entry?**  
-A: Yes. (1) Add the `model_type` to the appropriate set in `detector.py:_match_model_type()`. (2) Optionally add an explicit entry to `config.py:ARCHITECTURE_TASK_MAP`. (3) Update this doc.
+A: Yes. (1) Extend the mapping in `app/core/task_resolver.py`. (2) Update this doc.

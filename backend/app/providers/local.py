@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
+from app.config import settings
+
 from app.providers.base import (
     BaseProvider,
     ModelMetadata,
@@ -44,8 +46,8 @@ class LocalProvider(BaseProvider):
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         
-        # Default models directory
-        self.models_dir = Path(config.get("models_dir", "./models")) if config else Path("./models")
+        # Default to the project models dir (portable USB); config can override.
+        self.models_dir = Path(config.get("models_dir", settings.models_dir)) if config else settings.models_dir
         self.installed_dir = self.models_dir / "installed"
         self.cache_dir = self.models_dir / ".cache"
         

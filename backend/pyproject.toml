@@ -59,6 +59,9 @@ dev = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+sovereign = "app.cli.main:app"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 

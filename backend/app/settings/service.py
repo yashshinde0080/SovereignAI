@@ -15,7 +15,7 @@ from .schemas import (
 
 
 class SettingsService:
-    def __init__(self, db_path: str = "database/sovereign_settings.db"):
+    def __init__(self, db_path: Optional[str] = None):
         self.db = SettingsDatabase(db_path)
 
     # ── Full Settings ──

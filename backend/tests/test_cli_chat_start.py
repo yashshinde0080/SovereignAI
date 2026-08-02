@@ -140,7 +140,7 @@ def test_wait_for_server_grace_when_spawned_proc_dies(monkeypatch):
         holder["server"] = HTTPServer(("127.0.0.1", port), _HealthyHandler)
         holder["server"].serve_forever()
 
-    _serve_forever(threading.Thread(target=_late_server, daemon=True))
+    threading.Thread(target=_late_server, daemon=True).start()
     assert asyncio.run(cli._wait_for_server(_DeadProc(), timeout=10)) is True
     holder["server"].shutdown()
     holder["server"].server_close()

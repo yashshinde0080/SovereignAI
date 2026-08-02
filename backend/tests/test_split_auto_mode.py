@@ -97,7 +97,7 @@ def test_explicit_fullram_split_swaps_to_base(monkeypatch):
              "modes_supported": ["fullram", "layerstream"]},
         ]
 
-    async def _fake_create_engine(model_path, mode, model_metadata=None):
+    async def _fake_create_engine(self, model_path, mode, model_metadata=None):
         created["mode"] = mode
         created["path"] = model_path
 

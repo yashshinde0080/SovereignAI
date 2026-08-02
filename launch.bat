@@ -88,7 +88,7 @@ echo.
 echo   API:  http://127.0.0.1:8000
 echo   Docs: http://127.0.0.1:8000/docs
 echo.
-echo   CLI:  python -m cli.main --help
+echo   CLI:  sovereign --help   (or: cd backend\app ^&^& python -m cli.main --help)
 echo.
 echo ═══════════════════════════════════════
 echo.

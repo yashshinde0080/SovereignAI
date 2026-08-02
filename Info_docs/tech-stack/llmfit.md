@@ -144,7 +144,7 @@ Current: `EngineRouter` uses simple RAM threshold (FullRAM if `ram > model_size 
 
 Proposed:
 ```python
-# backend/app/model_manager/router.py
+# engine selection: backend/app/services/model_manager.py (via EngineFactory)
 from llmfit import score_model_fit
 
 async def select_engine(model_name: str, hardware: HardwareProfile) -> EngineType:

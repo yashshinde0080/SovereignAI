@@ -487,15 +487,31 @@ async def _wait_for_server(proc, timeout: float = 90.0) -> bool:
             if await _server_healthy():
                 return True
             if proc is not None and proc.poll() is not None:
+                # The process died — most likely the port is already bound by a
+                # server that is still booting. Give it a few seconds to come up.
+                grace = time.monotonic() + 5
+                while time.monotonic() < grace:
+                    if await _server_healthy():
+                        return True
+                    await asyncio.sleep(1)
                 return False
             await asyncio.sleep(1)
     return False
 
 
-async def _ensure_server() -> tuple:
+async def _ensure_server() -> tuple[bool, bool]:
     """Start the backend if it isn't running. Returns (healthy, started_now)."""
     if await _server_healthy():
         return True, False
+    if os.environ.get("SOVEREIGN_API_BASE"):
+        # Auto-start boots the local backend on the settings-DB port, which may
+        # differ from the env override — refuse rather than wait 90s on the wrong port.
+        console.print("[red]Server not reachable at SOVEREIGN_API_BASE.[/red]")
+        console.print(
+            "[dim]Auto-start only applies to the settings-DB origin — start the "
+            "server manually with 'sovereign serve'.[/dim]"
+        )
+        return False, False
     console.print("[yellow]Server is not running — starting it...[/yellow]")
     proc = _start_server()
     if await _wait_for_server(proc):

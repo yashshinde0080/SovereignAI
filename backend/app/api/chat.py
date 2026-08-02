@@ -1,9 +1,10 @@
 """Chat API Endpoints"""
 import asyncio
+import json
+import re
 from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-import json
 
 from app.schemas.chat import (
     ChatRequest, 
@@ -111,11 +112,11 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     prompt = ""
     if tokenizer and hasattr(tokenizer, "apply_chat_template"):
         try:
-            prompt = tokenizer.apply_chat_template(
-                messages_dicts, 
-                tokenize=False, 
-                add_generation_prompt=True
-            )
+            template_kwargs = {"tokenize": False, "add_generation_prompt": True}
+            # Thinking toggle for reasoning models (Qwen3.5); None = template default
+            if chat_request.enable_thinking is not None:
+                template_kwargs["enable_thinking"] = chat_request.enable_thinking
+            prompt = tokenizer.apply_chat_template(messages_dicts, **template_kwargs)
         except Exception as e:
             # Fallback
             prompt = build_prompt(messages_dicts)
@@ -136,15 +137,23 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
         top_p=chat_request.top_p
     )
     
+    raw_output = response.get("output", "") if "output" in response else response.get("text", "")
+    if _prompt_opens_think(prompt):
+        raw_output = _OPEN_TAG + raw_output  # opener lived in the prompt template
+    content, reasoning = _split_think(raw_output)
+    if "<think>" in raw_output:
+        content = content.strip()
+        reasoning = (reasoning or "").strip() or None
+    message = {"role": "assistant", "content": content}
+    if reasoning:
+        message["reasoning"] = reasoning
+    
     return ChatResponse(
         id=f"chat-{id(response)}",
         model=app.state.active_model,
         choices=[{
             "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": response.get("output", "") if "output" in response else response.get("text", "")
-            },
+            "message": message,
             "finish_reason": response.get("finish_reason", "stop")
         }],
         usage={
@@ -181,23 +190,65 @@ async def stream_response(
     request: ChatRequest,
     rag_metadata: list = None
 ) -> AsyncGenerator[str, None]:
-    """Stream tokens"""
+    """Stream tokens, splitting <think>...</think> reasoning out of content.
+
+    The raw stream accumulates in ``full_text``; each chunk we strip think
+    blocks from the whole text and emit the newly-appeared content and
+    reasoning deltas (holding back any trailing chars that could open a tag,
+    so a tag split across chunk boundaries never leaks). Reasoning arrives in
+    ``delta.reasoning``; content in ``delta.content``.
+    """
+    # If the chat template opened <think> in the prompt, the completion starts
+    # mid-reasoning — seed the buffer with the opener so the close is matched.
+    full_text = _OPEN_TAG if _prompt_opens_think(prompt) else ""
+    sent = 0   # chars of stripped content already emitted
+    rsent = 0  # chars of stripped reasoning already emitted
+    chunk_no = 0
+
+    def _emit(content: str, reasoning: str = "", finish_reason: str = None) -> str:
+        nonlocal chunk_no
+        chunk_no += 1
+        delta = {"content": content}
+        if reasoning and reasoning.strip():
+            delta["reasoning"] = reasoning
+        data = StreamChunk(
+            id=f"chunk-{chunk_no}",
+            choices=[{"index": 0, "delta": delta, "finish_reason": finish_reason}]
+        )
+        return f"data: {json.dumps(data.model_dump())}\n\n"
+
     async for chunk in engine.generate_stream(
         input_data=prompt,
         max_tokens=request.max_tokens,
         temperature=request.temperature,
         top_p=request.top_p
     ):
-        data = StreamChunk(
-            id=f"chunk-{id(chunk)}",
-            choices=[{
-                "index": 0,
-                "delta": {"content": chunk["token"]},
-                "finish_reason": chunk.get("finish_reason")
-            }]
-        )
-        yield f"data: {json.dumps(data.model_dump())}\n\n"
-        
+        token = chunk.get("token", "")
+        finish = chunk.get("finish_reason")
+        if not token and finish is None:
+            continue
+        full_text += token
+
+        content, reasoning = _split_think(full_text)
+        # Hold back trailing partial tags (e.g. "<thi", "</thi") so neither
+        # stream leaks a half-emitted tag or overshoots its offset
+        content = _trim_tag_prefix(content)
+        reasoning = _trim_tag_prefix(reasoning or "")
+        c_out = r_out = ""
+        if len(content) > sent:
+            c_out = content[sent:]
+            sent = len(content)
+        if len(reasoning) > rsent:
+            r_out = reasoning[rsent:]
+            rsent = len(reasoning)
+        if c_out or r_out:
+            yield _emit(c_out, r_out)
+
+        if finish is not None:
+            yield _emit("", "", finish)
+            sent, rsent = 0, 0
+            full_text = ""
+
     if rag_metadata:
         meta_chunk = StreamChunk(
             id=f"chunk-meta",
@@ -210,6 +261,63 @@ async def stream_response(
         yield f"data: {json.dumps(meta_chunk.model_dump())}\n\n"
     
     yield "data: [DONE]\n\n"
+
+
+_OPEN_TAG = "<think>"
+_CLOSE_TAG = "</think>"
+
+
+def _prompt_opens_think(prompt: str) -> bool:
+    """True if the chat template left an unclosed <think> opener at the end of
+    the prompt (thinking mode); then the completion holds only the close tag."""
+    return prompt.rstrip().endswith(_OPEN_TAG)
+
+
+def _trim_tag_prefix(text: str) -> str:
+    """Drop trailing chars that could start <think> or </think> (longest match)."""
+    for k in range(min(len(text), 8), 0, -1):  # len("</think>") == 8
+        tail = text[-k:]
+        if _OPEN_TAG.startswith(tail) or _CLOSE_TAG.startswith(tail):
+            return text[:-k]
+    return text
+
+
+def _split_think(text: str):
+    """Strip <think>...</think> reasoning out of generated text.
+
+    Returns (content, reasoning). Reasoning is None when there is no think
+    block. Handles full blocks, unclosed trailing blocks (the model stopped
+    mid-think, so there is no answer to lose), and a bare </think> whose
+    opener the chat template left in the prompt (everything before it is
+    reasoning). Without any think tag the text passes through untouched.
+    Text is returned raw (no whitespace cleanup) so streaming deltas stay
+    prefix-stable; callers may strip as they see fit.
+    """
+    if _OPEN_TAG not in text and _CLOSE_TAG not in text:
+        return text, None
+    content, reasoning = [], []
+    pos = 0
+    in_think = False
+    for m in re.finditer(r"<think>|</think>", text):
+        chunk = text[pos:m.start()]
+        pos = m.end()
+        if m.group() == _OPEN_TAG:
+            if chunk:
+                content.append(chunk)  # content before the opener
+            in_think = True
+        else:  # </think>
+            # Chunk between an opener and its close is reasoning. A stray
+            # close with no opener in this text is not a reasoning marker:
+            # thinking mode is handled by callers seeding the opener, so a
+            # bare close here keeps its text in content (the tag itself is
+            # dropped) — reclassifying it would desync streamed output.
+            if chunk:
+                (reasoning if in_think else content).append(chunk)
+            in_think = False
+    tail = text[pos:]
+    if tail:
+        (reasoning if in_think else content).append(tail)
+    return "".join(content), "".join(reasoning) or None
 
 
 def build_prompt(messages: list) -> str:

@@ -335,12 +335,12 @@ class FullRAMEngine(BaseEngine):
         message = None  # plain-text note for non-generative tasks (masked_lm)
         
         if is_generative:
-            output_ids = output_res # TaskRouter returns output_ids for generative
-            if modality == "text":
-                # slice the prompt
-                output_ids = output_ids[0][prompt_tokens:]
-            else:
-                output_ids = output_ids[0]
+            output_ids = output_res[0]  # TaskRouter returns output_ids for generative
+            # Strip the prompt for all generative modalities (text, multimodal/vision2seq);
+            # prompt_tokens == 0 is a no-op. Previously only text was sliced, so vision2seq
+            # (e.g. Qwen3.5) echoed the whole rendered prompt in the response.
+            if prompt_tokens > 0 and len(output_ids) >= prompt_tokens:
+                output_ids = output_ids[prompt_tokens:]
             
             output_res = self.tokenizer.decode(output_ids, skip_special_tokens=True)
             completion_tokens = len(output_ids)

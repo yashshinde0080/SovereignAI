@@ -5,7 +5,7 @@ files that llmfit auto-discovers and scores alongside its built-in catalog.
 
 Usage:
     catalog = CustomModelCatalog()
-    catalog.load_directory(Path("plugins/user/models"))
+    catalog.load_directory(Path("workspace/plugins/user/models"))
     catalog.register_with_llmfit()  # makes scores available via llmfit
 """
 import os

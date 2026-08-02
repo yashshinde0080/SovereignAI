@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     audit_logging: bool = True
     
     # Custom model catalog (enterprise / USB YAML definitions)
-    catalog_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "plugins" / "user" / "models")
+    catalog_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "plugins" / "user" / "models")
 
     # Model Defaults
     default_quant: str = "Q4_K_M"
@@ -61,3 +61,7 @@ settings.workspace_dir.mkdir(parents=True, exist_ok=True)
 settings.catalog_dir.mkdir(parents=True, exist_ok=True)
 settings.plugins_dir.mkdir(parents=True, exist_ok=True)
 settings.database_path.parent.mkdir(parents=True, exist_ok=True)
+
+# Keep HuggingFace tokenizer/config/module caches on the pendrive (portable USB).
+# setdefault → an externally-set HF_HOME (e.g. launch script) wins.
+os.environ.setdefault("HF_HOME", str(settings.workspace_dir / "hf_cache"))

@@ -48,8 +48,8 @@ class ProviderRegistry:
                     "token": "hf_xxx"
                 },
                 "local": {
-                    "enabled": true,
-                    "models_dir": "./models"
+                    "enabled": true
+                    # models_dir defaults to the project models dir
                 },
                 "enterprise": {
                     "enabled": false,
@@ -67,7 +67,7 @@ class ProviderRegistry:
         if not providers_config:
             providers_config = {
                 "huggingface": {"enabled": True},
-                "local": {"enabled": True, "models_dir": "./models"},
+                "local": {"enabled": True},
             }
         
         for provider_id, provider_config in providers_config.items():

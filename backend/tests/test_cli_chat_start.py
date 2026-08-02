@@ -1,12 +1,15 @@
 """Runnable checks for the ``chat`` command's server auto-start wiring.
 
-Covers ``_server_healthy`` (probes /health) and ``_ensure_server`` (skip start
-when the server is already up; start + wait for healthy when it's down).
+Covers ``_server_healthy`` (probes /health), ``_ensure_server`` (skip start
+when the server is already up; start + wait for healthy when it's down; refuse
+auto-start under a SOVEREIGN_API_BASE override) and the ``_wait_for_server``
+grace window (spawned process died, but the port owner becomes healthy).
 ``_start_server`` itself is stubbed so the test never boots the real backend.
 """
 import asyncio
 import socket
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -41,6 +44,10 @@ def _free_port() -> int:
     return port
 
 
+def _serve_forever(server):
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+
 class _FakeProc:
     """Stand-in for subprocess.Popen — only poll() is used by _wait_for_server."""
 
@@ -48,11 +55,17 @@ class _FakeProc:
         return None  # still running
 
 
+class _DeadProc:
+    """A spawned server that already exited (e.g. port was taken)."""
+
+    def poll(self):
+        return -1
+
+
 @pytest.fixture
 def healthy_server():
     server = HTTPServer(("127.0.0.1", 0), _HealthyHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
+    _serve_forever(server)
     yield server
     server.shutdown()
     server.server_close()
@@ -85,11 +98,12 @@ def test_ensure_server_starts_and_waits_when_down(monkeypatch):
     port = _free_port()
     monkeypatch.setattr(cli, "SERVER_ORIGIN", f"http://127.0.0.1:{port}")
     started = []
+    holder = {}
 
     def _fake_start_server():
         started.append(True)
-        server = HTTPServer(("127.0.0.1", port), _HealthyHandler)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
+        holder["server"] = HTTPServer(("127.0.0.1", port), _HealthyHandler)
+        _serve_forever(holder["server"])
         return _FakeProc()
 
     monkeypatch.setattr(cli, "_start_server", _fake_start_server)
@@ -97,3 +111,36 @@ def test_ensure_server_starts_and_waits_when_down(monkeypatch):
     assert healthy is True
     assert did_start is True
     assert started == [True]
+    holder["server"].shutdown()
+    holder["server"].server_close()
+
+
+def test_ensure_server_env_override_refuses_auto_start(monkeypatch):
+    port = _free_port()
+    monkeypatch.setattr(cli, "SERVER_ORIGIN", f"http://127.0.0.1:{port}")
+    monkeypatch.setenv("SOVEREIGN_API_BASE", f"http://127.0.0.1:{port}")
+    calls = []
+    monkeypatch.setattr(cli, "_start_server", lambda: calls.append("started"))
+    healthy, started = asyncio.run(cli._ensure_server())
+    assert healthy is False
+    assert started is False
+    assert calls == []
+
+
+def test_wait_for_server_grace_when_spawned_proc_dies(monkeypatch):
+    """A dead spawned proc must not fail instantly: the port owner (a server
+    that was already booting) becomes healthy within the grace window."""
+    port = _free_port()
+    monkeypatch.setattr(cli, "SERVER_ORIGIN", f"http://127.0.0.1:{port}")
+
+    holder = {}
+
+    def _late_server():
+        time.sleep(2)  # the other server finishes booting ~2s later
+        holder["server"] = HTTPServer(("127.0.0.1", port), _HealthyHandler)
+        holder["server"].serve_forever()
+
+    _serve_forever(threading.Thread(target=_late_server, daemon=True))
+    assert asyncio.run(cli._wait_for_server(_DeadProc(), timeout=10)) is True
+    holder["server"].shutdown()
+    holder["server"].server_close()

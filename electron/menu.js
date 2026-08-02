@@ -29,7 +29,13 @@ function createMenu(mainWindow) {
           click: async () => {
             const { shell } = require('electron');
             const path = require('path');
-            const modelsPath = path.join(app.getPath('userData'), 'models');
+            const fs = require('fs');
+            // Point at the backend's real models dir (portable: on the
+            // pendrive next to the app, not %APPDATA%).
+            const modelsPath = app.isPackaged
+              ? path.join(process.resourcesPath, 'workspace', 'models')
+              : path.join(__dirname, '..', 'workspace', 'models');
+            fs.mkdirSync(modelsPath, { recursive: true });
             await shell.openPath(modelsPath);
           }
         },

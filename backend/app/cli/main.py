@@ -92,6 +92,39 @@ def version():
 
 
 @app.command()
+def help():
+    """Show the full command reference"""
+    table = Table(title="SovereignAI Edge — Commands", box=box.ROUNDED)
+    table.add_column("Command", style="cyan")
+    table.add_column("What it does")
+    table.add_column("Example")
+
+    for cmd, desc, example in [
+        ("version", "Show version", "sovereign version"),
+        ("system", "Hardware profile, server status, model recommendations", "sovereign system"),
+        ("list", "List installed models", "sovereign list"),
+        ("pull <model>", "Download a model (-q/--quant)", "sovereign pull llama3:8b"),
+        ("run <model>", "Load a model + chat TUI (server must be running)", "sovereign run llama3:8b"),
+        ("chat <model>", "Auto-start the server if needed, then chat", "sovereign chat llama3:8b"),
+        ("benchmark", "Run inference benchmark (-n iters, -t tokens)", "sovereign benchmark -n 5"),
+        ("remove <model>", "Delete a model (-f to skip confirm)", "sovereign remove llama3:8b"),
+        ("serve", "Start the API server (settings-DB host/port)", "sovereign serve"),
+        ("benchmark-turboquant <model>", "KV-compression benchmark", "sovereign benchmark-turboquant m.gguf"),
+    ]:
+        table.add_row(cmd, desc, example)
+
+    console.print(table)
+    console.print(Panel.fit(
+        "[bold]Chat slash commands:[/bold] /help /stats /clear /mode <m> /model <n> /exit\n"
+        "[bold]Env:[/bold] SOVEREIGN_API_BASE overrides the server URL "
+        "(default: api_port from the settings DB)\n"
+        "[bold]From the project root:[/bold] sovereign <command> "
+        "(or: cd backend/app && python -m cli.main <command>)",
+        title="Tips", border_style="blue", box=box.ROUNDED
+    ))
+
+
+@app.command()
 def system():
     """Show system information"""
     async def _get_system():

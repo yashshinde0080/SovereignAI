@@ -16,6 +16,33 @@ from app.providers.huggingface import HuggingFaceProvider
 from app.providers.custom_catalog import CustomModelCatalog
 
 
+def _fuzzy_match_model(models: List[Dict[str, Any]], model_id: str) -> Optional[Dict[str, Any]]:
+    """Resolve a model id that wasn't found in the registry directly.
+
+    Normalizes slashes/colons, prefers an exact normalized match, then a
+    containment match. ``split:`` variants never win a fuzzy match — they are
+    derived views of a base model, so a display-name request like
+    "Qwen3.5-0.8B" must resolve to the base model rather than the split copy
+    (otherwise ``app.state.active_model`` ends up as a different id than the
+    one the caller asked for). Explicit "split:..." requests still resolve
+    through the direct registry lookup before this is called.
+    """
+    clean_request = model_id.replace("/", "-").replace(":", "-").lower()
+    stripped_req = clean_request.replace("split-", "")
+
+    for m in models:
+        if m["id"].startswith("split:"):
+            continue  # prefer the base model over split variants
+        clean_m = m["id"].replace("/", "-").replace(":", "-").lower()
+        if clean_m == clean_request:
+            return m  # exact normalized match wins outright
+        if clean_m.replace("split-", "") == stripped_req:
+            return m  # exact match modulo the split: prefix
+        if stripped_req in clean_m or clean_m in stripped_req:
+            return m  # first containment match (base models only)
+    return None
+
+
 class ModelManager:
     """Manage model lifecycle"""
     
@@ -213,35 +240,9 @@ class ModelManager:
         model = await self.get_model(model_id)
         
         if not model:
-            # Fuzzy match: if model_id has slashes but we only found the folder name
-            # or vice versa (some frontends replace slashes with dashes)
+            # Fuzzy match: some callers pass display names or dash-replaced ids
             all_models = await self.list_models()
-            clean_request = model_id.replace("/", "-").replace(":", "-").lower()
-            
-            # Phase 1: Direct clean match
-            for m in all_models:
-                clean_m = m["id"].replace("/", "-").replace(":", "-").lower()
-                if clean_m == clean_request:
-                    print(f"LOAD: Direct fuzzy match {model_id} to {m['id']}")
-                    model = m
-                    break
-            
-            # Phase 2: Prefix/Suffix/Containment match
-            if not model:
-                for m in all_models:
-                    clean_m = m["id"].replace("/", "-").replace(":", "-").lower()
-                    
-                    # Match without split: prefix
-                    stripped_m = clean_m.replace("split-", "")
-                    stripped_req = clean_request.replace("split-", "")
-                    
-                    if stripped_m == stripped_req:
-                        model = m
-                        break
-                    if stripped_req in stripped_m or stripped_m in stripped_req:
-                        model = m
-                        break
-            
+            model = _fuzzy_match_model(all_models, model_id)
             if model:
                 print(f"LOAD: Fuzzy matched {model_id} to {model['id']}")
                 model_id = model["id"]
@@ -256,6 +257,13 @@ class ModelManager:
         # Unload current if any
         await self.unload_model()
         
+        # Split variants are layerstream-only: they live in offload_cache as
+        # per-layer safetensors with no consolidated model.safetensors, so the
+        # factory's auto heuristic must never hand one to a full-ram engine.
+        if mode == "auto" and model["id"].startswith("split:"):
+            mode = "layerstream"
+            print(f"LOAD: split model is layerstream-only; forcing mode=layerstream")
+
         # If we're in fullram mode but selected a split model, try to use the base model
         model_path = model["path"]
         if mode == "fullram" and model["id"].startswith("split:"):

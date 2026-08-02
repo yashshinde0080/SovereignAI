@@ -18,7 +18,7 @@ SovereignAI Edge is a **portable, 100% offline AI platform** that runs LLMs loca
 | Install deps | `pip install -r backend/requirements.txt` |
 | Package manager | `uv` (lock file `uv.lock` present), but `pyproject.toml` uses hatchling |
 
-**Important:** The top-level `launch.bat` / `launch.sh` scripts handle venv creation, deps, and server startup. They set `host=127.0.0.1` by default (read from SQLite settings DB at `database/sovereign_settings.db` section `security` key `api_port` / `bind_localhost_only`).
+**Important:** The top-level `launch.bat` / `launch.sh` scripts handle venv creation, deps, and server startup. They set `host=127.0.0.1` by default (read from SQLite settings DB at `workspace/database/sovereign_settings.db` section `security` key `api_port` / `bind_localhost_only`).
 
 ### Frontend (Next.js 16 + React 19)
 
@@ -89,16 +89,17 @@ The ponytail review (in `issue.md`) flags this as a major over-engineering probl
 
 ### 3. Engine selection is in `ModelManager`, not in the engines themselves
 
-The adaptive routing logic lives in `backend/app/model_manager/router.py` (or similar). Hardware profiling is in `backend/app/core/hardware_detector.py`. The engines themselves don't decide which mode to use.
+Engine selection happens in `backend/app/services/model_manager.py:load_model()` via `EngineFactory` (`backend/app/core/engine_factory.py`). Hardware profiling is in `backend/app/core/hardware_detector.py`. The engines themselves don't decide which mode to use.
 
 ### 4. Portability constraint: all paths are relative
 
-No absolute paths anywhere. The app runs from USB drives. The file layout is:
-- `./models/` — `.gguf` checkpoints
-- `./database/` — SQLite DB files
-- `./workspace/` — sessions, documents, logs
-- `./plugins/` — user Python scripts
-- `./plugins/user/` — user-added plugins
+No absolute paths anywhere. The app runs from USB drives. All runtime storage lives strictly inside `./workspace/`:
+- `./workspace/models/` — `.gguf` checkpoints + HF cache
+- `./workspace/database/` — SQLite DB files (sovereign.db, sovereign_settings.db)
+- `./workspace/data/` — vector index, misc data
+- `./workspace/offload_cache/` — LayerStream layer caches
+- `./workspace/sessions/` — sessions, snapshots
+- `./workspace/plugins/` — user Python scripts (+ `workspace/plugins/user/models` catalog)
 
 ### 5. proxy.py is a separate NVIDIA proxy server
 
@@ -137,7 +138,6 @@ SovereignAI/
 │   │   ├── core/                   # System-level services
 │   │   │   ├── hardware_detector.py
 │   │   │   └── task_router.py      # 44-entry task map (mostly speculative)
-│   │   ├── model_manager/          # Model loading, routing, registry
 │   │   ├── database/               # SQLite connection + manager
 │   │   ├── vectorstore/            # FAISS-based RAG
 │   │   ├── plugins/                # Plugin system (interface, manager, sandbox)

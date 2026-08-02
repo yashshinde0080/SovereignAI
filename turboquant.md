@@ -646,7 +646,7 @@ class FullRAMKVCache:
 ## Engine Router Integration
 
 ```python
-# backend/app/model_manager/router.py (or wherever engine selection happens)
+# engine selection: backend/app/services/model_manager.py (via EngineFactory)
 
 def select_engine_and_kv_config(hardware_profile, model_size_gb, context_length):
     """

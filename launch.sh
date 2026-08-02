@@ -51,13 +51,11 @@ fi
 
 echo -e "${GREEN}✓${NC} Dependencies installed"
 
-# Create necessary directories
-mkdir -p "$SCRIPT_DIR/models/installed"
+# Create necessary directories (all runtime storage lives in workspace/)
 mkdir -p "$SCRIPT_DIR/workspace/sessions"
 mkdir -p "$SCRIPT_DIR/workspace/documents"
 mkdir -p "$SCRIPT_DIR/workspace/logs"
-mkdir -p "$SCRIPT_DIR/database"
-mkdir -p "$SCRIPT_DIR/plugins"
+mkdir -p "$SCRIPT_DIR/workspace/plugins"
 
 # Start backend
 echo -e "${BLUE}Starting backend server...${NC}"

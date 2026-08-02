@@ -49,13 +49,11 @@ if not exist "%VENV_DIR%\.installed" (
 
 echo [OK] Dependencies installed
 
-:: Create necessary directories
-if not exist "%SCRIPT_DIR%models\installed" mkdir "%SCRIPT_DIR%models\installed"
+:: Create necessary directories (all runtime storage lives in workspace/)
 if not exist "%SCRIPT_DIR%workspace\sessions" mkdir "%SCRIPT_DIR%workspace\sessions"
 if not exist "%SCRIPT_DIR%workspace\documents" mkdir "%SCRIPT_DIR%workspace\documents"
 if not exist "%SCRIPT_DIR%workspace\logs" mkdir "%SCRIPT_DIR%workspace\logs"
-if not exist "%SCRIPT_DIR%database" mkdir "%SCRIPT_DIR%database"
-if not exist "%SCRIPT_DIR%plugins" mkdir "%SCRIPT_DIR%plugins"
+if not exist "%SCRIPT_DIR%workspace\plugins" mkdir "%SCRIPT_DIR%workspace\plugins"
 
 :: Check if port 8000 is in use
 netstat -ano | findstr :8000 >nul 2>&1

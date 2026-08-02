@@ -37,12 +37,13 @@ def _split_model():
 def _patch_factory(monkeypatch, create_engine):
     """load_model does `from app.core.engine_factory import EngineFactory` lazily;
     the from-import re-reads the name from app.core.engine_factory at call time,
-    so patch the class there."""
+    so patch the class there. create_engine must be a staticmethod-compatible
+    function matching the real signature: (model_path, mode, model_metadata)."""
     import app.core.engine_factory as ef_module
     FakeFactory = type(
         "FakeFactory",
         (),
-        {"__init__": lambda self, hw: None, "create_engine": create_engine},
+        {"__init__": lambda self, hw: None, "create_engine": staticmethod(create_engine)},
     )
     monkeypatch.setattr(ef_module, "EngineFactory", FakeFactory)
 
@@ -64,14 +65,11 @@ def test_split_auto_forced_layerstream(monkeypatch):
 
     created = {}
 
-    async def _fake_create_engine(self, model_path, mode, model_metadata=None):
+    async def _fake_create_engine(model_path, mode, model_metadata=None):
         created["mode"] = mode
         created["path"] = model_path
 
-        class _Engine:
-            mode = mode
-            task_metadata = {}
-
+        _Engine = type("FakeEngine", (), {"mode": mode, "task_metadata": {}})
         return _Engine()
 
     _patch_factory(monkeypatch, _fake_create_engine)
@@ -97,14 +95,11 @@ def test_explicit_fullram_split_swaps_to_base(monkeypatch):
              "modes_supported": ["fullram", "layerstream"]},
         ]
 
-    async def _fake_create_engine(self, model_path, mode, model_metadata=None):
+    async def _fake_create_engine(model_path, mode, model_metadata=None):
         created["mode"] = mode
         created["path"] = model_path
 
-        class _Engine:
-            mode = mode
-            task_metadata = {}
-
+        _Engine = type("FakeEngine", (), {"mode": mode, "task_metadata": {}})
         return _Engine()
 
     async def _fake_get_model(self, name):

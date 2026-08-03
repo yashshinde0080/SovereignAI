@@ -64,6 +64,10 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
   useEffect(() => {
     if (initialAsk && !autoAskSent.current) {
       autoAskSent.current = true;
+      toast({
+        title: `Asking about '${initialAsk}'...`,
+        description: 'Your question was sent automatically.',
+      });
       sendMessage(`Ask about '${initialAsk}'`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

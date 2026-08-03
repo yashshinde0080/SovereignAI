@@ -10,6 +10,8 @@ export interface RagSource {
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  /** Model's internal reasoning (e.g. Qwen3.5 <think> blocks), shown in a collapsible block. */
+  reasoning?: string;
   /** RAG sources cited by an assistant reply (from stream rag_metadata). */
   sources?: RagSource[];
 }

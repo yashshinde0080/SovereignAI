@@ -62,20 +62,45 @@ const CodeBlock = ({ inline, className, children }: { inline?: boolean; classNam
 // answer starts. The user's own toggle wins either way.
 const ThinkingBlock = ({ reasoning, live }: { reasoning: string; live?: boolean }) => {
   const [open, setOpen] = useState(live);
+  const [copied, setCopied] = useState(false);
+
+  const copyReasoning = () => {
+    navigator.clipboard.writeText(reasoning);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="mb-3 rounded-lg border border-border/50 bg-muted/40 overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-        title={open ? 'Hide reasoning' : 'Show reasoning'}
-        aria-expanded={open}
-      >
-        <Brain className={cn('h-3.5 w-3.5 shrink-0', live && 'animate-pulse')} />
-        <span className="font-semibold tracking-wide">{live ? 'Thinking…' : 'Thinking'}</span>
-        <ChevronDown
-          className={cn('h-3.5 w-3.5 ml-auto shrink-0 transition-transform duration-200', open && 'rotate-180')}
-        />
-      </button>
+      <div className="flex items-center gap-1 px-2 py-1.5">
+        <button
+          onClick={() => setOpen(!open)}
+          className="flex flex-1 min-w-0 items-center gap-2 px-1 py-0.5 text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          title={open ? 'Hide reasoning' : 'Show reasoning'}
+          aria-expanded={open}
+        >
+          <Brain className={cn('h-3.5 w-3.5 shrink-0', live && 'animate-pulse')} />
+          <span className="font-semibold tracking-wide">{live ? 'Thinking…' : 'Thinking'}</span>
+        </button>
+        <button
+          onClick={copyReasoning}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          title={copied ? 'Copied!' : 'Copy reasoning'}
+          aria-label="Copy reasoning"
+        >
+          {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          onClick={() => setOpen(!open)}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+          title={open ? 'Hide reasoning' : 'Show reasoning'}
+          aria-label={open ? 'Hide reasoning' : 'Show reasoning'}
+        >
+          <ChevronDown
+            className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')}
+          />
+        </button>
+      </div>
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -85,9 +110,9 @@ const ThinkingBlock = ({ reasoning, live }: { reasoning: string; live?: boolean 
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <p className="whitespace-pre-wrap px-3 pb-3 text-[13px] leading-relaxed text-muted-foreground/90 italic">
+            <pre className="whitespace-pre-wrap px-3 pb-3 text-[12.5px] leading-relaxed font-mono text-muted-foreground/90 border-t border-border/40">
               {reasoning}
-            </p>
+            </pre>
           </motion.div>
         )}
       </AnimatePresence>

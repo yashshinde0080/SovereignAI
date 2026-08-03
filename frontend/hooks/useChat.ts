@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Message, RagSource } from '@/types';
 import { errMsg } from '@/lib/utils';
 
@@ -46,6 +46,9 @@ function getSessionId(): string {
 }
 
 const STORAGE_KEY = `sovereignai.chat.messages.${getSessionId()}`;
+// Thinking toggle persisted per session, same key scheme as the messages, so
+// it survives refreshes within the tab (a new tab = fresh session = default).
+const THINKING_KEY = `sovereignai.chat.thinking.${getSessionId()}`;
 
 // Validate parsed JSON into a Message[] (shared by load + legacy migration).
 function sanitizeMessages(parsed: unknown): Message[] {
@@ -59,6 +62,20 @@ function sanitizeMessages(parsed: unknown): Message[] {
         typeof (m as Record<string, unknown>).content === 'string'
     )
     .map((m) => ({ ...m, sources: normalizeSources((m as Record<string, unknown>).sources) }));
+}
+
+// Restore the persisted thinking toggle for this session. Missing or corrupt
+// stored values fall back to the default (true). Browser only; SSR-safe.
+function loadThinking(): boolean {
+  if (typeof window === 'undefined') return true;
+  try {
+    const raw = window.localStorage.getItem(THINKING_KEY);
+    if (raw === null) return true;
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === 'boolean' ? parsed : true;
+  } catch {
+    return true;
+  }
 }
 
 // Restore any persisted history for this session. Browser only; SSR-safe.
@@ -76,6 +93,23 @@ function loadMessages(): Message[] {
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Thinking mode for reasoning models (Qwen3.5 etc.): toggles the backend's
+  // enable_thinking chat-template flag. Default ON so reasoning models think
+  // out loud; harmless for models whose template ignores the flag. Kept in a
+  // ref so runCompletion always reads the live value, never a stale closure.
+  const [enableThinking, setEnableThinking] = useState<boolean>(loadThinking);
+  const thinkingRef = useRef(enableThinking);
+  useEffect(() => {
+    thinkingRef.current = enableThinking;
+    // Persist so the toggle survives a page refresh within the session.
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(THINKING_KEY, JSON.stringify(enableThinking));
+    } catch {
+      // storage unavailable (private mode, quota) — non-fatal
+    }
+  }, [enableThinking]);
 
   // Restore persisted history once on mount, after hydration, so SSR and the
   // first client render agree (avoids a hydration mismatch from localStorage).
@@ -130,6 +164,11 @@ export function useChat() {
           messages: messagesToSend,
           stream: true,
           use_rag: true,
+          // Thinking models burn tokens on <think> before the answer — the
+          // backend's 512 default truncates mid-reasoning, leaving content
+          // empty. Give thinking a headroom budget; keep 512 otherwise.
+          max_tokens: thinkingRef.current ? 1024 : 512,
+          enable_thinking: thinkingRef.current,
         }),
       });
 
@@ -143,8 +182,22 @@ export function useChat() {
         if (!reader) throw new Error('No response body');
 
         let assistantContent = '';
+        let assistantReasoning = '';
         let buffer = '';
         const decoder = new TextDecoder();
+
+        // Replace the streaming placeholder (or keep patching the growing
+        // reply) with the accumulated content + reasoning so both stream live.
+        const patchLastMessage = (patch: Partial<Message>) => {
+          setMessages((prev) => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = {
+              ...newMessages[newMessages.length - 1],
+              ...patch,
+            };
+            return newMessages;
+          });
+        };
 
         // Add placeholder message
         setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
@@ -191,17 +244,16 @@ export function useChat() {
                   continue;
                 }
 
+                // Reasoning (thinking) deltas arrive before content for
+                // reasoning models; both accumulate into the same message.
+                const reasoningToken = chunk.choices?.[0]?.delta?.reasoning || '';
                 const token = chunk.choices?.[0]?.delta?.content || '';
-                if (token) {
-                  assistantContent += token;
-
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1] = {
-                      role: 'assistant',
-                      content: assistantContent,
-                    };
-                    return newMessages;
+                if (reasoningToken) assistantReasoning += reasoningToken;
+                if (reasoningToken || token) {
+                  if (token) assistantContent += token;
+                  patchLastMessage({
+                    content: assistantContent,
+                    reasoning: assistantReasoning || undefined,
                   });
                 }
               } catch (e) {
@@ -210,11 +262,35 @@ export function useChat() {
             }
           }
         }
+
+        // If the model stopped mid-think (reasoning but no answer text),
+        // surface its reasoning as the reply instead of an empty bubble.
+        // Small Qwen3.5 models emit a 'Thinking Process' outline and then
+        // EOS without closing <think>, so content stays empty otherwise.
+        if (!assistantContent.trim() && assistantReasoning.trim()) {
+          assistantContent = assistantReasoning;
+          assistantReasoning = '';
+        }
+        patchLastMessage({
+          content: assistantContent,
+          reasoning: assistantReasoning || undefined,
+        });
       } else {
         // Fallback for non-streaming
         const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || "";
-        setMessages((prev) => [...prev, { role: 'assistant', content }]);
+        const msg = data.choices?.[0]?.message || {};
+        let content = msg.content || "";
+        let reasoning = msg.reasoning || undefined;
+        // Same mid-think fallback as streaming: reasoning-only replies are
+        // surfaced as the answer so the bubble is never empty.
+        if (!content.trim() && reasoning?.trim()) {
+          content = reasoning;
+          reasoning = undefined;
+        }
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content, ...(reasoning ? { reasoning } : {}) },
+        ]);
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -272,7 +348,11 @@ export function useChat() {
     ];
     for (const m of messages) {
       if (!m.content.trim()) continue;
-      lines.push(`## ${m.role === 'user' ? 'User' : 'Assistant'}`, '', m.content, '');
+      lines.push(`## ${m.role === 'user' ? 'User' : 'Assistant'}`, '');
+      if (m.reasoning?.trim()) {
+        lines.push('**Thinking:**', '', `> ${m.reasoning.trim().split('\n').join('\n> ')}`, '');
+      }
+      lines.push(m.content, '');
       if (m.sources?.length) {
         lines.push('**Sources Used:**', ...m.sources.map((s) => `- ${s.filename}`), '');
       }
@@ -288,5 +368,16 @@ export function useChat() {
     URL.revokeObjectURL(url);
   }, [messages]);
 
-  return { messages, isLoading, sendMessage, editAndResend, regenerate, clearMessages, exportChat };
+  return {
+    messages,
+    isLoading,
+    enableThinking,
+    setEnableThinking,
+    sendMessage,
+    editAndResend,
+    regenerate,
+    clearMessages,
+    exportChat,
+  };
 }
+

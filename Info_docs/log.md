@@ -90,3 +90,19 @@
 - Marked Ponytail Audit (full project) (July 24) as done
 - Marked Literature Review (July 24) as done
 - All backlog items now completed and moved to Done section
+
+## [2026-08-03] implement | Reasoning Token Support for Qwen3.5 Models
+- **Backend**: Added reasoning field to Message type (`frontend/types/index.ts`) to capture model's internal thinking process
+- **Frontend**: Enhanced `useChat` hook (`frontend/hooks/useChat.ts`) with:
+  - Thinking toggle persistence via localStorage
+  - Increased max_tokens (1024 vs 512) when thinking enabled to accommodate reasoning tokens
+  - Streaming handler for reasoning deltas alongside content tokens
+  - Fallback to display reasoning-only responses when content is empty
+  - Export functionality now includes reasoning blocks in markdown output
+- **Frontend UI**: Updated components to display reasoning:
+  - `MessageList.tsx`: Shows thinking section with blockquote formatting
+  - `ChatWindow.tsx`: Added thinking toggle button to header
+  - `ChatModule.tsx`: Connected thinking toggle state
+- **Backend**: FullRAM executor (`backend/app/engines/fullram/executor.py`) updated to handle reasoning field in responses
+- **Tests**: Added test files for load status agreement and split auto mode functionality
+- **Maintenance**: Updated freebuff.txt timestamp

@@ -333,6 +333,7 @@ class FullRAMEngine(BaseEngine):
         completion_tokens = 0
         predictions = []  # structured top-k candidates (masked_lm)
         message = None  # plain-text note for non-generative tasks (masked_lm)
+        finish_reason = "stop"
         
         if is_generative:
             output_ids = output_res[0]  # TaskRouter returns output_ids for generative
@@ -344,6 +345,12 @@ class FullRAMEngine(BaseEngine):
             
             output_res = self.tokenizer.decode(output_ids, skip_special_tokens=True)
             completion_tokens = len(output_ids)
+            # Honest truncation signal: hitting max_new_tokens means "length".
+            # (Previously always reported "stop", which hid thinking-mode
+            # truncation — reasoning eats the whole budget and content comes
+            # out empty.)
+            if completion_tokens >= max_tokens:
+                finish_reason = "length"
             
         elif task_type == "question_answering":
             # Extract text from QA logits
@@ -387,6 +394,7 @@ class FullRAMEngine(BaseEngine):
             "mode": self.mode,
             "input": "provided inputs", 
             "output": output_res,
+            "finish_reason": finish_reason,
             "confidence": f"{confidence:.4f}",
             "predictions": predictions,
             "message": message,

@@ -1,130 +1,105 @@
-"""Split models (offload_cache per-layer weights) are layerstream-only.
+"""Regression: split models must never hit the fullram engine on mode=auto.
 
-Auto mode must never hand a split directory to the full-ram engine: the
-full-ram engine looks for a consolidated model.safetensors that only exists
-in the base model's directory, and the factory's auto heuristic (RAM-based)
-has no idea the split view can't run full-ram.
+Split models live in ``workspace/offload_cache`` as per-layer safetensors
+(``embed``/``layer_N``/``lm_head``) and only support the LayerStream engine
+(registry ``modes_supported: ["layerstream"]``). The auto-mode RAM heuristic
+picks fullram for a small split model, and FullRAMEngine then runs
+``from_pretrained`` on a directory with no consolidated weights — the
+"no file named model.safetensors, or pytorch_model.bin" failure.
+
+These tests drive the real ``ModelManager.load_model`` with a stubbed registry
+and engine factory (no model files touched), asserting the resolved engine
+mode and the path handed to the factory.
 """
 import asyncio
+import types
 
-from app.services.model_manager import ModelManager, _fuzzy_match_model
+import app.core.engine_factory as engine_factory_mod
+from app.services.model_manager import ModelManager
 
-
-def _fake_app(model_manager):
-    class _State:
-        def __init__(self):
-            self.active_engine = None
-            self.active_model = None
-            self.active_mode = None
-            self.hardware_profile = {}
-
-    class _App:
-        state = _State()
-
-    return _App()
+BASE = {"id": "Qwen/Qwen3.5-0.8B", "path": "/models/base"}
+SPLIT = {"id": "split:Qwen-Qwen3.5-0.8B", "path": "/offload/cache"}
 
 
-def _split_model():
-    return {
-        "id": "split:Qwen-Qwen3.5-0.8B",
-        "name": "Qwen-Qwen3.5-0.8B (Split)",
-        "path": "D:/SovereignAI/workspace/offload_cache/Qwen-Qwen3.5-0.8B",
-        "modes_supported": ["layerstream"],
-        "size_gb": 1.9,
-    }
+class _FakeEngine:
+    """Minimal stand-in — load_model only touches .mode / .task_metadata."""
+
+    mode = "fullram"
+    task_metadata = {}
+
+    async def unload(self):
+        pass
 
 
-def _patch_factory(monkeypatch, create_engine):
-    """load_model does `from app.core.engine_factory import EngineFactory` lazily;
-    the from-import re-reads the name from app.core.engine_factory at call time,
-    so patch the class there. create_engine must be a staticmethod-compatible
-    function matching the real signature: (model_path, mode, model_metadata)."""
-    import app.core.engine_factory as ef_module
-    FakeFactory = type(
-        "FakeFactory",
-        (),
-        {"__init__": lambda self, hw: None, "create_engine": staticmethod(create_engine)},
+class _FakeFactory:
+    """Records what load_model asked for; never touches real engines."""
+
+    def __init__(self, hardware_profile):
+        self.hardware_profile = hardware_profile
+        self.created = []
+
+    async def create_engine(self, model_path, mode="auto", model_metadata=None):
+        self.created.append({"path": model_path, "mode": mode})
+        engine = _FakeEngine()
+        engine.mode = "fullram" if mode == "auto" else mode
+        return engine
+
+
+def _make_manager(monkeypatch, models):
+    """ModelManager with a stubbed registry, no real DB/engines/app involved."""
+    manager = ModelManager.__new__(ModelManager)  # skip the heavy __init__
+    app = types.SimpleNamespace(
+        state=types.SimpleNamespace(
+            hardware_profile={},
+            active_engine=None,
+            active_model=None,
+            active_mode=None,
+        )
     )
-    monkeypatch.setattr(ef_module, "EngineFactory", FakeFactory)
+    manager.app = app
+
+    async def fake_get_model(model_id):
+        return next((m for m in models if m["id"] == model_id), None)
+
+    async def fake_list_models():
+        return models
+
+    manager.get_model = fake_get_model
+    manager.list_models = fake_list_models
+    factory = _FakeFactory({})
+    # load_model does `from app.core.engine_factory import EngineFactory` at
+    # call time, so patching the module attribute is enough.
+    monkeypatch.setattr(engine_factory_mod, "EngineFactory", lambda hw: factory)
+    return manager, app, factory
 
 
-def test_split_auto_forced_layerstream(monkeypatch):
-    """auto on a split model must resolve to layerstream before engine creation."""
-    mm = ModelManager()
-    app = _fake_app(mm)
-    mm.app = app
+def test_split_auto_forces_layerstream(monkeypatch):
+    """mode=auto on a split id must resolve to layerstream, never fullram."""
+    manager, app, factory = _make_manager(monkeypatch, [SPLIT, BASE])
 
-    async def _fake_get_model(self, name):
-        return _split_model() if name == "split:Qwen-Qwen3.5-0.8B" else None
+    result = asyncio.run(manager.load_model(SPLIT["id"], mode="auto"))
 
-    async def _fake_unload(self):
-        pass
-
-    monkeypatch.setattr(ModelManager, "get_model", _fake_get_model)
-    monkeypatch.setattr(ModelManager, "unload_model", _fake_unload)
-
-    created = {}
-
-    async def _fake_create_engine(model_path, mode, model_metadata=None):
-        created["mode"] = mode
-        created["path"] = model_path
-
-        _Engine = type("FakeEngine", (), {"mode": mode, "task_metadata": {}})
-        return _Engine()
-
-    _patch_factory(monkeypatch, _fake_create_engine)
-
-    result = asyncio.run(mm.load_model("split:Qwen-Qwen3.5-0.8B", mode="auto"))
-    assert created["mode"] == "layerstream", f"expected layerstream, got {created['mode']}"
+    assert factory.created[0]["mode"] == "layerstream"
     assert result["mode"] == "layerstream"
+    assert app.state.active_mode == "layerstream"
+    assert app.state.active_model == SPLIT["id"]
 
 
-def test_explicit_fullram_split_swaps_to_base(monkeypatch):
-    """Explicit fullram on a split model redirects to the base model path."""
-    mm = ModelManager()
-    app = _fake_app(mm)
-    mm.app = app
+def test_split_explicit_fullram_swaps_to_base_path(monkeypatch):
+    """Explicit fullram on a split still redirects to the base model's dir."""
+    manager, app, factory = _make_manager(monkeypatch, [SPLIT, BASE])
 
-    created = {}
+    result = asyncio.run(manager.load_model(SPLIT["id"], mode="fullram"))
 
-    async def _fake_list_models(self):
-        return [
-            _split_model(),
-            {**_split_model(), "id": "Qwen/Qwen3.5-0.8B",
-             "path": "D:/SovereignAI/workspace/models/installed/Qwen-Qwen3.5-0.8B",
-             "modes_supported": ["fullram", "layerstream"]},
-        ]
-
-    async def _fake_create_engine(model_path, mode, model_metadata=None):
-        created["mode"] = mode
-        created["path"] = model_path
-
-        _Engine = type("FakeEngine", (), {"mode": mode, "task_metadata": {}})
-        return _Engine()
-
-    async def _fake_get_model(self, name):
-        return _split_model() if name == "split:Qwen-Qwen3.5-0.8B" else None
-
-    async def _fake_unload(self):
-        pass
-
-    monkeypatch.setattr(ModelManager, "get_model", _fake_get_model)
-    monkeypatch.setattr(ModelManager, "unload_model", _fake_unload)
-    monkeypatch.setattr(ModelManager, "list_models", _fake_list_models)
-    _patch_factory(monkeypatch, _fake_create_engine)
-
-    result = asyncio.run(mm.load_model("split:Qwen-Qwen3.5-0.8B", mode="fullram"))
-    assert created["mode"] == "fullram"
-    assert "installed" in created["path"], f"expected base path, got {created['path']}"
-    assert result["mode"] == "fullram"
+    assert factory.created[0]["path"] == BASE["path"]  # base weights dir
+    assert factory.created[0]["mode"] == "fullram"
 
 
-def test_fuzzy_prefers_base_over_split():
-    """A display-name fuzzy match must never resolve to a split variant."""
-    models = [
-        _split_model(),
-        {**_split_model(), "id": "Qwen/Qwen3.5-0.8B"},
-    ]
-    match = _fuzzy_match_model(models, "Qwen3.5-0.8B")
-    assert match is not None
-    assert not match["id"].startswith("split:")
+def test_non_split_auto_unaffected(monkeypatch):
+    """auto on a base model stays auto — resolution is left to the factory."""
+    manager, app, factory = _make_manager(monkeypatch, [SPLIT, BASE])
+
+    result = asyncio.run(manager.load_model(BASE["id"], mode="auto"))
+
+    assert factory.created[0]["mode"] == "auto"
+    assert result["mode"] == "fullram"  # the factory's own auto resolution

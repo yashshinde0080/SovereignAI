@@ -257,12 +257,12 @@ class ModelManager:
         # Unload current if any
         await self.unload_model()
         
-        # Split variants are layerstream-only: they live in offload_cache as
-        # per-layer safetensors with no consolidated model.safetensors, so the
-        # factory's auto heuristic must never hand one to a full-ram engine.
+        # Split models are stored in offload_cache as per-layer safetensors and
+        # only support the LayerStream engine. auto must never hand them to
+        # fullram (which would look for a consolidated model.safetensors that
+        # only exists in the base model dir).
         if mode == "auto" and model["id"].startswith("split:"):
             mode = "layerstream"
-            print(f"LOAD: split model is layerstream-only; forcing mode=layerstream")
 
         # If we're in fullram mode but selected a split model, try to use the base model
         model_path = model["path"]

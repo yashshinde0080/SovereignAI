@@ -16,9 +16,10 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useChat } from '@/hooks/useChat';
+import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
-import { Download, Trash2, FileText, X, Sparkles } from 'lucide-react';
+import { Download, Trash2, FileText, X, Sparkles, Brain } from 'lucide-react';
 import { errMsg } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -38,7 +39,17 @@ interface ChatModuleProps {
 
 export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
   const autoAskSent = useRef(false);
-  const { messages, isLoading, sendMessage, editAndResend, regenerate, clearMessages, exportChat } = useChat();
+  const {
+    messages,
+    isLoading,
+    enableThinking,
+    setEnableThinking,
+    sendMessage,
+    editAndResend,
+    regenerate,
+    clearMessages,
+    exportChat,
+  } = useChat();
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [docs, setDocs] = useState<RAGDoc[]>([]);
   const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -241,6 +252,23 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
             </motion.div>
           )}
         </AnimatePresence>
+        {/* Thinking toggle — reasoning models (Qwen3.5 etc.) emit a
+            <think> trace when enabled; the backend strips it from content
+            and streams it separately so it renders in a collapsible block. */}
+        <div className="mb-2 flex items-center justify-end gap-2 px-1">
+          <label
+            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+            title="Let reasoning models think out loud before answering"
+          >
+            <Brain className="h-3.5 w-3.5" />
+            Thinking
+          </label>
+          <Switch
+            checked={enableThinking}
+            onCheckedChange={setEnableThinking}
+            aria-label="Toggle thinking mode"
+          />
+        </div>
         <PromptInput
           onSend={handleSend}
           disabled={isLoading}

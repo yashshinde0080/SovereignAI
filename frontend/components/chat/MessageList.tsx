@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { Message, RagSource } from '@/types';
-import { User, Bot, Copy, Check, Pencil, RefreshCw, FileText } from 'lucide-react';
+import { User, Bot, Copy, Check, Pencil, RefreshCw, FileText, Brain, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -54,6 +54,44 @@ const CodeBlock = ({ inline, className, children }: { inline?: boolean; classNam
     <code className={cn("bg-muted/50 rounded-md px-1.5 py-0.5 text-sm font-mono text-primary", className)}>
       {children}
     </code>
+  );
+};
+
+// Collapsible reasoning block for assistant messages with a <think> trace.
+// Auto-opens while the reasoning is still streaming (live); collapsed once the
+// answer starts. The user's own toggle wins either way.
+const ThinkingBlock = ({ reasoning, live }: { reasoning: string; live?: boolean }) => {
+  const [open, setOpen] = useState(live);
+  return (
+    <div className="mb-3 rounded-lg border border-border/50 bg-muted/40 overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        title={open ? 'Hide reasoning' : 'Show reasoning'}
+        aria-expanded={open}
+      >
+        <Brain className={cn('h-3.5 w-3.5 shrink-0', live && 'animate-pulse')} />
+        <span className="font-semibold tracking-wide">{live ? 'Thinking…' : 'Thinking'}</span>
+        <ChevronDown
+          className={cn('h-3.5 w-3.5 ml-auto shrink-0 transition-transform duration-200', open && 'rotate-180')}
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <p className="whitespace-pre-wrap px-3 pb-3 text-[13px] leading-relaxed text-muted-foreground/90 italic">
+              {reasoning}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
 
@@ -178,6 +216,27 @@ export function MessageList({ messages, onEditMessage, onRegenerate, editingInde
               {message.role === 'user' ? (
                 <p className="whitespace-pre-wrap">{message.content}</p>
               ) : (
+                <>
+                {message.reasoning && (
+                  <ThinkingBlock
+                    reasoning={message.reasoning}
+                    live={isLoading && index === messages.length - 1 && !message.content.trim()}
+                  />
+                )}
+                {!message.content.trim() && !message.reasoning &&
+                  isLoading && index === messages.length - 1 && (
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse">
+                      <Brain className="h-4 w-4" />
+                      Thinking…
+                    </p>
+                  )}
+                {message.reasoning && !message.content.trim() &&
+                  !(isLoading && index === messages.length - 1) && (
+                    <p className="text-sm text-muted-foreground">
+                      The model stopped thinking before producing an answer — try
+                      asking again, or turn thinking off for a quicker reply.
+                    </p>
+                  )}
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -193,6 +252,7 @@ export function MessageList({ messages, onEditMessage, onRegenerate, editingInde
                 >
                   {message.content}
                 </ReactMarkdown>
+                </>
               )}
 
               {message.role === 'assistant' && message.sources && message.sources.length > 0 && (

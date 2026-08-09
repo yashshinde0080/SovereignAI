@@ -106,3 +106,37 @@
 - **Backend**: FullRAM executor (`backend/app/engines/fullram/executor.py`) updated to handle reasoning field in responses
 - **Tests**: Added test files for load status agreement and split auto mode functionality
 - **Maintenance**: Updated freebuff.txt timestamp
+
+## [2026-08-05] implement | PRD & TRD Documentation + Project Review
+- **Documentation**: Created `PRD.md` (102 lines) — Product Requirements Document with user stories, acceptance criteria, and success metrics
+- **Documentation**: Created `TRD.md` (150 lines) — Technical Requirements Document with architecture decisions, API contracts, and infrastructure specs
+- **Review**: Completed project review; removed `diagrams/sovereignai-architecture.mmd` (63 lines) as outdated
+- **Planning**: Updated `TODOS.md` with 29 new lines — refined backlog across 5 phases (Core Engine → UI → Desktop/USB → Ecosystem → Hardening)
+
+## [2026-08-09] implement | TurboQuant KV Cache Hardening + Benchmark Suite + Repository Cleanup
+- **Repository Cleanup** (commit 841c5d1): Major housekeeping — removed 13 stale files (1,798 lines deleted):
+  - `QA_FIXES_REPORT.md`, `Recent_work.md`, `SECURITY_FIXES_REPORT.md`, `TODOS.md`, `folder_structure.md`, `issue.md`
+  - `portability_audit.py`, `qa-home-evidence.png`, `qa-home.png`, `qa.md`, `quant.md`, `verify_workspace.py`
+  - Cleared root clutter, consolidated documentation into wiki
+
+- **TurboQuant Core Improvements** (commit e843b5a): Enhanced KV cache compression pipeline:
+  - `config.py` (+13/-0): Added rotation seed, QJL dim scaling, bit-width validation
+  - `kv_cache.py` (+293/-78): Rewrote `TurboQuantKVCache` with chunked rotation, batched QJL projection, per-layer codebooks
+  - `qjl.py` (+54/-1): Optimized Johnson-Lindenstrauss projection with precomputed random matrices
+  - `__init__.py`, `__main__.py`: Exported public API, added CLI smoke test
+
+- **Benchmark Suite** (commit 26a5523): Added comprehensive evaluation harness:
+  - `backend/benchmarks/accuracy_eval.py` (261 lines): End-to-end accuracy evaluation with perplexity, token accuracy, reconstruction MSE
+  - `backend/benchmarks/qjl_ablation.py` (181 lines): Ablation study varying QJL dimensions, rotation seeds, bit-widths
+  - `backend/app/config.py`: Added `turboquant_benchmark_mode` flag
+
+- **Test Coverage** (commit 8194c79): Created `backend/tests/test_turboquant.py` (399 lines):
+  - Unit tests for PolarQuant encoding/decoding, QJL projection, codebook reconstruction
+  - Integration tests for LayerStream + TurboQuant executor path
+  - Property-based tests: reconstruction MSE < 0.02 on unit vectors, memory reduction > 4×
+  - Benchmark regression tests with `eval_smoke.json` and `eval_gate_2026-08-09.json` gates
+
+- **Automation & Reporting** (commits 8194c79, 1cff700):
+  - `reviews/autoplan-report-2026-08-09.md` (412 lines): Autoplan-generated implementation report with phase breakdown, risk assessment, and rollout checklist
+  - Updated `accuracy_eval.py` with streaming JSONL output for CI integration
+  - Evaluation gates: `eval_smoke.json` (fast CI gate), `eval_gate_2026-08-09.json` (full release gate)

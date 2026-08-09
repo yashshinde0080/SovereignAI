@@ -13,12 +13,19 @@ class TurboQuantConfig:
     # Quantization bits per coordinate (3.5 = lossless, 2.5 = near-lossless)
     bits_per_coord: float = 3.5
 
-    # QJL residual correction dimension (None = auto = head_dim)
+    # QJL residual correction dimension. Kept None at construction so the
+    # runtime "auto" path resolves it (kv_cache.py uses `qjl_dim or head_dim`);
+    # a hardcoded default here silently disabled auto for head_dim != 128.
     qjl_dim: Optional[int] = None
 
     # Enable/disable stages
     enable_polarquant: bool = True
     enable_qjl: bool = True
+
+    # Bit-pack PolarQuant indices (base-`levels` into uint32 words, 9 per word
+    # at 3.5 bits => ~0.44 B/coord). Off keeps one byte per index (unpacked
+    # fallback for debugging / level counts too large to pack).
+    bit_pack: bool = True
 
     # Rotation matrix strategy
     rotation_type: Literal["random", "hadamard"] = "random"
@@ -31,7 +38,3 @@ class TurboQuantConfig:
 
     # Collect debug stats
     collect_stats: bool = False
-
-    def __post_init__(self):
-        if self.qjl_dim is None:
-            self.qjl_dim = 128  # Default head_dim, overridden at runtime

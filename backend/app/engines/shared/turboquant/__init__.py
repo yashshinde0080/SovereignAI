@@ -1,7 +1,7 @@
 from .config import TurboQuantConfig
 from .codebook import get_lloyd_max_centroids, quantize_polar
 from .polarquant import get_rotation_matrix, apply_rotation, inverse_rotation
-from .qjl import get_qjl_projection, qjl_encode, qjl_decode
+from .qjl import get_qjl_projection, qjl_encode, qjl_decode, pack_qjl_bits, unpack_qjl_bits
 from .kv_cache import TurboQuantKVCacheManager, QuantizedKVCache
 
 try:
@@ -19,6 +19,8 @@ __all__ = [
     "get_qjl_projection",
     "qjl_encode",
     "qjl_decode",
+    "pack_qjl_bits",
+    "unpack_qjl_bits",
     "TurboQuantKVCacheManager",
     "QuantizedKVCache",
     "TurboQuantHFProxyCache",

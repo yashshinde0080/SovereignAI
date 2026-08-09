@@ -63,8 +63,8 @@ def test_kv_cache():
     compressed_mb = mgr.get_size_mb()
     fp16_mb = (k.numel() + v.numel()) * 2 / 1024**2
     ratio = fp16_mb / compressed_mb
-    # ponytail: ratio < 1x without bit-packing; to hit 3-6x, pack indices into
-    # int32/int64 (3.5 bits/coord → 9 indices/word) and reduce QJL dim < head_dim
+    # Bit-packing shipped (indices 9/word + QJL 32/word): expect ~3-4x here.
+    # The ~6x headline needs codebooks that absorb magnitudes (no scale tax).
     print(f"  Compression: {fp16_mb:.1f} MB -> {compressed_mb:.1f} MB ({ratio:.1f}x) OK")
 
     # Test with QJL off (PolarQuant only, 1 byte/coord)

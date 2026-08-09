@@ -43,7 +43,9 @@ class Settings(BaseSettings):
     default_mode: str = "auto"
 
     # TurboQuant KV Cache Compression
-    turboquant_enabled: bool = True
+    # Off by default: the shipped cache is ~1x vs FP16 (no bit-packing yet) and the
+    # 6x claim is unvalidated. Re-enable only after the accuracy eval gate passes.
+    turboquant_enabled: bool = False
     turboquant_bits: float = 3.5
     turboquant_qjl_enabled: bool = True
     turboquant_rotation: str = "random"

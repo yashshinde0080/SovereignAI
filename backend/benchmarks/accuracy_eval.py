@@ -28,10 +28,7 @@ fp16 scales on top of its quantized indices, i.e. strictly less memory).
 import argparse
 import json
 import math
-import os
-import tempfile
 import time
-import zipfile
 
 import torch
 
@@ -131,13 +128,9 @@ def needle_recall(model, tokenizer, tq_kwargs, context_tokens=2048, generate=8):
     cache = _get_cache(out)
     next_logits = out.logits[:, -1, :]  # [1, V]
     pwd_ids = tokenizer("PINEAPPLE", add_special_tokens=False, return_tensors="pt").input_ids
-    # mean log-prob over the password token(s)
-    logp = 0.0
-    logits = next_logits
-    for t in pwd_ids[0]:
-        logp += torch.log_softmax(logits, dim=-1)[0, t].item()
-        logits = logits  # single-token password; loop kept for multi-token
-    logp = logp / pwd_ids[0].numel()
+    # Mean log-prob over the password token(s). Approximation: all tokens are
+    # scored against the final probe logits (fine for a fixed single word).
+    logp = torch.log_softmax(next_logits, dim=-1)[0, pwd_ids[0]].mean().item()
 
     # Greedy continuation, 1 token at a time (exercises per-token update path).
     gen = []
@@ -152,9 +145,15 @@ def needle_recall(model, tokenizer, tq_kwargs, context_tokens=2048, generate=8):
     return logp, text, ("PINEAPPLE" in text or "Pineapple" in text)
 
 
-def get_wikitext_slice(tokens: int) -> str:
+def get_wikitext_slice(tokens: int) -> tuple[str, str]:
     """Fetch a slice of wikitext-2 test (datasets-server HTTP API, no pyarrow
-    needed); fall back to synthetic text offline."""
+    needed); fall back to synthetic text offline.
+
+    ``tokens`` is a character budget (chars ~= tokens * 4). Returns
+    ``(text, source)`` where source is "wikitext" or "synthetic-fallback" so
+    callers can tell a network-offline run from a real one (a degenerate
+    fallback eval must never be mistaken for a gate pass).
+    """
     import json as _json
     import urllib.request as _url
 
@@ -165,11 +164,11 @@ def get_wikitext_slice(tokens: int) -> str:
             data = _json.load(resp)
         lines = [r["row"]["text"].strip() for r in data["rows"] if len(r["row"]["text"].strip()) > 80]
         if lines:
-            return "\n".join(lines)[: tokens * 4]
+            return "\n".join(lines)[: tokens * 4], "wikitext"
         raise RuntimeError("no long lines in wikitext rows")
     except Exception as e:  # pragma: no cover - network fallback
         print(f"    wikitext fetch failed ({e}); using synthetic text")
-        return "The quick brown fox jumps over the lazy dog. " * (tokens // 9)
+        return "The quick brown fox jumps over the lazy dog. " * (tokens // 9), "synthetic-fallback"
 
 
 def run_config(model, tokenizer, label, tq_kwargs, text, context, out):
@@ -205,12 +204,12 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
     model.eval()
 
-    text = get_wikitext_slice(args.tokens)
+    text, text_source = get_wikitext_slice(args.tokens)
     # Trim to a multiple of CHUNK for clean flushes.
     ids = tokenizer(text, return_tensors="pt").input_ids[0]
     ids = ids[: (ids.numel() // CHUNK) * CHUNK]
     text = tokenizer.decode(ids)
-    print(f"Eval text: {ids.numel()} tokens, model {model_id}")
+    print(f"Eval text: {ids.numel()} tokens, source {text_source}, model {model_id}")
 
     configs = [
         ("baseline", None),
@@ -242,6 +241,8 @@ def main():
     print("=" * 78)
     print(f"Gate: ppl degradation < {GATE_PPL_DEGRADATION*100:.0f}% AND needle logp within "
           f"{GATE_NEEDLE_LOGPROB_FACTOR:.0f}x of baseline")
+    print(f"NOTE: ~{ids.numel()} scored tokens is a coarse gate (fine for catching catastrophic "
+          f"failure; a release-grade gate should use 4-8k+ tokens). Text source: {text_source}")
     qjl_on = next(r for r in results if r["label"] == "tq-3.5+qjl")
     qjl_off = next(r for r in results if r["label"] == "tq-3.5-noqjl")
     if qjl_on["perplexity"] < qjl_off["perplexity"]:
@@ -253,7 +254,8 @@ def main():
 
     if args.out:
         with open(args.out, "w") as f:
-            json.dump({"model": model_id, "tokens": ids.numel(), "results": results}, f, indent=2)
+            json.dump({"model": model_id, "tokens": ids.numel(),
+                       "text_source": text_source, "results": results}, f, indent=2)
         print(f"Results written to {args.out}")
 
 

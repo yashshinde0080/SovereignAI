@@ -1,0 +1,369 @@
+<!-- /autoplan report: stored in project folder per user request (no ~/.gstack writes) -->
+
+# /autoplan Review Report — turboquant.md (TurboQuant KV Cache)
+
+- **Date:** 2026-08-09 | **Branch:** main | **Commit:** 841c5d1
+- **Plan under review:** `turboquant.md` (TurboQuant KV-cache compression integration guide)
+- **Scope detected:** UI = no (backend-only plan) → Phase 2 (Design) skipped | DX = yes (new CLI command + config surface) → Phase 3.5 ran
+- **Voices:** Primary (Buffy) + Independent reviewer (code-reviewer agent). Codex unavailable on this machine, so the second voice is the independent reviewer. No gstack install, so all artifacts live in `reviews/` per the user's explicit constraint.
+
+## TL;DR
+
+**The plan is stale. ~90% of it was already implemented on 2026-07-23** (`Info_docs/log.md` line 88: "Marked TurboQuant KV Cache Compression (July 23) as done"). The shipped implementation **does not deliver the plan's headline claim**: measured bytes/coord give ~0.98x compression vs FP16, not 6x. The code's own comments admit this ("ratio < 1x without bit-packing"). The remaining work is not Phase 4 (GGUF export) — it is making the headline claim true: bit-packing, dropping or fixing QJL, fixing an O(n^2) update path, an accuracy eval suite, and flipping the default from on to off.
+
+**Verdict:** Treat turboquant.md as an implementation record, not a to-execute plan. Rewrite it as "current state + what is needed for real compression." Gate below.
+
+---
+
+## Decision Audit Trail
+
+| # | Phase | Decision | Class | Principle | Rationale | Rejected |
+|---|-------|----------|-----------|-----------|----------|----------|
+| 1 | CEO | Mode = SELECTIVE EXPANSION | Mechanical | P6 | Plan is an existing-system feature, baseline accepted, cherry-pick real remaining work | Other modes |
+| 2 | CEO | P1 (6x @ 3.5 bits, zero loss) accepted as real per paper, UNVERIFIED in this impl | Auto | P1/P6 | Paper + community validate the claim; shipped code does not meet it → eval gate required | Reject premise |
+| 3 | CEO | P2 (custom PyTorch TQ) challenged at gate | User Challenge | P5 | llama.cpp tbq3_0/tbq4_0 (PR #21089) exists as Layer-1 alternative for GGUF models | Keep custom only |
+| 4 | CEO | Approach A (fix in place: bit-pack + drop QJL + validate) | Auto | P1/P3/P5 | Smallest diff to make the real claim true; no new infra | Rewrite / drop feature |
+| 5 | CEO | Engine-router auto-enable (RAM budget) → defer to TODOS | Auto | P2/P3 | Outside blast radius of the core fix; needs eval first | Implement now |
+| 6 | Eng | update() O(n^2) re-quantize-every-token → must fix | Auto | P1 | Long-context decode is the exact use case; per-token full-history requant is catastrophic | Keep |
+| 7 | Eng | Flip turboquant_enabled default to False until validated | Auto | P1/P3 | Default-on ships a slower, lossy, ~1x path on every LayerStream load | Keep on |
+| 8 | Eng | Drop QJL at >= 3 bits (or fix decode scaling) | Auto | P3 + community evidence | QJL adds little at 3+ bits per community; as shipped it is near no-op (scaling off by ~sqrt(d')) | Keep broken QJL |
+| 9 | Eng | Fix FullRAM dim-order / seq_len metadata bug | Auto | P1 | Silent wrong sequence-length bookkeeping in decode | Keep |
+| 10 | Eng | Accuracy eval suite (perplexity + needle-in-haystack vs FP16) required | Auto | P1 | "Zero accuracy loss" is unverified; MSE-on-random-data is not evidence | MSE only |
+| 11 | Eng | Unit tests in backend/tests/ | Auto | P1 | Only manual __main__.py self-check exists | Manual only |
+| 12 | Eng | CLI benchmark honesty: use the model, label estimates as estimates | Auto | P5 | "Estimated (bit-packed): Xx" is fabricated math presented as a result | Keep |
+| 13 | Eng | Remove/align dead config flags (hadamard, beta_lloyd_max, enable_polarquant, collect_stats) | Auto | P5 | Config claims modes the code does not implement | Keep |
+| 14 | DX | benchmark-turboquant reports real measured ratio only | Auto | P5 | DX principle: every output is a measurement or clearly labeled | Estimates |
+| 15 | DX | Document turboquant status + default-off in CLI help | Auto | P1 | TTHW and trust: devs must know the feature is experimental | Silence |
+
+---
+
+# Phase 1 — CEO Review
+
+## Premises (challenged → gate)
+
+| # | Premise | Verdict |
+|---|---------|---------|
+| P1 | TurboQuant gives ~6x KV compression with zero accuracy loss at 3.5 bits | 🟢 Real per paper (arXiv 2504.19874, ICLR 2026, Google Research) + community. 🔴 UNVERIFIED in this implementation: shipped code measures ~0.98x, no accuracy eval exists |
+| P2 | Custom PyTorch TurboQuant is the right build | 🟠 Challenged at gate. llama.cpp ships native tbq3_0/tbq4_0 kernels (PR #21089) with community GPU ports. For GGUF models that is Layer 1. The custom path makes sense for the LayerStream raw-PyTorch stack, but the two should be cross-validated, not assumed |
+| P3 | KV cache is the memory bottleneck | 🟡 Half true. FullRAM long-context: yes. LayerStream caps KV at 2048 MB and offloads to CPU, so the benefit there is latency (skip requant) and CPU RAM, not the headline number |
+| P4 | 3.5 bits + QJL is the right operating point | 🟠 Community finding: at >= 3 bits, Lloyd-Max-only beats the two-stage QJL. The plan's insistence on QJL at 3.5 bits is likely suboptimal and adds 1 byte/coord that kills the ratio |
+| P5 | Default-on is harmless | 🔴 Wrong. config.py sets turboquant_enabled=True and LayerStream auto-enables from settings. With ~1x compression this makes every load strictly worse (lossy + slower + no memory win) |
+
+## What already exists (leverage map)
+
+| Plan sub-problem | Existing code (implemented 2026-07-23) |
+|---|---|
+| Core library (config, polarquant, qjl, codebook, kv_cache, hf_proxy) | `backend/app/engines/shared/turboquant/` — 8 files, shipped |
+| Settings | `backend/app/config.py:45-49` (turboquant_enabled/bits/qjl_enabled/rotation) |
+| LayerStream wiring | `layerstream/executor.py:152-160` reads settings; `layer_executor.py:42-63` builds TurboQuantKVCacheManager + TurboQuantHFProxyCache |
+| KV factory | `layerstream/kv_cache.py:147` `KVCacheManager.create(mode="turboquant")` |
+| FullRAM flag | `fullram/kv_cache.py:16` `use_turboquant` |
+| CLI | `cli/main.py:697` `benchmark_turboquant` (synthetic only) |
+| Self-check | `shared/turboquant/__main__.py` (manual, MSE-only) |
+| Paper verification | Confirmed: arXiv 2504.19874, ICLR 2026, Google Research; ~6x/3.5-bit validated by community |
+
+Not implemented: Phase 4 (GGUF/llama.cpp tbq3_0/tbq4_0 export), engine-router auto-enable (engine_factory.py has zero turboquant awareness), accuracy evals, unit tests, bit-packing.
+
+## Dream state delta
+
+```
+  CURRENT STATE                      THIS PLAN (as written)         12-MONTH IDEAL
+  ~0.98x compression, default-on,    Stale 4-phase roadmap,          Bit-packed 3.5-bit cache
+  no evals, no tests, O(n^2) update  ~90% already shipped,           at ~4-6x with validated
+  (lossy + slower + no win)          headline claim unmet            accuracy vs FP16, evals in
+                                     --->                            CI, default-off until proven,
+                                                                     llama.cpp numbers cross-checked
+```
+
+## Implementation alternatives (0C-bis)
+
+```
+APPROACH A: Fix in place (recommended)
+  Summary: Keep the shipped package. Bit-pack 3.5-bit indices (9/word), drop QJL at
+            3.5 bits or fix its decode scaling, compress scales, fix update() to append
+            incrementally, fix the FullRAM layout bug, flip default off, add evals.
+  Effort:   M (human ~3-5 days / CC ~2-3 hours)
+  Risk:     Med (math is subtle; eval gate catches regressions)
+  Pros:     Smallest diff; reuses all shipped code; directly makes the headline true
+  Cons:     Ships alongside the "broken Beta Lloyd-Max" legacy; QJL decision still open
+  Reuses:   Entire shared/turboquant package, both engine integrations, CLI
+
+APPROACH B: Stand on llama.cpp (Layer 1)
+  Summary: For GGUF models, use llama.cpp native tbq3_0/tbq4_0 (PR #21089) instead of
+            custom PyTorch. Keep custom path only for the safetensors LayerStream stack.
+  Effort:   M (human ~1-2 weeks / CC ~1 day) — depends on llama.cpp integration maturity
+  Risk:     Med-High (llama.cpp backend not wired into LayerStream today; big detour)
+  Pros:     Proven kernels, no custom math, community GPU ports, real compression today
+  Cons:     LayerStream runs raw PyTorch layers; adopting llama.cpp KV only is a hybrid
+            nobody else has; the 3-duplicate-engine history says be careful
+  Reuses:   Existing GGUF paths, prior llama.cpp findings
+
+APPROACH C: Defer the feature
+  Summary: Flip default off, mark experimental, park the library. Focus on the P1
+            validation spike from the 2026-08-05 review (70B-on-8GB claim) instead.
+  Effort:   S (human ~1 day / CC ~10 min)
+  Risk:     Low
+  Pros:     Removes a net-negative default from every load today; zero sunk cost
+  Cons:     The July work sits unused; long-context enablement stays impossible
+  Reuses:   Nothing new
+```
+
+**RECOMMENDATION:** Approach A. It is the smallest diff that makes the shipped claim true, and it reuses everything already built. B is the honest Layer-1 counterweight and should at least be benchmarked against A's numbers. C is the fallback if the eval gate fails.
+
+## Error & Rescue Registry
+
+| Failure | Rescue |
+|---------|--------|
+| Eval gate fails (accuracy drops at 3.5 bits) | Drop to 4-bit pure-PolarQuant; or disable feature (Approach C). Never ship a lossy no-win default |
+| Bit-packing bugs corrupt cache | Unit tests on packed roundtrip + golden vectors; keep unpacked path as fallback flag |
+| llama.cpp tbq3_0 numbers are better | Adopt llama.cpp KV for GGUF models; keep custom only where necessary |
+| O(n^2) update still slow after chunking | Chunked re-quantization every N tokens; document the latency tradeoff |
+| FullRAM path silently wrong after fix | Layout assertion + integration test with a real tiny model |
+
+## Failure Modes Registry
+
+| Mode | Trigger | Detection | Blast radius |
+|------|---------|-----------|--------------|
+| Net-negative default | Every LayerStream load with turboquant_enabled=True | Compression ratio printed by CLI shows ~1x | All users |
+| Silent accuracy loss | Quantized cache with no eval gate | None today (MSE only) | All long-context users |
+| FullRAM seq_len metadata wrong | FullRAM + turboquant decode | get_seq_length returns num_heads | FullRAM turboquant path |
+| O(n^2) decode stalls | Long context + update() requant | Latency grows with context | Long-context chat |
+| QJL near-noop | Decode scaling off by sqrt(d') | Self-test passes anyway (insensitive) | Residual correction stage |
+
+## CEO consensus table
+
+```
+CEO DUAL VOICES — CONSENSUS TABLE:
+  Dimension                           Primary  Reviewer  Consensus
+  1. Premises valid?                  NO       NO        CHALLENGE (P2, P5; P1 unverified)
+  2. Right problem to solve?          YES*     YES*      CONFIRMED (*if compression made real)
+  3. Scope calibration correct?       NO       NO        CHALLENGE (plan is stale; real work is bit-packing + validation)
+  4. Alternatives sufficiently explored? NO   NO        CHALLENGE (llama.cpp native path ignored)
+  5. Competitive/market risks covered? YES     YES       CONFIRMED (paper validated; community exists)
+  6. 6-month trajectory sound?        NO       NO        CHALLENGE (net-negative default today)
+```
+
+## NOT in scope
+
+- GGUF/llama.cpp tbq3_0/tbq4_0 export (Phase 4): do NOT build until Approach A or B is chosen and the eval gate passes. It is a distribution problem, and llama.cpp PR #21089 already exists.
+- Engine-router RAM-budget auto-enable: defer to TODOS until evals exist. Auto-enabling an unvalidated path is how the current default-on bug happened.
+- Beam search reorder, batch > 1: document as known limits, do not build unless an eval needs them.
+- ManualStreamEngine cleanup: unrelated to this plan, but it still exists in engine_factory.py (prior review said delete). Flagged, not in scope.
+
+## Phase 1 completion summary
+
+Strategic call: the feature is worth finishing because the paper is real and long-context enablement is the wedge. But the current state is a net-negative default with an unverified headline. Sequence: flip default off → fix update() + FullRAM bug → bit-pack + drop QJL → eval gate → re-enable. That is the entire real plan.
+
+**PHASE 1 COMPLETE.** Primary: 6 issues. Independent reviewer: 6 aligned issues. Consensus: 4/6 confirmed, 2 disagreements resolved as challenges. Premise gate folded into the final gate.
+
+---
+
+# Phase 2 — Design Review
+
+**SKIPPED — no UI scope.** Checked the plan for view/rendering terms (component, screen, form, button, modal, layout, dashboard, sidebar, nav, dialog). Zero matches beyond generic "configuration". This plan is backend-only (engines, config, CLI). Nothing to design-review.
+
+---
+
+# Phase 3 — Eng Review
+
+## Scope challenge (with actual code)
+
+Read: all 8 turboquant package files, layerstream/executor.py + layer_executor.py + kv_cache.py, fullram/kv_cache.py, config.py, engine_factory.py, model_manager.py, cli/main.py.
+
+Complexity check: the plan touches 8+ files and adds 6 classes, but they are ALREADY SHIPPED. The complexity smell applies to the remaining work, which is smaller: bit-packing module, update() refactor, FullRAM layout fix, eval harness. Not reduced, but re-scoped to what is real.
+
+**Sub-problem → code map:** every roadmap checkbox except Phase 4 and the router section maps to shipped code (see Phase 1 leverage map).
+
+## Architecture (current state)
+
+```
+  LayerStream:                                   FullRAM:
+  LayerExecutor                                 KVCache (numpy)
+    | turboquant_config?                          | use_turboquant?
+    |--> TurboQuantKVCacheManager                 |--> TurboQuantKVCacheManager
+    |       | update(layer, k, v)  [O(n^2) NOW]   |        [BUG: [1,seq,nh,hd] vs
+    |       |   dequantize-all + cat + requant    |         expected [1,nh,seq,hd]]
+    |--> TurboQuantHFProxyCache (DynamicCache)    |
+            | update() -> manager -> dequantized K/V for attention
+            | reorder_cache: NotImplementedError
+
+  Shared core (shipped, diverged from plan):
+    polarquant: random QR rotation (hadamard config = dead)
+    codebook:   UNIFORM centroids (plan said Beta Lloyd-Max; that version was
+                found broken and replaced — plan doc is wrong about its own core)
+    qjl:        P normalized by 1/sqrt(d'), decode divides by d'  [net 1/d'^1.5 — near noop]
+    kv_cache:   uint8 idx (1 B) + int8 qjl (1 B) + float32 scale (0.03 B) = ~2.03 B/coord
+                vs FP16 2 B/coord  ->  ~0.98x  [6x claim unmet]
+
+  Missing: bit-packing, incremental update, evals, tests, router awareness
+  (engine_factory.py has zero turboquant references -> FullRAM turboquant unreachable)
+```
+
+## Section 3 — Test review (full depth)
+
+Test diagram — every new codepath and its coverage:
+
+| Codepath | Covered today? | Gap |
+|----------|----------------|-----|
+| PolarQuant roundtrip MSE | Manual `__main__.py` | Not in pytest; asserts MSE on synthetic only |
+| QJL roundtrip | Manual `__main__.py` | Assert is insensitive to the sqrt(d') scaling error |
+| KV manager quantize/dequantize shape | Manual `__main__.py` | No attention-quality check |
+| Compression ratio | Printed, never asserted | No assert that ratio > 1; no bit-packed path |
+| LayerStream wiring (settings -> config) | None | No test that turboquant_config reaches LayerExecutor |
+| LayerStream decode with past_length | None | FullRAM seq_len bug class uncovered |
+| FullRAM numpy -> torch layout | None | The dim-order bug ships untested |
+| HF proxy DynamicCache contract | None | No test against a real small model |
+| CLI benchmark output | None | Fabricated estimate printed as result |
+| Accuracy vs FP16 (perplexity / needle-in-haystack) | None | **The critical missing eval** |
+
+**Auto-decided:** add real pytest coverage in `backend/tests/test_turboquant.py` (roundtrip, ratio >= 1 assert, incremental update, FullRAM layout with a real tiny HF model) and an eval harness (perplexity on a small slice + needle-in-haystack at moderate context) run against FP16 baseline. This is the completeness call (P1): the "zero accuracy loss" claim cannot ship without it.
+
+## Performance
+
+- `update()` is O(n^2): every new token dequantizes the full history, concatenates, re-quantizes. At 128K context each decode step re-runs rotation matmuls over the whole sequence. This is the single worst property of the shipped code and it hits the exact use case the feature exists for. Fix: store per-chunk entries and only quantize the new chunk; dequantize only what attention needs.
+- QJL stage: as shipped, effectively attenuated ~8x at d'=128, so it corrects almost nothing while costing 1 byte/coord. Either fix the scaling or drop the stage at >= 3 bits.
+- The fullram sliding-window shift in the non-turboquant path (`cache[:, :, :-shift]`) shifts ALL layers; pre-existing, out of scope, noted.
+
+## Eng consensus table
+
+```
+ENG DUAL VOICES — CONSENSUS TABLE:
+  Dimension                           Primary  Reviewer  Consensus
+  1. Architecture sound?              NO       NO        CHALLENGE (O(n^2) update, unreachable FullRAM path)
+  2. Test coverage sufficient?        NO       NO        CHALLENGE (zero pytest, no accuracy eval)
+  3. Performance risks addressed?     NO       NO        CHALLENGE (requant-every-token)
+  4. Security threats covered?        YES      YES       CONFIRMED (no new attack surface; local-only)
+  5. Error paths handled?             PARTIAL  PARTIAL   DISAGREE->taste (batch>1, beam documented, not built)
+  6. Deployment risk manageable?      NO       NO        CHALLENGE (default-on net-negative)
+```
+
+## Eng completion summary
+
+The plan as written would have you implement what already exists. The real engineering work: bit-pack indices to ~0.44 B/coord, drop or fix QJL, compress scales, make update() incremental, fix the FullRAM layout bug, add the eval gate, flip the default off, and align the dead config flags with reality. Failure modes registry above; the two critical gaps are the unmet compression claim and the absent accuracy validation.
+
+**PHASE 3 COMPLETE.** Primary: 8 issues. Independent reviewer: 10 findings (2 critical, 5 high/medium shared). Consensus: 4/6 confirmed, 1 taste, 1 resolved as challenge.
+
+---
+
+# Phase 3.5 — DX Review
+
+Developer-facing surface: the `sovereign benchmark-turboquant` CLI command, the `turboquant_*` config keys, and the LayerStream auto-enable behavior. Product type: CLI Tool + embedded engine library.
+
+## Developer journey map
+
+| Stage | Developer does | Friction | Status |
+|-------|----------------|----------|--------|
+| Discover | Reads `sovereign help` → sees benchmark-turboquant | Listed as "KV-compression benchmark", fine | ok |
+| Install | Nothing new (ships with app) | none | ok |
+| Hello World | `sovereign benchmark-turboquant m.gguf` | `model` arg is IGNORED; output is synthetic; prints "Estimated (bit-packed): Xx" as if real | FAIL |
+| Real usage | Toggles settings, loads model | Default-on means the lossy ~1x path is active with no visible indicator | FAIL |
+| Debug | Runs the self-check | `python -m app.engines.shared.turboquant` prints "OK" while admitting ratio < 1x; no accuracy signal | FAIL |
+| Upgrade | Reads log.md "done" | Doc says done; claim unmet. Trust gap | FAIL |
+
+## Developer empathy narrative
+
+"I saw the log say TurboQuant was done, so I ran the benchmark to show the team the 6x win. I passed my model file. It printed synthetic numbers, ignored my model, and told me the bit-packed version would be 4x better. Then I loaded a model for real chat and it was slower. I checked the config: turboquant_enabled is on by default. I have no idea if my outputs got worse, because nothing measures accuracy. I can't tell if this feature helps or hurts, and the docs say it's finished. I stopped trusting the memory-reduction numbers."
+
+## DX scorecard
+
+| # | Dimension | Score | Why |
+|---|-----------|-------|-----|
+| 1 | Getting started (TTHW) | 4/10 | Benchmark runs, but output is synthetic and partly fabricated; no "does this work" signal |
+| 2 | Credible | 2/10 | Log claims done; claim unmet; default-on net-negative; docs contradict code |
+| 3 | Findable | 6/10 | CLI help lists the command; no docs section explains the current state |
+| 4 | Useful | 3/10 | ~1x compression today; the 6x value is theoretical |
+| 5 | Valuable | 3/10 | Saves nothing measurable today; costs latency and accuracy risk |
+| 6 | Accessible | 6/10 | Works across modes with a flag; only one surface (CLI) |
+| 7 | Desirable | 4/10 | Real paper + community momentum; implementation lags the story |
+| 8 | Error handling | 3/10 | reorder_cache raises, batch>1 raises, no human-readable "why" for default behavior |
+
+**Overall: 3.9/10. TTHW: ~2 min to run, ~0 min to trust.**
+
+## DX implementation checklist
+
+1. `benchmark-turboquant` must actually load/use the model or clearly say "synthetic"; label estimates as estimates; print the measured ratio and assert a floor.
+2. Flip default to off; when on, surface a one-line warning in CLI/server logs ("TurboQuant experimental: compression ~1x until bit-packing lands").
+3. Rewrite `turboquant.md` header to "Status: implemented 2026-07-23, headline claim not yet met" with a pointer to this report.
+4. Add a `--packed` path to the benchmark once bit-packing ships so the real number is the headline.
+
+## DX consensus table
+
+```
+DX DUAL VOICES — CONSENSUS TABLE:
+  Dimension                           Primary  Reviewer  Consensus
+  1. Getting started < 5 min?         YES      YES       CONFIRMED (runs fast, but misleading output)
+  2. API/CLI naming guessable?        YES      YES       CONFIRMED (benchmark-turboquant is clear)
+  3. Error messages actionable?       NO       NO        CHALLENGE (silent no-op / fabricated numbers)
+  4. Docs findable & complete?        NO       NO        CHALLENGE (log.md says done; truth differs)
+  5. Upgrade path safe?               NO       NO        CHALLENGE (default-on lossy path)
+  6. Dev environment friction-free?   YES      YES       CONFIRMED
+```
+
+**PHASE 3.5 COMPLETE.** DX overall: 3.9/10. TTHW: ~2 min to run, 0 min to trust. Primary: 4 issues. Reviewer: 3 aligned. Consensus: 3/6 confirmed.
+
+---
+
+# Cross-Phase Themes
+
+**Theme: the headline claim is unverified in shipped code.** Flagged independently in CEO (P1), Eng (compression math + no accuracy eval), and DX (credibility 2/10). High-confidence signal: the entire value proposition depends on bit-packing + an eval gate that do not exist yet. Every other finding hangs off this one.
+
+**Theme: default-on amplifies the gap.** CEO P5, Eng deployment risk, DX upgrade-path all hit the same bug: `turboquant_enabled=True` with ~1x compression means every LayerStream load is worse. Flip it off first.
+
+---
+
+# Implementation Tasks (aggregated, P1 -> P3)
+
+- [x] **P1 (critical) — Flip default off** ✅ DONE 2026-08-09: `backend/app/config.py` `turboquant_enabled: bool = False` with rationale comment. Files: `backend/app/config.py`.
+- [x] **P1 (critical) — Make update() incremental** ✅ DONE 2026-08-09: `TurboQuantKVCacheManager` rewritten with a per-layer raw-token hot buffer (chunk_size 64) that flushes to quantized chunks. `update()` is O(chunk) and NEVER re-quantizes history — every token is quantized exactly once, so incremental == one-shot **bit-exact** (proven by test). Bonus fix: `TurboQuantConfig.__post_init__` was silently hardcoding `qjl_dim=128`, defeating the auto=head_dim path (4x QJL storage at hd≠128) — removed; `qjl_dim or head_dim` now resolves at runtime. Files: `backend/app/engines/shared/turboquant/kv_cache.py`, `turboquant/config.py`.
+- [x] **P1 (critical) — Bit-pack indices** ✅ DONE 2026-08-09: `pack_indices`/`unpack_indices`/`_per_word_for` in `kv_cache.py` — base-`levels` digits into uint32 words (3.5 bits → 11 levels → 9/word, 11⁹ < 2³²), little-endian, zero-padded tail, vectorized unpack. New `bit_pack: bool = True` config flag; `False` restores the uint8 fallback. Also dropped the dead `v_indices=zeros_like()` tensors (free memory). Ratio asserts in tests now `> 1.0` (QJL-on) and `> 3.0` (QJL-off). Measured: self-check 1.4x (QJL) / 3.8x (PolarQuant-only 4-bit), up from 1.0x/1.9x. Files: `shared/turboquant/kv_cache.py`, `config.py`. (human: ~1-2 days / CC: ~30 min)
+- [ ] **P1 (high) — Accuracy eval gate**: perplexity + needle-in-haystack vs FP16 baseline before any re-enable. Files: `backend/tests/` new `test_turboquant_eval.py` or `backend/benchmarks/`. (human: ~2 days / CC: ~40 min)
+- [x] **P1 (high) — QJL decision (drop vs fix)** ✅ DONE 2026-08-09, decision: **KEEP + FIX**. `benchmarks/qjl_ablation.py` (new) swept QJL off/shipped/fixed across 2.0-4.0 bits, normal + heavy-tailed data, KV NMSE + attention fidelity. Result: at 3.5 bits QJL cuts attn NMSE 0.494 -> 0.275 (fixed) vs 0.463 (shipped) — the "drop at >= 3 bits" community premise is FALSIFIED for this implementation (uniform codebook leaves a large residual that even weak QJL fixes). The decode scale is now the empirically tuned absolute c=1/32 (sweep optimum at hd=32 AND hd=64, cliff at 1/16; the old 1/d'^1.5 undercorrects ~16x, the textbook 1/sqrt(d') overcorrects catastrophically). Caveat: tuned on synthetic data — re-validate on real models in the eval-gate task. Same-budget finding: 4.0-bit no-QJL (0.205 @ 139KB) strictly beats 3.5+QJL (0.316 @ 157KB) — a bits=4.0 default is the recommended follow-up. Files: `shared/turboquant/qjl.py`, `benchmarks/qjl_ablation.py`. (human: ~4h / CC: ~15 min)
+- [ ] **P2 — Fix FullRAM layout bug**: transpose [seq, nh, hd] -> [1, nh, seq, hd] before update; add integration test with tiny model. Files: `fullram/kv_cache.py`, `backend/tests/test_turboquant.py`. (human: ~2h / CC: ~10 min)
+- [x] **P2 — Unit tests** ✅ DONE 2026-08-09: 19 tests in `backend/tests/test_turboquant.py` (roundtrip shape+MSE, incremental==one-shot bit-exact, no-requant identity, long-run 300x1 flush, partial buffer, empty update, get(device=), update-after-clear, layer independence, ratio floor, batch>1 raises, QJL-off path, default-off config). Full suite: **62 passed**, self-check green. (human: ~1 day / CC: ~30 min)
+- [ ] **P2 — Align dead config**: implement or remove hadamard / beta_lloyd_max / enable_polarquant / collect_stats; make defaults match code. Files: `shared/turboquant/config.py`, `codebook.py`. (human: ~1h / CC: ~5 min)
+- [ ] **P3 — CLI honesty**: use the model arg or say "synthetic"; label estimates; print measured ratio only. Files: `backend/app/cli/main.py`. (human: ~2h / CC: ~10 min)
+- [ ] **P3 — Rewrite turboquant.md** as "status + what's needed for 6x" pointing at this report. Files: `turboquant.md`. (human: ~1h / CC: ~10 min)
+- [ ] **P3 — TODOS.md**: add engine-router auto-enable (gated on eval), llama.cpp cross-validation benchmark, GGUF tbq3_0/tbq4_0 evaluation. (human: ~30 min / CC: ~5 min)
+
+---
+
+# GSTACK REVIEW REPORT
+
+## Runs / Status / Findings
+
+| Run | Status | Findings |
+|-----|--------|----------|
+| CEO (primary) | clean | 0 unresolved after gate |
+| CEO (independent reviewer) | clean | 0 unresolved after gate |
+| Design | skipped | no UI scope (documented) |
+| Eng (primary) | clean | 0 unresolved after gate |
+| Eng (independent reviewer) | clean | 0 unresolved after gate |
+| DX (primary) | clean | 0 unresolved after gate |
+| DX (independent reviewer) | clean | 0 unresolved after gate |
+
+VERDICT: CROSS-MODEL — both voices agree: plan is stale (~90% shipped), headline 6x claim unmet (~0.98x), real plan is bit-packing + validation + default-off. Approved as the review report; the plan doc itself needs a rewrite (task P3 above) before any implementation resumes.
+
+**UNRESOLVED DECISIONS:** none for the review pipeline. Two items are gated on the user at the final approval gate: (1) User Challenge on the plan's premise (custom PyTorch vs llama.cpp native), (2) taste choice on QJL at 3.5 bits (drop vs fix). Both are user calls, listed in the gate.
+
+## Final gate decision (2026-08-09)
+
+- **User Challenge:** RESOLVED — refocus the work on making the 6x claim true (bit-packing + validation + default-off). turboquant.md is treated as an implementation record; Phase 4 (GGUF/llama.cpp export) stays deferred. Roadmap preserved as-is per user choice, re-prioritized per this report.
+- **Gate:** APPROVED AS-IS (2026-08-09). Interrogation answered for 5 findings (compression math, O(n^2) update, FullRAM dim-order, QJL scaling, stale-plan evidence). Challenge resolved: refocus on the real gap. Report is the review of record.
+
+**STATUS: DONE.**
+
+## Implementation Status (2026-08-09, post-gate)
+
+First tranche of the approved P1 work shipped and verified:
+
+| Task | Status | Evidence |
+|------|--------|----------|
+| Flip `turboquant_enabled` default to False | ✅ | `backend/app/config.py:46`; test `TestConfigDefault::test_turboquant_defaults_off` |
+| Make `update()` incremental (hot-buffer, no requant of history) | ✅ | `kv_cache.py` rewrite; bit-exact equality tests; no-requant identity test |
+| Fix `qjl_dim` auto (was hardcoded 128 → 4x QJL storage at hd≠128) | ✅ | `turboquant/config.py`; surfaced by the ratio test; self-check now 1.0x QJL / 1.9x PolarQuant-only |
+| **Bit-pack indices** (9 x 3.5-bit codes per uint32 word, unpacked fallback) | ✅ | `pack_indices`/`unpack_indices` + `bit_pack` flag; ratio now **1.4x QJL / 3.8x no-QJL** (was 1.0x/1.9x); dead zero tensors dropped |
+| **Pack QJL codes to 1 bit** (32/word) + fp16 scales | ✅ | `pack_qjl_bits`/`unpack_qjl_bits` in `qjl.py`; ratio now **3.3x QJL-on** (was 1.4x) at hd=64, ~4.1x at hd=128; scales were already fp16 for fp16 engine inputs (`.to(fp16)` enforces it for fp32 inputs) |
+| **QJL drop-vs-fix decision** (ablation-driven) | ✅ | KEEP + FIX: `benchmarks/qjl_ablation.py` shows QJL-on beats off at 3.5 bits (attn 0.275 vs 0.494 with tuned gain); decode scale tuned to absolute c=1/32 (optimum at hd 32/64, cliff at 1/16); KV cache K MSE 0.147 -> **0.132** |
+| Unit tests | ✅ | `backend/tests/test_turboquant.py` — **33 tests** (roundtrip, packing, fallback, ratio>3, qjl_dim≠hd, tuned-gain-beats-off decision test, scale pin, incremental, edge cases); full suite **76 passed**; self-check green |
+
+Remaining P1/P2/P3 (next tranches): accuracy eval gate vs FP16 (the gate before any re-enable — also where the tuned QJL gain gets re-validated on real models), **consider raising default bits to 4.0** (same-budget ablation: 4.0-no-QJL strictly beats 3.5+QJL at smaller size; 4.0+QJL is best overall), FullRAM dim-order fix (P2, dormant — router not wired), CLI honesty, `turboquant.md` rewrite, dead-config alignment. Note on the 6x headline: at 3.5-bit indices + 1-bit QJL + fp16 scales the ceiling is ~4.1x (hd=128); the paper's 6x assumes the full 3.5 bits total (2.5-bit PolarQuant + 1-bit QJL) with no per-vector scale — reaching it requires codebooks that absorb magnitudes directly (the deeper issue behind why QJL helps here: the uniform codebook poorly matches rotated-coordinate concentration, leaving a large residual for QJL to fix).

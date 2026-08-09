@@ -1,0 +1,51 @@
+{
+  "model": "hf-internal-testing/tiny-random-LlamaForCausalLM",
+  "tokens": 320,
+  "results": [
+    {
+      "label": "baseline",
+      "tq_kwargs": null,
+      "perplexity": 32740.753589522963,
+      "needle_logp": -10.311535835266113,
+      "needle_gen": "Finlandony \u043e\u0442\u043a\u0440\u044b InstallheyclerView BritainWhen",
+      "needle_hit": false,
+      "seconds": 0.07918834686279297
+    },
+    {
+      "label": "tq-3.5+qjl",
+      "tq_kwargs": {
+        "bits_per_coord": 3.5,
+        "enable_qjl": true
+      },
+      "perplexity": 32759.82898883475,
+      "needle_logp": -10.310341596603394,
+      "needle_gen": "wurdenWS choices lake \u00e5rsupdated avoided Share",
+      "needle_hit": false,
+      "seconds": 0.21179890632629395
+    },
+    {
+      "label": "tq-3.5-noqjl",
+      "tq_kwargs": {
+        "bits_per_coord": 3.5,
+        "enable_qjl": false
+      },
+      "perplexity": 32754.560885276678,
+      "needle_logp": -10.310153007507324,
+      "needle_gen": "wurdenWS choices lake \u00e5rsupdated avoided Share",
+      "needle_hit": false,
+      "seconds": 0.14437198638916016
+    },
+    {
+      "label": "tq-4.0+qjl",
+      "tq_kwargs": {
+        "bits_per_coord": 4.0,
+        "enable_qjl": true
+      },
+      "perplexity": 32758.661047001726,
+      "needle_logp": -10.309818506240845,
+      "needle_gen": "wurdenWS choices lake \u00e5rsupdated avoided Share",
+      "needle_hit": false,
+      "seconds": 0.15013933181762695
+    }
+  ]
+}

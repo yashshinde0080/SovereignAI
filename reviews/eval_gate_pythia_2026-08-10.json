@@ -1,0 +1,66 @@
+{
+  "model": "EleutherAI/pythia-70m-deduped",
+  "tokens": 448,
+  "text_source": "wikitext-cache",
+  "results": [
+    {
+      "label": "baseline",
+      "tq_kwargs": null,
+      "perplexity": 39.17353720002372,
+      "needle_logp": -13.914029121398926,
+      "needle_gen": "The secret password isThe secret password is",
+      "needle_hit": false,
+      "seconds": 2.638197183609009
+    },
+    {
+      "label": "tq-affine-3.5",
+      "tq_kwargs": {
+        "bits_per_coord": 3.5,
+        "quant_scheme": "affine"
+      },
+      "perplexity": 564.8070603799797,
+      "needle_logp": -16.547006607055664,
+      "needle_gen": " the most popular way to get the most",
+      "needle_hit": false,
+      "seconds": 6.074319362640381
+    },
+    {
+      "label": "tq-affine-4.0",
+      "tq_kwargs": {
+        "bits_per_coord": 4.0,
+        "quant_scheme": "affine"
+      },
+      "perplexity": 582.48764720081,
+      "needle_logp": -12.180274963378906,
+      "needle_gen": " a little bit more.\n\nThe",
+      "needle_hit": false,
+      "seconds": 9.213114976882935
+    },
+    {
+      "label": "tq-affine-4k5v",
+      "tq_kwargs": {
+        "bits_per_coord": 4.0,
+        "quant_scheme": "affine",
+        "v_bits": 5.0
+      },
+      "perplexity": 564.007554110977,
+      "needle_logp": -12.670759201049805,
+      "needle_gen": " fox and the other people in the background",
+      "needle_hit": false,
+      "seconds": 8.739715576171875
+    },
+    {
+      "label": "tq-affine-4k6v",
+      "tq_kwargs": {
+        "bits_per_coord": 4.0,
+        "quant_scheme": "affine",
+        "v_bits": 6.0
+      },
+      "perplexity": 555.3445863745717,
+      "needle_logp": -12.429924011230469,
+      "needle_gen": " a little bit more than a little bit",
+      "needle_hit": false,
+      "seconds": 7.537808179855347
+    }
+  ]
+}

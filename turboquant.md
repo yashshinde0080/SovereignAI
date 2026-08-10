@@ -1,3 +1,5 @@
+> ⚠️ **Status: experimental, default-off** — The eval gate (perplexity + needle-in-haystack) FAILS on Qwen2-0.5B and Pythia-70m at all bit rates (3-6 bits, both polar and affine schemes). See [`reviews/autoplan-report-2026-08-09.md`](reviews/autoplan-report-2026-08-09.md) for the full accuracy analysis and gate results.
+
 # TurboQuant Integration Guide for SovereignAI Edge
 
 > **Source Paper**: *TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate* (Google Research, ICLR 2026)  

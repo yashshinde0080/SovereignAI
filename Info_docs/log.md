@@ -140,3 +140,26 @@
   - `reviews/autoplan-report-2026-08-09.md` (412 lines): Autoplan-generated implementation report with phase breakdown, risk assessment, and rollout checklist
   - Updated `accuracy_eval.py` with streaming JSONL output for CI integration
   - Evaluation gates: `eval_smoke.json` (fast CI gate), `eval_gate_2026-08-09.json` (full release gate)
+
+## [2026-08-10] implement | Per-Channel Affine (KIVI-Style) Quantizer + Re-gate on Real Models
+Six commits (`2831555` → `40379b6`), one coherent tranche: after the 2026-08-09 polar gate FAILED (Qwen2-0.5B ppl 1201-3623 vs baseline 8.3), built the report's recommended "path to re-enable" — a KIVI-style per-channel affine quantizer (arXiv:2402.02750), then re-gated it on two real models. Verdict: affine beats polar 4-13× on ppl but still **FAILS the 2% gate at all bit rates** (3017-4201% Qwen2, 1318-1387% Pythia). TurboQuant stays experimental/default-off.
+
+- **New affine quantizer** (`baeb975`): `backend/app/engines/shared/turboquant/affine.py` (new) — per-group symmetric affine quantization: K gets per-(head,dim) max-abs scales computed over the sequence (channel outliers), V per-(head,token) scales (token outliers). No rotation, no QJL, no unit-norm. Fixed a half-step indexing bug (`round(x_level + half)` not truncation — truncation gave a Δ/2 bias → 3× NMSE inflation, caught by unit test).
+- **Config rework** (`baeb975`): `config.quant_scheme: "polar"/"affine"` (backward-compatible switch; all 32 polar tests pass unmodified), `config.k_bits`/`v_bits` asymmetric budgets (V harder than K), removed dead fields (`rotation_type`, `codebook_type`, `collect_stats`, `enable_polarquant`). Scheme dispatch in `kv_cache.py` (`_quantize_kv_affine`/`_dequantize_kv_affine`), indices packed like polar, scales fp16 when packed.
+- **Structure probe** (`659afc4`): `benchmarks/kv_structure_probe.py` (model-agnostic, `--model` arg) — measured real Qwen2-0.5B K/V through the proxy `update()` hook: **raw K per-channel std varies 0.03-21.8 (layer 0, cv 1.84)**, V per-token 2-8×. Exactly the structure polar's rotation destroys and per-channel scales exploit.
+- **Gate harness hardening** (`659afc4`): `benchmarks/cache_wikitext.py` pins eval text to `reviews/eval_wikitext.txt` (reproducible + offline — datasets-server API was rate-limited); `accuracy_eval.py` prefers the cache, configs now baseline + 4 affine configs, QJL comparison made conditional; `benchmarks/check_ram.py` (Windows RAM check via ctypes).
+- **FullRAM dim-order fix** (`57cd6ce`): `fullram/kv_cache.py` now transposes numpy `[seq, nh, hd]` → TQ `[1, nh, seq, hd]` on update and back on get (router still not wired for turboquant — dormant P2). Removed `rotation_type` from LayerStream executor config.
+- **CLI honesty** (`2831555`): `sovereign benchmark-turboquant` no longer prints fabricated bit-packed estimates — labels ratio "Measured … (synthetic K/V, no real model)" and points at the eval-gate report.
+- **Tests** (`a6d286f`): 11 new `TestAffineScheme` tests — roundtrip NMSE, affine-beats-polar on structured data (≤0.5× NMSE), same-chunking bit-exactness, chunk-boundary scale consistency (≤1.5×), scale shapes, asymmetric bits, ratio >3.0, no-requant invariant, default-scheme. 43 turboquant / 86 full suite.
+- **Re-gate results** (`a6d286f`): `reviews/eval_gate_affine_2026-08-10.json` (Qwen2-0.5B, wikitext, 704 tokens):
+  | config | ppl | deg | needle |
+  |---|---|---|---|
+  | baseline | **8.34** | — | ✅ PINEAPPLE123. The |
+  | affine-3.5 | 259.9 | +3017% | ❌ |
+  | affine-4.0 | 304.2 | +3548% | ❌ |
+  | affine-4k5v | 358.6 | +4201% | ❌ |
+  | affine-4k6v | 323.8 | +3783% | ❌ |
+  NMSE on layer-4 captured K/V: affine 4-bit K 0.0050 vs polar 3.5+qjl 0.142 (**28× better**), 5-bit 0.00093 (153×), 6-bit 0.00017 (835×). First-chunk ppl 16.4 vs 8.3 — attention corrupts immediately at 64 tokens, compounds to 36× over 768.
+- **Cross-model bound** (`a6d286f`): `reviews/eval_gate_pythia_2026-08-10.json` — Pythia-70m (moderate key norms ~10-15 vs Qwen2 ~215): baseline 39.2 → affine 555-583 ppl (**1318-1387% deg**). Same catastrophic pattern → NOT a Qwen2-sharpness artifact.
+- **Conclusion (in `reviews/autoplan-report-2026-08-09.md` tranche)**: on 0.5B-70M models, per-coordinate scalar quantization at ≤6 bits cannot pass a 2%-degradation gate — per-coord error (~0.5% NMSE at 4 bits) corrupts attention logits → hidden states → errors compound across the sequence. The paper's 6× "zero-loss" claim likely only holds for ≥7B models / single-token evals. Recommended next: llama.cpp tbq3_0/tbq4_0 eval (PR #21089), per-vector codebooks, TinyLlama-1.1B gate run as the final viability test.
+- **Root markers** (`40379b6`): `turboquant.md` gets experimental/default-off warning banner pointing at the report; `TODOS.md` re-created (P3: CLI honesty, ≥1B gate, llama.cpp eval); added `llama-cpp-tq` + `llama-cpp-pr` submodule pointers.

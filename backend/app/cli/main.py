@@ -744,8 +744,7 @@ def benchmark_turboquant(
     ratio = total_fp16 / (compressed_mb * 1024 * 1024)
 
     console.print(f"  Compressed size ({num_layers} layers): {compressed_gb:.3f} GB")
-    console.print(f"  Naive compression ratio: {ratio:.1f}x")
-    console.print(f"  Estimated (bit-packed 3.5-bit indices): {ratio * 4:.1f}x")
+    console.print(f"  Measured compression ratio: {ratio:.1f}x (synthetic K/V, no real model)")
     console.print(f"  Quantization time: {elapsed:.3f}s")
 
     # Reconstruction error
@@ -769,8 +768,7 @@ def benchmark_turboquant(
     )
 
     console.print(table)
-    console.print(f"\n[dim]Synthetic data only. Real model accuracy depends on attention distribution.[/dim]")
-    console.print(f"[dim]With bit-packing + QJL pruning, expected real ratio: 3-6x at {bits} bits/coord.[/dim]")
+    console.print(f"\n[dim]Synthetic data only. Real accuracy depends on attention distribution. See reviews/autoplan-report-2026-08-09.md for eval-gate results.[/dim]")
 
 
 if __name__ == "__main__":

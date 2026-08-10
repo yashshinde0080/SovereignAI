@@ -157,7 +157,6 @@ class LayerStreamEngine(BaseEngine):
                 tq_config = {
                     "bits_per_coord": sov_settings.turboquant_bits,
                     "enable_qjl": sov_settings.turboquant_qjl_enabled,
-                    "rotation_type": sov_settings.turboquant_rotation,
                 }
 
         # Detect hybrid architecture (e.g. Qwen3.5 linear_attention + full_attention)

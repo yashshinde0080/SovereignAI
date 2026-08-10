@@ -56,8 +56,13 @@ class KVCache:
         if self.use_turboquant and self.tq_manager is not None:
             import torch
 
-            k_t = torch.from_numpy(key).unsqueeze(0)
-            v_t = torch.from_numpy(value).unsqueeze(0)
+            # FullRAM numpy layout is [seq, nh, hd]; TQ manager expects [1, nh, seq, hd]
+            k_t = torch.from_numpy(key).unsqueeze(0).transpose(1, 2)
+            v_t = torch.from_numpy(value).unsqueeze(0).transpose(1, 2)
+        else:
+            seq_len = key.shape[0]
+
+        if self.position + seq_len > self.max_seq_len:
             self.tq_manager.update(layer_idx, k_t, v_t)
             k_out, v_out = self.tq_manager.get(layer_idx)
             return k_out.squeeze(0).numpy(), v_out.squeeze(0).numpy()
@@ -85,8 +90,9 @@ class KVCache:
 
             k_out, v_out = self.tq_manager.get(layer_idx)
             if k_out is not None:
-                return k_out.squeeze(0).numpy(), v_out.squeeze(0).numpy()
-            return np.array([]), np.array([])
+            # TQ return [1, nh, seq, hd] -> [seq, nh, hd] numpy for FullRAM
+            return k_out.squeeze(0).transpose(0, 1).numpy(), v_out.squeeze(0).transpose(0, 1).numpy()
+        return np.array([]), np.array([])
 
         return (
             self.cache[layer_idx, 0, : self.position],

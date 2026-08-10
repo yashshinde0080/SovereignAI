@@ -44,7 +44,7 @@ class LayerExecutor:
             self._hf_cache_factory = lambda: self.cache
         elif turboquant_config is not None:
             from app.engines.shared.turboquant import TurboQuantKVCacheManager, TurboQuantHFProxyCache
-            tq_config = turboquant_config if hasattr(turboquant_config, 'bits_per_coord') else type('obj', (object,), {'bits_per_coord': 3.5, 'qjl_dim': 128, 'enable_polarquant': True, 'enable_qjl': True, 'rotation_type': 'random', 'codebook_type': 'beta_lloyd_max', 'device': device, 'collect_stats': False})()
+            tq_config = turboquant_config if hasattr(turboquant_config, 'bits_per_coord') else type('obj', (object,), {'bits_per_coord': 3.5, 'qjl_dim': 128, 'enable_qjl': True, 'device': device})()
             # Use config object
             from app.engines.shared.turboquant import TurboQuantConfig
             if isinstance(turboquant_config, dict):

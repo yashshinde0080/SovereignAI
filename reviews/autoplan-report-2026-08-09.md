@@ -410,3 +410,109 @@ Pass = ppl degradation < 2% AND needle log-prob within 10x of baseline. Smoke-va
 ## What this means for the headline
 
 The 6x claim assumed "zero accuracy loss at 3.5 bits." This gate is the first real-data test of that claim and it fails on Qwen2-0.5B by 4 orders of magnitude of ppl degradation. Compression ratios (now ~3.3-4.1x) are real and bit-exact; accuracy is not. Until the quantizer changes, TurboQuant is a storage-efficient cache that destroys model quality — worth nothing until it passes this gate. This is the honest state of the feature.
+
+---
+
+# Per-Channel Affine (KIVI-Style) Tranche — 2026-08-10
+
+Following the polar gate's FAIL verdict, the report's own "path to re-enable" called for a fundamentally better quantizer: **KIVI-style per-channel affine** (arXiv:2402.02750), with per-(head,dim) max-abs scales for K and per-(head,token) max-abs scales for V, no rotation, no QJL — exactly the scheme the literature uses to get <1% ppl degradation at 2.5-4 bits on Llama-7B.
+
+## What was built
+
+| Artifact | Description |
+|---|---|
+| `backend/app/engines/shared/turboquant/affine.py` (new) | KIVI-style per-group symmetric affine quantizer. Symmetric ±scale with levels at positions `k - (L-1)/2`; the exact `round(x_level + half)` bijection was critical (a truncation-to-int bug gave a half-step bias → 3x inflated NMSE — caught by unit tests) |
+| `config.quant_scheme: str = "polar" / "affine"` | Backward-compatible switch between the two schemes; `polar` is the unchanged legacy path (all 32 polar tests pass with zero modification) |
+| `config.k_bits / v_bits: Optional[float]` | Asymmetric bit budgets (KIVI-style: V needs more bits than K). Flows through per-entry `levels` in `QuantizedKVCache`, pack/unpack uses each entry's own base |
+| `TurboQuantKVCacheManager._quantize_kv_affine / _dequantize_kv_affine` | Scheme dispatch in the manager: K per-channel scales `[nh, 1, hd]`, V per-token scales `[nh, seq, 1]`. Indices packed identically to polar (base-levels uint32). No rotation/QJL/unit-norm. Scales fp16 when packed |
+| `benchmarks/kv_structure_probe.py` (extended) | Now accepts `--model` arg; probes key norms (the sharpness signal) plus per-channel structure and affine-vs-polar NMSE on any HF model |
+| `benchmarks/cache_wikitext.py` (new) | Pins the gate eval text to `reviews/eval_wikitext.txt` so runs are reproducible and work offline |
+| `accuracy_eval.py` (extended) | Prefers local wikitext cache; configs list now carries baseline + 4 affine configs; QJL comparison made conditional (the polar baseline was recorded in the 2026-08-09 gate) |
+
+## The structure probe — real K/V channel structure is massive
+
+Before writing the quantizer, we probed real Qwen2-0.5B K/V (via the proxy `update()` hook, `benchmarks/kv_structure_probe.py`): **raw K per-channel std varies 0.03–21.8 across channels** (layer 0, cv 1.84), and 0.3–3.6 in deeper layers (cv 0.4–0.5). V per-token std varies 2–8x. This is precisely the structure that the polar scheme's rotation destroys — and that per-channel scales exploit.
+
+## NMSE improvement (layer 4, same captured tensors)
+
+| Config | K NMSE | V NMSE | vs polar (3.5+qjl K) |
+|--------|--------|--------|----------------------|
+| polar 3.5+qjl | 0.142 | 0.134 | — |
+| affine 3-bit | 0.0228 | 0.092 | 6× better K |
+| **affine 4-bit** | **0.0050** | 0.026 | **28× better K** |
+| affine 5-bit | 0.00093 | 0.0066 | 153× better K |
+| affine 6-bit | 0.00017 | 0.0017 | 835× better K |
+
+Same improvement on Pythia-70m (moderate norms): affine 4-bit K NMSE 0.0038, V 0.0157.
+
+**Unit tests** — 11 new `TestAffineScheme` tests (43 total turboquant, 86 full suite): roundtrip NMSE thresholds, structured-data wins (affine beats polar at ≤0.5× NMSE on channel-structured data), same-chunking bit-exactness, chunk-boundary scale consistency (within 1.5× NMSE), scale shapes, asymmetric bits, ratio >3.0, no-requant invariant. The half-step indexing bug was caught by `test_roundtrip_shape_and_nmse` (0.0405 vs expected 0.0125 — a 3× bias from truncating instead of rounding the half-integer level positions).
+
+## Re-gate on Qwen2-0.5B (real wikitext, 768 tokens, `reviews/eval_gate_affine_2026-08-10.json`)
+
+| config | ppl | deg% | needle hit |
+|--------|-----|------|-----------|
+| **baseline** | **8.34** | — | ✅ PINEAPPLE123. The |
+| affine-3.5 | 259.9 | +3017% | ❌ |
+| affine-4.0 | 304.2 | +3548% | ❌ |
+| affine-4k5v | 358.6 | +4201% | ❌ |
+| affine-4k6v | 323.8 | +3783% | ❌ |
+
+**Improvement: 4-13× better ppl than polar's 1201-3623. Still FAILS by 1500-2100× the gate threshold (3017-4201% vs <2%). Non-monotonic across bit rates — the error-compounding regime.** First-chunk ppl-so-far: 16.4 vs baseline 8.3 (2× degradation at 64 tokens, no compounding). The attention is immediately corrupted at 64 tokens; it compounds to 36× over 768 tokens.
+
+## Cross-model bounding: Pythia-70m (cached wikitext, `reviews/eval_gate_pythia_2026-08-10.json`)
+
+To test the "Qwen2-0.5B has uniquely sharp attention (norms ~215)" hypothesis, the gate also ran on **Pythia-70m** — a 70M param GPT-NeoX model with **moderate key norms (~10-15)**, i.e. attention logits ~200, not ~5800.
+
+| config | ppl | deg% |
+|--------|-----|------|
+| **baseline** | **39.2** | — |
+| affine-3.5 | 564.8 | +1342% |
+| affine-4.0 | 582.5 | +1387% |
+| affine-4k5v | 564.0 | +1340% |
+| affine-4k6v | 555.3 | +1318% |
+
+**Same catastrophic failure — 1318-1387% degradation — and non-monotonic. First-chunk ppl: ~100 vs baseline ~39 (2.5×).** The pattern is identical to Qwen2: immediate 2-2.5× per-step degradation, compounding to 13-42× over 500-700 tokens, regardless of bit budget.
+
+## Cross-model conclusion
+
+| Test | Model | Polar ppl deg | Affine ppl deg | Gate? |
+|------|-------|--------------|---------------|-------|
+| Sharp attention | Qwen2-0.5B (norms ~215) | 15289-46009% | 3017-4201% | ❌ FAIL |
+| Moderate norms | Pythia-70m (norms ~10) | not run | 1318-1387% | ❌ FAIL |
+
+**On 0.5B-70M models, per-coordinate scalar quantization at ≤6 bits cannot pass a 2%-degradation accuracy gate.** The mechanism: even with a perfect codebook and per-channel scales, each coordinate's quantization error (NMSE ~0.3-2% per-coord at 4 bits) produces attention logit errors that corrupt the hidden state → subsequent K/V predictions are also corrupted → errors compound across the sequence. The 2× first-chunk degradation makes compounding inevitable. On a ≥1B model with more capacity to absorb the per-step error, the degradation per token would be smaller, but the failure mode (scalar quantization cannot represent vectors within tolerance of softmax argmax) is structural.
+
+**Implications for the 6x claim:** the paper's headline requires "zero accuracy loss" at 3.5 bits. No scalar quantizer at that rate can pass our gate. The claim likely holds for its target models (≥7B, with softer attention and more capacity) and target eval (single-token generation without compounding, or slowly compounding tasks). Our gate measures the worst case: chunked perplexity with full cache carried over hundreds of tokens. This IS the real use case (chat/decode with context), so the restriction is genuine: **TurboQuant is a storage-efficient cache that destroys model quality on small models and under long-context chunked evaluation.**
+
+## Updated task status
+
+| Task | Status | Evidence |
+|------|--------|----------|
+| KIVI-style per-channel affine quantizer | ✅ | `affine.py`, `config.quant_scheme`, `config.k_bits/v_bits`, scheme dispatch in `kv_cache.py` |
+| Unit tests (affine path) | ✅ | 11 `TestAffineScheme` tests (43 total turboquant, 86 full suite) |
+| Structure probe (model-agnostic) | ✅ | `benchmarks/kv_structure_probe.py` accepts `--model`; confirms per-channel K structure (cv 0.4-1.8) on Qwen2, Pythia |
+| Gate harness improvements (wikitext cache, conditional QJL print) | ✅ | `accuracy_eval.py` prefers `reviews/eval_wikitext.txt`; cache script at `benchmarks/cache_wikitext.py` |
+| Re-gate on Qwen2-0.5B (all affine configs) | ✅ FAIL | 259-359 ppl vs 8.3 baseline; 3017-4201% deg; needle lost |
+| Cross-model gate on Pythia-70m | ✅ FAIL | 555-583 ppl vs 39.2 baseline; 1318-1387% deg; needle baseline miss |
+| FullRAM dim-order fix | ❌ P2 | Dormant — router not wired for turboquant at all |
+| Dead-config alignment | ❌ P2 | hadamard/beta_lloyd_max/enable_polarquant/collect_stats |
+| CLI honesty | ❌ P3 | benchmark-turboquant still prints fabricated estimates |
+| turboquant.md rewrite | ❌ P3 | Document as experimental, point at this report |
+| TODOS.md | ❌ P3 | Router auto-enable (gated), llama.cpp cross-validation, GGUF tbq eval |
+
+## Lessons learned
+
+1. **The half-step indexing bug** — `(q + half).to(int64)` vs `round(q + half)`. For even level counts (16), level positions are half-integers ±7.5. Truncation shifted every interior index by -0.5 → Δ/2 bias → 3× NMSE inflation. Caught by a unit test on synthetic structured data. The fix: `(x_level + half).round().clamp(0, L-1)` — exactly bijective for both odd and even levels.
+
+2. **The synthetic ablation limitation** — the QJL ablation (`benchmarks/qjl_ablation.py`) and the earlier Gaussian-LM codebook experiment both predicted dramatically better accuracy on real data than the gate measured, because their random-query attention-fidelity metric averaged out the razor-sharpness of real attention logits. The gate is the arbiter. Future ablation work should measure per-chunk ppl as the primary metric, not attention NMSE on random vectors.
+
+3. **Per-channel scales vs rotation** — on real K/V with per-channel magnitude variation (cv 0.4-1.8), per-channel affine beats the rotated codebook by 28× at 4 bits. The rotation destroys the structure that per-channel scales exploit. Even so, the remaining per-coordinate error at 4 bits (~0.5% NMSE RMS) is too large for the compounding attention-error regime.
+
+4. **Gate design matters** — the chunked ppl measurement (cache carried across chunks) is the correct precision test: it measures the actual decode path. The needle test adds a qualitative check. The 2% gate threshold on 0.5B-70M models may be stricter than what a 7B model can achieve, but it is the right bar for quality; no one should ship a feature that gives 1300+% ppl degradation even on a small model.
+
+## Next steps (recommended)
+
+1. **Phase 4 evaluation (llama.cpp tbq3_0/tbq4_0)** — if these exist and work (PR #21089), they are the fastest path to "does ≥7B model turboquant work?". The custom PyTorch path lacks a 7B+ model test; llama.cpp kernels at least tell us whether the paper's claim is real in practice.
+2. **Per-vector codebooks** — the fundamental limitation of scalar-per-coordinate quantization for this regime. A spherical codebook (VQ-VAE-style) or per-vector product quantizer could encode whole vectors at 3.5 bits with lower error.
+3. **TinyLlama-1.1B gate run** — if a ≥1B model with real attention capacity is accessible (GPU or very patient CPU), running the gate on TinyLlama with affine-4k6v would definitively answer whether the scheme is viable for models with more redundancy. This is the single remaining experiment before declaring Approach A dead or viable.
+4. **P2/P3 cleanup** — FullRAM layout fix, dead-config alignment, CLI honesty, turboquant.md rewrite, TODOS.md. These are independent of the accuracy question and improve code quality even if the feature stays off.

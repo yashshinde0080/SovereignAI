@@ -390,6 +390,146 @@ class TestBitPacking:
         assert torch.equal(unpack_qjl_bits(packed, n), codes)
 
 
+class TestAffineScheme:
+    """KIVI-style per-channel affine quantizer (config.quant_scheme='affine'):
+    K per-(head,dim) scales, V per-(head,token) scales, no rotation/QJL."""
+
+    NH, HD = 4, 32
+
+    def _manager(self, chunk_size: int = 64, **cfg_overrides):
+        cfg_kwargs = {"bits_per_coord": 4.0, "quant_scheme": "affine", "device": "cpu"}
+        cfg_kwargs.update(cfg_overrides)
+        config = TurboQuantConfig(**cfg_kwargs)
+        return TurboQuantKVCacheManager(
+            config, num_layers=2, num_heads=self.NH, head_dim=self.HD,
+            device="cpu", chunk_size=chunk_size,
+        )
+
+    def _structured_kv(self, batch: int, nh: int, seq: int, hd: int, seed: int = 0):
+        """K with per-channel magnitudes (x20 spread across hd), V with
+        per-token magnitudes (x10 spread across seq) — the structure that
+        per-channel scales exist for (KIVI's premise)."""
+        g = torch.Generator().manual_seed(seed)
+        k = torch.randn(batch, nh, seq, hd, generator=g) * torch.linspace(0.1, 2.0, hd).view(1, 1, 1, hd)
+        v = torch.randn(batch, nh, seq, hd, generator=g) * torch.linspace(0.2, 2.0, seq).view(1, 1, seq, 1)
+        return k, v
+
+    def test_roundtrip_shape_and_nmse(self):
+        mgr = self._manager()
+        k, v = self._structured_kv(1, self.NH, 64, self.HD)
+        mgr.update(0, k, v)
+        k_recon, v_recon = mgr.get(0)
+        assert k_recon.shape == k.shape and v_recon.shape == v.shape
+        nmse_k = ((k_recon - k) ** 2).mean().item() / (k ** 2).mean().item()
+        nmse_v = ((v_recon - v) ** 2).mean().item() / (v ** 2).mean().item()
+        assert nmse_k < 0.02, f"affine K NMSE too high: {nmse_k:.4f}"
+        assert nmse_v < 0.06, f"affine V NMSE too high: {nmse_v:.4f}"
+
+    def test_affine_beats_polar_on_structured_data(self):
+        """The KIVI premise pinned: on channel/token-structured data, 4-bit
+        affine must beat 4-bit polar (which rotates the structure away) by a
+        wide margin on K reconstruction."""
+        k, v = self._structured_kv(1, self.NH, 64, self.HD)
+        mgr_aff = self._manager()
+        mgr_pol = self._manager(quant_scheme="polar", enable_qjl=False)
+        mgr_aff.update(0, k, v)
+        mgr_pol.update(0, k, v)
+        k_aff, _ = mgr_aff.get(0)
+        k_pol, _ = mgr_pol.get(0)
+        nmse_aff = ((k_aff - k) ** 2).mean().item() / (k ** 2).mean().item()
+        nmse_pol = ((k_pol - k) ** 2).mean().item() / (k ** 2).mean().item()
+        assert nmse_aff < nmse_pol * 0.5, \
+            f"affine {nmse_aff:.4f} not < 0.5x polar {nmse_pol:.4f}"
+
+    def test_incremental_consistent_within_same_chunking(self):
+        """Affine scales are per-chunk, so bit-exactness holds for the SAME
+        flush boundaries regardless of arrival pattern (4x16 vs 16x4)."""
+        mgr_a = self._manager(chunk_size=16)
+        mgr_b = self._manager(chunk_size=16)
+        k, v = self._structured_kv(1, self.NH, 64, self.HD)
+        for s in range(0, 64, 16):
+            mgr_a.update(0, k[:, :, s:s + 16], v[:, :, s:s + 16])
+        for s in range(0, 64, 4):
+            mgr_b.update(0, k[:, :, s:s + 4], v[:, :, s:s + 4])
+        ka, va = mgr_a.get(0)
+        kb, vb = mgr_b.get(0)
+        assert torch.equal(ka.float(), kb.float())
+        assert torch.equal(va.float(), vb.float())
+        assert len(mgr_a.k_cache[0]) == 4
+
+    def test_chunked_close_to_one_shot(self):
+        """Different chunk boundaries shift the per-chunk scales, so NOT
+        bit-exact — but quality must stay within 1.5x NMSE of the one-shot
+        flush (per-chunk scales from 16 vs 64 tokens are near-equivalent)."""
+        mgr_chunked = self._manager(chunk_size=16)
+        mgr_one = self._manager(chunk_size=64)
+        k, v = self._structured_kv(1, self.NH, 64, self.HD)
+        for s in range(0, 64, 16):
+            mgr_chunked.update(0, k[:, :, s:s + 16], v[:, :, s:s + 16])
+        mgr_one.update(0, k, v)
+        k_c, _ = mgr_chunked.get(0)
+        k_o, _ = mgr_one.get(0)
+        nmse_c = ((k_c - k) ** 2).mean().item() / (k ** 2).mean().item()
+        nmse_o = ((k_o - k) ** 2).mean().item() / (k ** 2).mean().item()
+        assert nmse_c < nmse_o * 1.5 + 1e-6
+
+    def test_scale_shapes_and_packing(self):
+        mgr = self._manager(chunk_size=16)
+        k, v = self._structured_kv(1, self.NH, 16, self.HD)
+        mgr.update(0, k, v)
+        kc, vc = mgr.k_cache[0][0], mgr.v_cache[0][0]
+        assert kc.scheme == "affine" and vc.scheme == "affine"
+        assert kc.k_scale.shape == (self.NH, 1, self.HD)   # per-channel
+        assert vc.k_scale.shape == (self.NH, 16, 1)        # per-token
+        assert kc.levels == 16  # 4 bits
+        assert kc.packed is True and kc.k_indices.dtype == torch.uint32
+        assert kc.k_scale.dtype == torch.float16
+
+    def test_odd_levels_3_5_bits(self):
+        mgr = self._manager(bits_per_coord=3.5)
+        k, v = self._structured_kv(1, self.NH, 64, self.HD)
+        mgr.update(0, k, v)
+        assert mgr.k_cache[0][0].levels == 11  # int(2**3.5)
+        k_recon, _ = mgr.get(0)
+        assert k_recon.shape == k.shape
+        nmse = ((k_recon - k) ** 2).mean().item() / (k ** 2).mean().item()
+        assert nmse < 0.06
+
+    def test_asymmetric_kv_bits(self):
+        """KIVI-style asymmetric budgets: k_bits=3 (8 levels) + v_bits=5 (32
+        levels) flow into the per-entry levels and pack/unpack correctly."""
+        mgr = self._manager(bits_per_coord=4.0, k_bits=3.0, v_bits=5.0)
+        k, v = self._structured_kv(1, self.NH, 64, self.HD)
+        mgr.update(0, k, v)
+        assert mgr.k_cache[0][0].levels == 8
+        assert mgr.v_cache[0][0].levels == 32
+        k_recon, v_recon = mgr.get(0)
+        assert k_recon.shape == k.shape and v_recon.shape == v.shape
+
+    def test_compression_ratio_above_3(self):
+        """4-bit affine: ~3.7x at hd=32 (indices 8/word + fp16 scales)."""
+        mgr = self._manager()
+        k, v = self._structured_kv(1, self.NH, 64, self.HD)
+        mgr.update(0, k, v)
+        fp16_bytes = (k.numel() + v.numel()) * 2
+        ratio = fp16_bytes / (mgr.get_size_mb() * 1024 * 1024)
+        assert ratio > 3.0, f"affine ratio too low: {ratio:.2f}x"
+
+    def test_no_requant_identity(self):
+        """Same invariant as polar: flushed chunks are never re-quantized by
+        later updates (object identity)."""
+        mgr = self._manager(chunk_size=8)
+        k, v = self._structured_kv(1, self.NH, 16, self.HD)
+        mgr.update(0, k[:, :, :8], v[:, :, :8])
+        first = mgr.k_cache[0][0]
+        mgr.update(0, k[:, :, 8:], v[:, :, 8:])
+        assert mgr.k_cache[0][0] is first
+
+    def test_default_scheme_is_polar(self):
+        assert TurboQuantConfig().quant_scheme == "polar"
+        assert TurboQuantConfig().k_bits is None and TurboQuantConfig().v_bits is None
+
+
 class TestConfigDefault:
     def test_turboquant_defaults_off(self):
         """P1: the feature must be off by default until the 6x claim is validated."""

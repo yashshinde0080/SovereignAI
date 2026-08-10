@@ -7,6 +7,7 @@ from .config import TurboQuantConfig
 from .codebook import get_lloyd_max_centroids, quantize_polar
 from .polarquant import get_rotation_matrix, apply_rotation, inverse_rotation
 from .qjl import get_qjl_projection, qjl_encode, qjl_decode, pack_qjl_bits, unpack_qjl_bits
+from .affine import quantize_affine, dequantize_affine
 
 
 def _per_word_for(levels: int) -> int:
@@ -87,6 +88,7 @@ class QuantizedKVCache:
     num_heads: int = 0
     levels: int = 0  # codebook size at pack time (unpack base)
     packed: bool = False
+    scheme: str = "polar"  # "polar" (rotation + QJL) or "affine" (per-channel scales)
 
 
 class TurboQuantKVCacheManager:
@@ -109,6 +111,14 @@ class TurboQuantKVCacheManager:
     O(n^2) requantize-everything (the bug this replaces). Chunk count stays
     O(n / chunk_size); ``get()`` dequantizes chunks and appends the
     (still-raw) hot buffer.
+
+    Two schemes (``config.quant_scheme``):
+      - ``polar``: normalize -> rotate -> scalar codebook (+ QJL residual).
+      - ``affine``: KIVI-style per-channel affine (K per-(head,dim) scales,
+        V per-(head,token) scales, no rotation/QJL). Note that affine scales
+        are per-CHUNK (computed at flush over the chunk's tokens), so
+        different flush boundaries give slightly different reconstructions —
+        the bit-exact one-shot identity applies within the same chunking.
     """
 
     _CHUNK_SIZE = 64  # raw-token hot buffer flush size
@@ -147,7 +157,15 @@ class TurboQuantKVCacheManager:
     def _quantize_kv(
         self, k: torch.Tensor, v: torch.Tensor
     ) -> Tuple[QuantizedKVCache, QuantizedKVCache]:
-        """Quantize K and V tensors for one layer/chunk.
+        """Quantize K and V tensors for one layer/chunk (scheme dispatch)."""
+        if self.config.quant_scheme == "affine":
+            return self._quantize_kv_affine(k, v)
+        return self._quantize_kv_polar(k, v)
+
+    def _quantize_kv_polar(
+        self, k: torch.Tensor, v: torch.Tensor
+    ) -> Tuple[QuantizedKVCache, QuantizedKVCache]:
+        """PolarQuant scheme: normalize -> rotate -> codebook (+ QJL residual).
 
         Normalizes each K/V vector to unit length before rotation/quantization
         so centroids (designed for [-1, 1]) match the actual data distribution.
@@ -232,11 +250,17 @@ class TurboQuantKVCacheManager:
     def _dequantize_kv(
         self, k_cache: QuantizedKVCache, v_cache: QuantizedKVCache
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Dequantize K and V for attention computation.
+        """Dequantize K and V for attention computation (scheme dispatch)."""
+        if k_cache.scheme == "affine":
+            return self._dequantize_kv_affine(k_cache, v_cache)
+        return self._dequantize_kv_polar(k_cache, v_cache)
 
-        Rescales by stored per-vector norms to recover original magnitude
-        after PolarQuant unit-vector quantization. Unpacks bit-packed indices
-        first when the chunk was stored packed.
+    def _dequantize_kv_polar(
+        self, k_cache: QuantizedKVCache, v_cache: QuantizedKVCache
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """PolarQuant scheme: centroids -> (+ QJL residual) -> inverse rotation
+        -> rescale by stored per-vector norms. Unpacks bit-packed indices first
+        when the chunk was stored packed.
 
         Derives matrices from cached head_dim (not self.head_dim) so models
         with non-standard K/V head_dim (e.g. Qwen3.5 MLA) work correctly.
@@ -279,6 +303,73 @@ class TurboQuantKVCacheManager:
         k_recon = inverse_rotation(k_rot.reshape(-1, hd), R_k).reshape(nh, seq, hd) * k_cache.k_scale
         v_recon = inverse_rotation(v_rot.reshape(-1, hd), R_v).reshape(nh, seq, hd) * v_cache.k_scale
 
+        return k_recon.unsqueeze(0), v_recon.unsqueeze(0)
+
+    def _quantize_kv_affine(
+        self, k: torch.Tensor, v: torch.Tensor
+    ) -> Tuple[QuantizedKVCache, QuantizedKVCache]:
+        """KIVI-style affine scheme: per-channel K scales, per-token V scales.
+
+        No rotation, no unit normalization, no QJL — the per-(head,dim) and
+        per-(head,token) max-abs scales absorb magnitudes directly, which the
+        rotation destroys. Indices are packed like polar's (base-``levels`` in
+        uint32 words). K and V may use different bit budgets via
+        ``config.k_bits`` / ``config.v_bits`` (per-token V is the harder one).
+        """
+        batch, nh, seq, hd = k.shape
+        if batch != 1:
+            raise ValueError(f"Batch > 1 not supported, got batch={batch}")
+
+        k_bits = self.config.k_bits if self.config.k_bits is not None else self.config.bits_per_coord
+        v_bits = self.config.v_bits if self.config.v_bits is not None else self.config.bits_per_coord
+        k_levels = max(4, int(2 ** k_bits))
+        v_levels = max(4, int(2 ** v_bits))
+
+        k = k.squeeze(0)
+        v = v.squeeze(0)
+        k_idx, k_scale = quantize_affine(k, k_levels, axis=1)  # per-(nh, hd) channel
+        v_idx, v_scale = quantize_affine(v, v_levels, axis=2)  # per-(nh, seq) token
+
+        # Bit-pack unless disabled (or levels too large to pack).
+        use_pack_k = self.config.bit_pack and _per_word_for(k_levels) >= 2
+        use_pack_v = self.config.bit_pack and _per_word_for(v_levels) >= 2
+        if use_pack_k:
+            k_idx = pack_indices(k_idx, k_levels)
+        if use_pack_v:
+            v_idx = pack_indices(v_idx, v_levels)
+        if use_pack_k:
+            k_scale = k_scale.to(torch.float16)
+        if use_pack_v:
+            v_scale = v_scale.to(torch.float16)
+
+        k_cache = QuantizedKVCache(
+            k_indices=k_idx, v_indices=None, k_qjl=None, k_scale=k_scale,
+            seq_len=seq, head_dim=hd, num_heads=nh, levels=k_levels,
+            packed=use_pack_k, scheme="affine",
+        )
+        v_cache = QuantizedKVCache(
+            k_indices=v_idx, v_indices=None, k_qjl=None, k_scale=v_scale,
+            seq_len=seq, head_dim=hd, num_heads=nh, levels=v_levels,
+            packed=use_pack_v, scheme="affine",
+        )
+        return k_cache, v_cache
+
+    def _dequantize_kv_affine(
+        self, k_cache: QuantizedKVCache, v_cache: QuantizedKVCache
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Affine scheme: unpack indices, re-scale by per-channel/per-token
+        scales (no rotation). K scales are [nh, 1, hd], V scales [nh, seq, 1]."""
+        nh, seq, hd = k_cache.num_heads, k_cache.seq_len, k_cache.head_dim
+        if k_cache.packed:
+            k_idx = unpack_indices(k_cache.k_indices, k_cache.levels, nh * seq * hd).reshape(nh, seq, hd)
+        else:
+            k_idx = k_cache.k_indices
+        if v_cache.packed:
+            v_idx = unpack_indices(v_cache.k_indices, v_cache.levels, nh * seq * hd).reshape(nh, seq, hd)
+        else:
+            v_idx = v_cache.k_indices
+        k_recon = dequantize_affine(k_idx, k_cache.k_scale, k_cache.levels)
+        v_recon = dequantize_affine(v_idx, v_cache.k_scale, v_cache.levels)
         return k_recon.unsqueeze(0), v_recon.unsqueeze(0)
 
     def _buf_len(self, layer_idx: int) -> int:

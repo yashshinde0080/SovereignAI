@@ -28,6 +28,7 @@ fp16 scales on top of its quantized indices, i.e. strictly less memory).
 import argparse
 import json
 import math
+import os
 import time
 
 import torch
@@ -145,17 +146,29 @@ def needle_recall(model, tokenizer, tq_kwargs, context_tokens=2048, generate=8):
     return logp, text, ("PINEAPPLE" in text or "Pineapple" in text)
 
 
+_WIKITEXT_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      "..", "..", "reviews", "eval_wikitext.txt")
+
+
 def get_wikitext_slice(tokens: int) -> tuple[str, str]:
     """Fetch a slice of wikitext-2 test (datasets-server HTTP API, no pyarrow
-    needed); fall back to synthetic text offline.
+    needed); prefer the local cache file (``reviews/eval_wikitext.txt``) for
+    reproducibility and offline use. Falls back to synthetic text if both the
+    cache and network fail.
 
     ``tokens`` is a character budget (chars ~= tokens * 4). Returns
-    ``(text, source)`` where source is "wikitext" or "synthetic-fallback" so
-    callers can tell a network-offline run from a real one (a degenerate
-    fallback eval must never be mistaken for a gate pass).
+    ``(text, source)`` where source identifies the actual source.
     """
     import json as _json
     import urllib.request as _url
+
+    # Prefer the local cache (offline-able, reproducible).
+    if os.path.exists(_WIKITEXT_CACHE):
+        with open(_WIKITEXT_CACHE, encoding="utf-8") as _f:
+            lines = [l.strip() for l in _f if len(l.strip()) > 80]
+        if lines:
+            print(f"    using cached wikitext ({_WIKITEXT_CACHE})")
+            return "\n".join(lines)[: tokens * 4], "wikitext-cache"
 
     try:
         api = ("https://datasets-server.huggingface.co/rows?dataset=Salesforce%2Fwikitext"
@@ -213,9 +226,13 @@ def main():
 
     configs = [
         ("baseline", None),
-        ("tq-3.5+qjl", {"bits_per_coord": 3.5, "enable_qjl": True}),
-        ("tq-3.5-noqjl", {"bits_per_coord": 3.5, "enable_qjl": False}),
-        ("tq-4.0+qjl", {"bits_per_coord": 4.0, "enable_qjl": True}),
+        # Per-channel affine (KIVI-style) re-gate. Polar configs (3.5+qjl,
+        # 3.5-noqjl, 4.0+qjl -> ppl 1201/3434/3623) are recorded in
+        # reviews/eval_gate_2026-08-09.json from the 2026-08-09 run.
+        ("tq-affine-3.5", {"bits_per_coord": 3.5, "quant_scheme": "affine"}),
+        ("tq-affine-4.0", {"bits_per_coord": 4.0, "quant_scheme": "affine"}),
+        ("tq-affine-4k5v", {"bits_per_coord": 4.0, "quant_scheme": "affine", "v_bits": 5.0}),
+        ("tq-affine-4k6v", {"bits_per_coord": 4.0, "quant_scheme": "affine", "v_bits": 6.0}),
     ]
     results = []
     for label, tq_kwargs in configs:
@@ -243,14 +260,18 @@ def main():
           f"{GATE_NEEDLE_LOGPROB_FACTOR:.0f}x of baseline")
     print(f"NOTE: ~{ids.numel()} scored tokens is a coarse gate (fine for catching catastrophic "
           f"failure; a release-grade gate should use 4-8k+ tokens). Text source: {text_source}")
-    qjl_on = next(r for r in results if r["label"] == "tq-3.5+qjl")
-    qjl_off = next(r for r in results if r["label"] == "tq-3.5-noqjl")
-    if qjl_on["perplexity"] < qjl_off["perplexity"]:
-        print(f"QJL gain re-validation on real K/V: QJL-ON beats QJL-off "
-              f"({qjl_on['perplexity']:.3f} vs {qjl_off['perplexity']:.3f}) -> keep")
+    qjl_on = next((r for r in results if r["label"] == "tq-3.5+qjl"), None)
+    qjl_off = next((r for r in results if r["label"] == "tq-3.5-noqjl"), None)
+    if qjl_on is not None and qjl_off is not None:
+        if qjl_on["perplexity"] < qjl_off["perplexity"]:
+            print(f"QJL gain re-validation on real K/V: QJL-ON beats QJL-off "
+                  f"({qjl_on['perplexity']:.3f} vs {qjl_off['perplexity']:.3f}) -> keep")
+        else:
+            print(f"QJL gain re-validation on real K/V: QJL-off beats QJL-ON "
+                  f"({qjl_off['perplexity']:.3f} vs {qjl_on['perplexity']:.3f}) -> reconsider")
     else:
-        print(f"QJL gain re-validation on real K/V: QJL-off beats QJL-ON "
-              f"({qjl_off['perplexity']:.3f} vs {qjl_on['perplexity']:.3f}) -> reconsider")
+        print("QJL comparison skipped (polar configs not in this run; 2026-08-09 gate: "
+              "3.5+qjl 1201 vs 3.5-noqjl 3434 on Qwen2-0.5B)")
 
     if args.out:
         with open(args.out, "w") as f:

@@ -498,7 +498,7 @@ To test the "Qwen2-0.5B has uniquely sharp attention (norms ~215)" hypothesis, t
 | Dead-config alignment | ❌ P2 | hadamard/beta_lloyd_max/enable_polarquant/collect_stats |
 | CLI honesty | ❌ P3 | benchmark-turboquant still prints fabricated estimates |
 | turboquant.md rewrite | ❌ P3 | Document as experimental, point at this report |
-| TODOS.md | ❌ P3 | Router auto-enable (gated), llama.cpp cross-validation, GGUF tbq eval |
+| TODOS.md | ✅ P3 | Router auto-enable (gated), llama.cpp tbq3_0/tbq4_0 eval DONE-by-research (2026-08-11, see Phase 4 section); remaining: codebook-vs-reference comparison |
 
 ## Lessons learned
 
@@ -512,7 +512,64 @@ To test the "Qwen2-0.5B has uniquely sharp attention (norms ~215)" hypothesis, t
 
 ## Next steps (recommended)
 
-1. **Phase 4 evaluation (llama.cpp tbq3_0/tbq4_0)** — if these exist and work (PR #21089), they are the fastest path to "does ≥7B model turboquant work?". The custom PyTorch path lacks a 7B+ model test; llama.cpp kernels at least tell us whether the paper's claim is real in practice.
+1. **Phase 4 evaluation (llama.cpp tbq3_0/tbq4_0)** — ✅ RESOLVED 2026-08-11 by research (see "Phase 4 evaluation" section below): kernels are fork-only (PR #21089 closed unmerged), unbuildable here (no compiler, 8GB RAM), but the paper's 6x claim is already community-validated at 104B scale. The remaining real experiment is a codebook comparison against the `turboquant_plus` Python reference implementation on our captured K/V — no build needed.
 2. **Per-vector codebooks** — the fundamental limitation of scalar-per-coordinate quantization for this regime. A spherical codebook (VQ-VAE-style) or per-vector product quantizer could encode whole vectors at 3.5 bits with lower error.
 3. **TinyLlama-1.1B gate run** — if a ≥1B model with real attention capacity is accessible (GPU or very patient CPU), running the gate on TinyLlama with affine-4k6v would definitively answer whether the scheme is viable for models with more redundancy. This is the single remaining experiment before declaring Approach A dead or viable.
 4. **P2/P3 cleanup** — FullRAM layout fix, dead-config alignment, CLI honesty, turboquant.md rewrite, TODOS.md. These are independent of the accuracy question and improve code quality even if the feature stays off.
+
+---
+
+# Phase 4 evaluation (2026-08-11): llama.cpp tbq3_0/tbq4_0 kernels
+
+**Goal:** fastest path to testing the paper's 6x claim on a real ≥7B model. **Verdict: the claim is already community-validated at 104B scale; the kernels cannot be built or run on this machine (no compiler, no RAM, no GPU); our custom path's accuracy gap is codebook-side, not scheme-side.**
+
+## Fact-check: what actually exists upstream
+
+| Claim | Reality (verified 2026-08-11) |
+|---|---|
+| PR #21089 "ggml: add CPU TurboQuant KV cache types (TBQ3_0 / TBQ4_0)" | **CLOSED UNMERGED on 2026-06-02** (GitHub API: `state=closed`, no `merged_at`). The kernels exist only in the community fork **`TheTom/llama-cpp-turboquant`** (turbo2/3/4 KV cache + TQ3_1S/TQ4_1S weight formats), with prebuilt binaries for **Mac (Metal) and Windows (CUDA) only** |
+| `TheTom/turboquant_plus` (initially cloned as a fork) | **Not a llama.cpp fork at all** — a Python reference implementation of the paper (PolarQuant + WHT) with validation papers and benchmark data. Runs directly on CPU |
+| Upstream llama.cpp | **Merged the Hadamard KV rotation** (#21038, citing TurboQuant directly) + fast WHT kernels on CPU (#22631), CUDA (#23615), Vulkan (#23687). Per the research home README: "Rotation + stock q4_0 cache is essentially turbo4's rotation stage" — the PolarQuant codebook itself is NOT upstream in llama.cpp |
+| vLLM | **Merged the full codec**: PR #38479 (April 2026) — `--kv-cache-dtype turboquant_k8v4` + friends, fused Triton store/decode kernels |
+| MLX (Apple) | Merged into `mlx-swift-lm` (PR #232): full asymmetric family (turbo0v*/turbo8v*) + symmetric turbo4/3/2; turbo8v3 = 2.7x KV at affine8-class KLD across 6 families (1.7B→32B) |
+
+## The paper's 6x claim — already validated at scale, by the community
+
+The fork's README reports the exact test this task wanted: **TurboQuant validated end-to-end from 1.5B to 104B at 128K context on a MacBook (turbo3, PPL 4.024, 74 GB peak memory)**, compressing KV cache **3.8–6.4x** at near q8_0 prefill speed and ~0.9x decode throughput at long context. The paper's headline is real on its target hardware — no local ≥7B test needed to establish that.
+
+## Why we can't run it on this machine (measured, not assumed)
+
+1. **RAM: 8 GB total, ~2 GB free** (checked via `GlobalMemoryStatusEx`). A ≥7B fp16 model needs ~14 GB; even Q4 quantized ≥7B needs ~5 GB resident plus KV. Physically cannot run.
+2. **No compiler:** VS 2022 dir exists but is empty (no `cl.exe`); no cmake, no mingw gcc/g++, no zig. Building llama.cpp from source is not possible.
+3. **Prebuilt binaries don't fit:** the fork ships Mac (Metal) and Windows (CUDA) builds only; this machine is Windows **CPU-only** (no GPU) — neither build runs here.
+
+## What this means for our project
+
+1. **Approach B ("stand on llama.cpp") is now partially obsolete in its specifics but vindicated in direction:** the codec upstreamed into **vLLM** (not llama.cpp's CPU kernels, which were closed unmerged). If we ever want a production-grade engine path, vLLM's `turboquant_k8v4` is the reference implementation of record.
+2. **Our accuracy failure is codebook-side, not scheme-side.** The paper's exact scheme (PolarQuant + WHT) passes at 104B; our implementation of a *different* codebook (uniform centroid) fails at 0.5B/70M. The next experiment is cheap and needs no build: `turboquant_plus` runs on CPU (torch) — run its `polar_quant.py` on our captured Qwen2 K/V, compare NMSE against our affine/polar numbers, then port it into `accuracy_eval.py` as one more config and re-gate. If the reference codebook passes where ours failed, the fix is a codebook swap; if it also fails, the small-model regime itself is the wall (matching the affine finding).
+3. **The honest boundary statement:** our gate (2% ppl degradation on 0.5B/70M models, chunked long-context) is much stricter than the paper's target regime (≥7B, MacBook-class). The claim "TurboQuant destroys small-model quality" stands; "TurboQuant works at ≥7B" is community-confirmed but untestable on this hardware.
+
+## Reference-codebook probe (2026-08-11): codebook swap would help, cannot pass the gate
+
+`benchmarks/reference_polar_probe.py` runs the `turboquant_plus` reference PolarQuant/TurboQuant (per-vector norm extraction + Gaussian Lloyd-Max centroids + norm correction) on the **same captured Qwen2-0.5B K/V** (layer 4, 256 tokens) as the affine probe. Results:
+
+| method | K NMSE | V NMSE |
+|---|---|---|
+| our polar 3.5+qjl | 0.14283 | 0.13510 |
+| ref PolarQuant 2-bit | 0.11492 | 0.12638 |
+| **ref PolarQuant 3-bit** | **0.02833** | **0.03446** |
+| ref PolarQuant 4-bit | 0.00872 | 0.00890 |
+| ref TurboQuant 3-bit (2+1 QJL) | 0.06820 | 0.07516 |
+| ref PolarQuant 3-bit, no norm-corr | 0.02945 | 0.03511 |
+| our affine 3-bit / 4-bit (report) | 0.0228 / 0.0050 | 0.092 / 0.026 |
+
+**Layer-0 confirmation (2026-08-11):** same probe on the extreme channel-structure layer (K ch cv 1.84): our polar 3.5+qjl K 0.13432 / V 0.13795 vs ref PolarQuant 3-bit 0.03334 / 0.03091 (4x better), ref 4-bit 0.00829 / 0.00820 — identical regime; QJL hurts (3-bit 0.0787 vs 0.0333), norm-corr ~no-op (0.0343). The codebook verdict holds on the worst case, not just layer 4.
+
+**Verdict: codebook-side confirmed, and it's a 5x fix — but the fix cannot pass the gate.**
+
+1. **The reference codebook is 5x better than ours on identical tensors** (3-bit 0.0283 vs our 3.5+qjl 0.1428). Our uniform-on-[-1,1] centroids were the polar path's dominant error source; porting the reference's Gaussian Lloyd-Max codebook + norm extraction would genuinely fix the polar path.
+2. **Yet it lands in the affine NMSE regime that already FAILED the gate.** Reference 4-bit (0.0087) ≈ our affine 4-bit (0.0050) — which gates at 3017–4201% ppl degradation. At the paper's actual 3.5-bit operating point (2.5-bit polar + 1-bit QJL, interpolating between our 2-bit and 3-bit rows) it would land ~0.05+, worse. No scalar per-coordinate codec gets under ~0.5% vector error on these models.
+3. **QJL hurts at these precisions** (TurboQuant 3-bit 0.068 vs PolarQuant 3-bit alone 0.028) — the reference's own two-stage scheme confirms our real-data finding that the 1-bit residual stage overcorrects once the codebook is good.
+4. **Norm correction is nearly a no-op** on real K/V (0.0283 vs 0.0295 at 3-bit) — the paper's "store norms + rescale" step contributes almost nothing here.
+
+**Implication:** the "port the reference codebook" experiment is resolved — it improves the polar path 5x but cannot change the gate verdict. The remaining paths are unchanged: ≥1B model gate test (TinyLlama-1.1B), or per-vector non-scalar codecs (spherical VQ / product quantization). `TODOS.md` updated.

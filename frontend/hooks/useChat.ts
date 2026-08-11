@@ -94,6 +94,15 @@ export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Live messages in a ref so sendMessage/editAndResend/regenerate keep stable
+  // identities (they read current state without re-creating themselves every
+  // render). Stable callbacks let MessageItem (React.memo) skip re-rendering
+  // completed messages when only the streaming tail changes.
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   // Thinking mode for reasoning models (Qwen3.5 etc.): toggles the backend's
   // enable_thinking chat-template flag. Default ON so reasoning models think
   // out loud; harmless for models whose template ignores the flag. Kept in a
@@ -156,6 +165,11 @@ export function useChat() {
     setMessages(messagesToSend);
     setIsLoading(true);
 
+    // rAF flush handle lives here so the finally block can cancel it if the
+    // stream errors mid-generation — a late flush would otherwise overwrite
+    // the appended error message with partial content.
+    let flushRaf: number | null = null;
+
     try {
       const response = await fetch(`${API_BASE}/v1/chat/completions`, {
         method: 'POST',
@@ -197,6 +211,22 @@ export function useChat() {
             };
             return newMessages;
           });
+        };
+
+        // One setState per token re-renders the whole message list (and
+        // re-parses every message's markdown) each tick. Accumulate into the
+        // content/reasoning locals and commit at most once per animation
+        // frame; the final patch on stream end is synchronous.
+        const flush = () => {
+          flushRaf = null;
+          patchLastMessage({
+            content: assistantContent,
+            reasoning: assistantReasoning || undefined,
+          });
+        };
+        const scheduleFlush = () => {
+          if (flushRaf !== null) return;
+          flushRaf = requestAnimationFrame(flush);
         };
 
         // Add placeholder message
@@ -249,13 +279,8 @@ export function useChat() {
                 const reasoningToken = chunk.choices?.[0]?.delta?.reasoning || '';
                 const token = chunk.choices?.[0]?.delta?.content || '';
                 if (reasoningToken) assistantReasoning += reasoningToken;
-                if (reasoningToken || token) {
-                  if (token) assistantContent += token;
-                  patchLastMessage({
-                    content: assistantContent,
-                    reasoning: assistantReasoning || undefined,
-                  });
-                }
+                if (token) assistantContent += token;
+                if (reasoningToken || token) scheduleFlush();
               } catch (e) {
                 console.error('JSON parse error:', e, data);
               }
@@ -270,6 +295,10 @@ export function useChat() {
         if (!assistantContent.trim() && assistantReasoning.trim()) {
           assistantContent = assistantReasoning;
           assistantReasoning = '';
+        }
+        if (flushRaf !== null) {
+          cancelAnimationFrame(flushRaf);
+          flushRaf = null;
         }
         patchLastMessage({
           content: assistantContent,
@@ -299,6 +328,10 @@ export function useChat() {
         { role: 'assistant', content: `**Error:** ${errMsg(error) || 'Sorry, an error occurred.'}` },
       ]);
     } finally {
+      if (flushRaf !== null) {
+        cancelAnimationFrame(flushRaf);
+        flushRaf = null;
+      }
       setIsLoading(false);
     }
   }, []);
@@ -306,29 +339,30 @@ export function useChat() {
   const sendMessage = useCallback((content: string) => {
     const trimmed = content.trim();
     if (!trimmed) return;
-    runCompletion([...messages, { role: 'user', content: trimmed }]);
-  }, [messages, runCompletion]);
+    runCompletion([...messagesRef.current, { role: 'user', content: trimmed }]);
+  }, [runCompletion]);
 
   // Replace the user message at `index`, drop everything after it, re-run.
   const editAndResend = useCallback((index: number, content: string) => {
     const trimmed = content.trim();
     if (!trimmed) return;
-    runCompletion([...messages.slice(0, index), { role: 'user', content: trimmed }]);
-  }, [messages, runCompletion]);
+    runCompletion([...messagesRef.current.slice(0, index), { role: 'user', content: trimmed }]);
+  }, [runCompletion]);
 
   // Re-run the last exchange: keep history up to the last user message,
   // drop the trailing assistant reply, and re-run the completion.
   const regenerate = useCallback(() => {
+    const current = messagesRef.current;
     let lastUserIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
+    for (let i = current.length - 1; i >= 0; i--) {
+      if (current[i].role === 'user') {
         lastUserIndex = i;
         break;
       }
     }
     if (lastUserIndex === -1) return;
-    runCompletion(messages.slice(0, lastUserIndex + 1));
-  }, [messages, runCompletion]);
+    runCompletion(current.slice(0, lastUserIndex + 1));
+  }, [runCompletion]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);

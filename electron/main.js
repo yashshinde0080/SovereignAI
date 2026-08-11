@@ -208,11 +208,9 @@ app.whenReady().then(async () => {
       return net.fetch(pathToFileURL(filePath).href);
     });
 
-    // Start backend first
-    await startBackend();
-    console.log('Backend started');
-
-    // Create window
+    // Create window first so the static UI paints while the backend boots
+    // behind it. The frontend retries /status and metricsWs auto-reconnects,
+    // so a briefly-unreachable backend self-heals.
     createWindow();
 
     // Create menu
@@ -220,6 +218,13 @@ app.whenReady().then(async () => {
 
     // Create tray
     tray = createTray(mainWindow);
+
+    // Boot backend in parallel — don't block first paint on Python startup.
+    startBackend().then(() => {
+      console.log('Backend started');
+    }).catch((err) => {
+      console.error('Backend failed to start:', err);
+    });
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

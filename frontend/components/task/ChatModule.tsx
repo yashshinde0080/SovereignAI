@@ -120,10 +120,14 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
     setSuggestion(null);
   };
 
-  const handleRegenerate = () => {
+  const handleEditMessage = useCallback((index: number) => {
+    setEditingIndex(index);
+  }, []);
+
+  const handleRegenerate = useCallback(() => {
     setEditingIndex(null);
     regenerate();
-  };
+  }, [regenerate]);
 
   const handleExport = () => {
     toast({
@@ -189,7 +193,7 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
           messages={messages}
           isLoading={isLoading}
           editingIndex={editingIndex}
-          onEditMessage={(index) => setEditingIndex(index)}
+          onEditMessage={handleEditMessage}
           onRegenerate={handleRegenerate}
         />
       </div>

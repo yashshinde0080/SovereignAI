@@ -163,3 +163,47 @@ Six commits (`2831555` → `40379b6`), one coherent tranche: after the 2026-08-0
 - **Cross-model bound** (`a6d286f`): `reviews/eval_gate_pythia_2026-08-10.json` — Pythia-70m (moderate key norms ~10-15 vs Qwen2 ~215): baseline 39.2 → affine 555-583 ppl (**1318-1387% deg**). Same catastrophic pattern → NOT a Qwen2-sharpness artifact.
 - **Conclusion (in `reviews/autoplan-report-2026-08-09.md` tranche)**: on 0.5B-70M models, per-coordinate scalar quantization at ≤6 bits cannot pass a 2%-degradation gate — per-coord error (~0.5% NMSE at 4 bits) corrupts attention logits → hidden states → errors compound across the sequence. The paper's 6× "zero-loss" claim likely only holds for ≥7B models / single-token evals. Recommended next: llama.cpp tbq3_0/tbq4_0 eval (PR #21089), per-vector codebooks, TinyLlama-1.1B gate run as the final viability test.
 - **Root markers** (`40379b6`): `turboquant.md` gets experimental/default-off warning banner pointing at the report; `TODOS.md` re-created (P3: CLI honesty, ≥1B gate, llama.cpp eval); added `llama-cpp-tq` + `llama-cpp-pr` submodule pointers.
+
+## [2026-08-11] implement | LayerStream Phase A+B (memory-bounded streaming + int4 codec) + Whole-App Performance + TurboQuant Phase 4 Research
+Five commits (`3143fe6` → `8050804`), one evening tranche (19:46–19:47), all pushed to `origin/main` (`8050804` = remote tip — verified via GitHub API). Three workstreams: two implementations + a research close-out on the TurboQuant gate.
+
+### LayerStream Phase A — make "memory-bounded" true (commit `3143fe6`)
+Per `Docs/LayerStream-Improvements.md` (new, 404 lines — office-hours design doc that exposed the core contradiction: the loader caches every layer in CPU RAM forever, prefetch depth is 1, and a whole second architecture — `scheduler.py`/`prefetch.py`/`mmap_loader.py`/`memory.py` — is unwired dead code). Shipped Phase A:
+- **Bounded LRU cache + pinned paths** (`loader.py` +191): `LayerWeightLoader` evicts LRU past `cache_max = 1 + prefetch_depth + pinned`; `embed`/`norm`/`lm_head` pinned (tiny, used every pass).
+- **Prefetch depth 3** (`layer_executor.py` +106): deep prefetch threaded through `LayerExecutor` so the disk stays saturated while compute runs.
+- **Cached attention mask** + position ids keyed by `(seq, past)` shape instead of rebuilt per forward call.
+- **Benchmark harness** (`benchmarks/layerstream_phase_a.py`, new, 143 lines): per-config fresh subprocesses; Qwen2-0.5B / 24 layers / `workspace/offload_cache/bench-*` split dirs.
+- **Removed `gc.collect()` per eviction** — it cost ~1.5 s/pass (tensors are refcounted; Python GC chases cycles, not tensors).
+- Measured (Qwen2-0.5B): fp16 cached **682.6 → 256.0 MB** bounded; int8 **1365.3 → 227.5 MB**; steady-state pass cost 0.02 s fp16 / 0.66 s int8 — the honest price of streaming (pre-fix decode showed 0.00 s only because everything stayed resident).
+- **Key finding**: `safetensors get_tensor(device="cpu")` returns mmap-backed views, so the OS reclaims fp16 pages (RSS +2 MB) — the "unlimited" fp16 cache was less catastrophic than feared; but the int8 path was dequantizing to *private fp32 copies* (1365 MB held, +1433 MB RSS) — the real RAM hog the bounded cache fixes.
+- **New tests** (`tests/test_layerstream_loader.py`, 9): budget eviction, pinned survival, LRU order, prefetch depth bounds, future reaping, mask caching/cap. Full suite **95 passed**.
+
+### LayerStream Phase B — shrink bytes per layer (commit `3143fe6`)
+- **int8 stays raw** (`loader.py`): the loader no longer CPU-dequantizes — RAM holds int8 + scale; dequant happens on the compute device inside `assign_weights` (`dequantize_on_device()`).
+- **Group-wise int4 codec** (`splitter.py` +66): Q4_0-style — group 32, packed nibbles, fp16 scales.
+- **bf16 capability gate** (`_compute_dtype_for`): bf16 only on AVX512-BF16/AMX CPUs — measured **163× slower** than fp32 on this AVX2 box, so default stays fp32.
+- Measured (full model in RAM, unlimited cache): fp16 682.6 MB (28.4 MB/layer) → int8 **341.4 MB** (14.2 MB/layer, 0.50×) → int4 **192.1 MB** (8.0 MB/layer, **0.28×**). int8 footprint cut **4×** (1365 → 341 MB) just by dropping the dequantized fp32 copy; at 7B the ladder reads ~14 GB → 7 GB → 3.5 GB.
+- Tensors < 1024 elems (`inv_freq`) stay fp — RoPE buffers never loaded raw as int tensors.
+- **New tests (6)**: int4 roundtrip NMSE, int4 padded-cols, int8 device-dequant ≡ old CPU path, raw-int8 stays in cache, numel gate, bf16 gate. Full suite **105 passed**.
+
+### Whole-app performance (commits `d4e5e07`, `aed5946`, `0d0f7d0`)
+Per `reviews/perf-research-2026-08-11.md` (new, 204 lines — end-to-end perf research grounded in `file:line` refs; rejected uvloop / V8-snapshot / gzip / react-window / periodic-vacuum with measured reasons). Implemented:
+- **rAF-batched token flush** (`useChat.ts`): one `setMessages` per animation frame instead of per token — at ~20-40 tok/s this was an O(N) `ReactMarkdown` re-parse + DOM diff every ~30 ms; `finally` cancels a pending flush so a mid-stream error can't clobber the error bubble; `sendMessage`/`editAndResend`/`regenerate` made stable via `messagesRef`.
+- **Message memoization** (`MessageList.tsx`): message row extracted into `React.memo`'d `MessageItem` — completed messages stop re-rendering and stop re-parsing markdown; `ChatModule.tsx` `onEditMessage`/`onRegenerate` now `useCallback`'d so the memo holds.
+- **Electron parallel boot** (`main.js`): window opens before the backend resolves; backend boots behind it — frontend `/status` retry + `metricsWs` reconnect self-heal.
+- **SSE frame batching** (`chat.py`): `stream_response` batches ~96 chars per frame (was one frame per engine token) — ~10× fewer frames/JSON serializations, deltas stay in order; guarded by `tests/test_stream_batch.py` (collapse, lossless reconstruction, finish-trails-content).
+- **`SettingsDialog` `next/dynamic`'d** (`ClientLayout.tsx`, `ssr: false`) — 8 settings sections off the global app-shell chunk.
+- Verified: `tsc --noEmit` clean, `node --check` clean, **28 pytest** tests pass (3 new + 25 existing).
+- **Measured and rejected (do not build)**: metrics-WS throttle (backend already pushes ~1/s), `/status` dedup (sub-ms loopback, redundant mounts), `next/dynamic` recharts (already route-split), chat-tail windowing (conditional — only if conversations grow past hundreds of messages).
+
+### TurboQuant Phase 4 research + reference-codebook probe (commits `0d0f7d0`, `8050804`)
+- **llama.cpp tbq3_0/tbq4_0 eval — resolved by research** (new "Phase 4 evaluation" section in `reviews/autoplan-report-2026-08-09.md`): PR #21089 **closed unmerged** (2026-06-02); kernels exist only in community fork `TheTom/llama-cpp-turboquant` (Mac Metal / Windows CUDA builds — neither runs on this CPU-only box); `TheTom/turboquant_plus` is actually a Python reference implementation of the paper (runs on CPU). Upstream llama.cpp merged only the Hadamard rotation (#21038); **vLLM merged the full codec** (#38479, `turboquant_k8v4`); MLX merged into `mlx-swift-lm`. The paper's 6× claim is **already community-validated at 104B/128K** (turbo3, ppl 4.024, 74 GB peak) — no local ≥7B test possible (8 GB RAM, ~2 GB free; no compiler — VS2022 dir empty).
+- **Reference-codebook probe** (`benchmarks/reference_polar_probe.py`, new, 133 lines): runs `turboquant_plus` PolarQuant/TurboQuant (per-vector norm extraction + Gaussian Lloyd-Max centroids + norm correction) on the same captured Qwen2-0.5B K/V as the affine probe (layer 4, 256 tokens):
+  | method | K NMSE | V NMSE |
+  |---|---|---|
+  | our polar 3.5+qjl | 0.14283 | 0.13510 |
+  | ref PolarQuant 3-bit | **0.02833** | 0.03446 |
+  | ref PolarQuant 4-bit | 0.00872 | 0.00890 |
+  | our affine 4-bit (report) | 0.0050 | 0.026 |
+  Verdict: reference codebook is **5× better than ours** (0.028 vs 0.143 at 3-bit) but lands **in the affine regime that already FAILED the gate** (ref 4-bit 0.0087 ≈ affine 4-bit 0.0050 → 3017–4201% ppl deg). QJL hurts (TurboQuant 3-bit 0.068 vs PolarQuant 3-bit 0.028); norm correction ~no-op. **Layer-0 confirmation** on the extreme channel-structure layer (K cv 1.84): identical regime (ref 3-bit 0.0333 vs our 0.1343). Codebook swap alone cannot pass the gate.
+- **`TODOS.md`** (`8050804`): reference-codebook comparison ✅ DONE, llama.cpp tbq eval ✅ DONE; remaining: ≥1B model gate (TinyLlama-1.1B), per-vector non-scalar codecs (spherical VQ / product quantization). Removed `llama-cpp-pr` submodule pointer.

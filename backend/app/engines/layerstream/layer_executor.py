@@ -5,25 +5,61 @@ import torch
 import torch.nn as nn
 from typing import Dict, Any, List, Optional
 
-from .loader import LayerWeightLoader
+from .loader import LayerWeightLoader, dequantize_on_device
 from .kv_cache import KVCacheManager, HFProxyCache, StatefulCache
 from .benchmark import BenchmarkTracker
+
+
+def _cpu_bf16_capable() -> bool:
+    """True only where torch's bf16 matmul is native (AVX512-BF16/AMX).
+
+    On AVX2, bf16 is emulated by torch and measured ~160x slower than fp32
+    (245ms vs 1.5ms per 1024x1024 matmul), so it must be gated on capability
+    rather than enabled by default.
+    """
+    try:
+        return bool(torch.backends.cpu.is_bf16_supported())
+    except Exception:
+        # older torch: no is_bf16_supported; fall back to the capability string
+        try:
+            return torch.backends.cpu.get_cpu_capability() in ("avx512_bf16", "amx")
+        except Exception:
+            return False
+
+
+def _compute_dtype_for(device: torch.device) -> torch.dtype:
+    """Pick the compute dtype: fp16 on CUDA, bf16 on capable CPUs, fp32 else."""
+    if device.type == "cuda":
+        return torch.float16
+    return torch.bfloat16 if _cpu_bf16_capable() else torch.float32
 
 class LayerExecutor:
     """Orchestrates IO, KV, and isolated GPU forward passes safely."""
     def __init__(self, components: Dict[str, Any], config: Any, weights_dir: str, device: str,
-                 turboquant_config: Optional[dict] = None, layer_types: Optional[list] = None):
+                 turboquant_config: Optional[dict] = None, layer_types: Optional[list] = None,
+                 prefetch_depth: int = 3, cache_budget_mb: Optional[float] = None):
         self.components = components
         self.config = config
         self.weights_dir = weights_dir
         self.device = torch.device(device)
         self.num_layers = len(components['layers'])
 
-        # CPU Optimization: float16 is very slow on many CPUs.
-        # Use bfloat16 or float32 for CPU-only runs.
-        self.compute_dtype = torch.float16 if self.device.type == "cuda" else torch.float32
+        self.compute_dtype = _compute_dtype_for(self.device)
 
-        self.loader = LayerWeightLoader(weights_dir)
+        self.layer_paths = [os.path.join(weights_dir, f"layer_{i}.safetensors") for i in range(self.num_layers)]
+        self.embed_path = os.path.join(weights_dir, "embed.safetensors")
+        self.norm_path = os.path.join(weights_dir, "norm.safetensors")
+        self.lm_head_path = os.path.join(weights_dir, "lm_head.safetensors")
+
+        # Pinned = tiny, used every pass: never evicted from the loader cache.
+        pinned = {self.embed_path, self.norm_path, self.lm_head_path}
+        self.loader = LayerWeightLoader(
+            weights_dir,
+            prefetch_depth=prefetch_depth,
+            cache_budget_mb=cache_budget_mb,
+            pinned_paths=pinned,
+        )
+        self._mask_cache = {}
         self.tracker = BenchmarkTracker()
 
         # Detect hybrid/stateful models (e.g. Qwen3.5 with linear_attention + full_attention)
@@ -64,14 +100,21 @@ class LayerExecutor:
         else:
             self.kv_manager = KVCacheManager()
             self._hf_cache_factory = lambda: HFProxyCache(self.kv_manager)
-        
-        self.layer_paths = [os.path.join(weights_dir, f"layer_{i}.safetensors") for i in range(self.num_layers)]
-        self.embed_path = os.path.join(weights_dir, "embed.safetensors")
-        self.norm_path = os.path.join(weights_dir, "norm.safetensors")
-        self.lm_head_path = os.path.join(weights_dir, "lm_head.safetensors")
     
     def _create_attention_mask(self, input_shape: tuple, past_length: int, dtype: torch.dtype) -> torch.Tensor:
-        """Architecture-aware attention mask mapping."""
+        """Architecture-aware attention mask mapping (cached per shape).
+
+        The mask only depends on (batch, seq, past_length, dtype), so repeated
+        identical shapes across generate() calls (same prompt length, or a
+        prefill repeated after a context reset) hit the cache instead of
+        rebuilding. Bounded at 64 shapes; decode's past_length grows per token,
+        so the cache is capped rather than allowed to track a full context.
+        """
+        key = (input_shape, past_length, str(dtype))
+        cached = self._mask_cache.get(key)
+        if cached is not None:
+            return cached
+
         batch_size, seq_length = input_shape
         mask = torch.full((batch_size, 1, seq_length, seq_length + past_length), torch.finfo(dtype).min, device=self.device)
         
@@ -84,19 +127,33 @@ class LayerExecutor:
             
         full_mask = full_mask.unsqueeze(0).unsqueeze(0).expand(batch_size, 1, seq_length, seq_length + past_length)
         mask = torch.where(full_mask == 1.0, torch.tensor(0.0, device=self.device, dtype=dtype), mask)
+        if len(self._mask_cache) > 64:
+            self._mask_cache.clear()  # bounded: decode grows past_length per token
+        self._mask_cache[key] = mask
         return mask
 
     def assign_weights(self, module: nn.Module, state_dict: dict):
-        """Ultra-fast weight assignment with vGPU/CUDA awareness."""
-        for name, _ in module.named_parameters():
+        """Ultra-fast weight assignment with vGPU/CUDA awareness.
+
+        Quantized weights (int8/int4, detected by a matching ``<name>.scale``
+        entry) are dequantized on the compute device, so RAM/disk hold the
+        small form and the device pays the conversion. fp16/fp32 pass through
+        unchanged. non_blocking=True overlaps the copy with the next disk read.
+        """
+        for name, param in module.named_parameters():
             if name in state_dict:
                 parts = name.split('.')
                 parent = module
                 for part in parts[:-1]:
                     parent = getattr(parent, part)
                 attr = parts[-1]
-                # vGPU/CUDA optimization: use non_blocking=True to overlap copy with next disk read
-                dev_tensor = state_dict[name].to(self.device, dtype=self.compute_dtype, non_blocking=True)
+                scale = state_dict.get(f"{name}.scale")
+                if scale is not None:
+                    dev_tensor = dequantize_on_device(
+                        state_dict[name], scale, self.device, self.compute_dtype, tuple(param.shape))
+                else:
+                    # vGPU/CUDA optimization: overlap copy with next disk read
+                    dev_tensor = state_dict[name].to(self.device, dtype=self.compute_dtype, non_blocking=True)
                 parent._parameters[attr] = nn.Parameter(dev_tensor, requires_grad=False)
                 
         for name, buf in module.named_buffers():
@@ -107,7 +164,12 @@ class LayerExecutor:
             attr = parts[-1]
             
             if name in state_dict:
-                dev_tensor = state_dict[name].to(self.device, non_blocking=True)
+                scale = state_dict.get(f"{name}.scale")
+                if scale is not None:
+                    dev_tensor = dequantize_on_device(
+                        state_dict[name], scale, self.device, self.compute_dtype, tuple(buf.shape))
+                else:
+                    dev_tensor = state_dict[name].to(self.device, non_blocking=True)
                 parent._buffers[attr] = dev_tensor
             elif buf is not None and buf.device.type == 'meta':
                 # Handle RoPE and other buffers specifically for CUDA/vGPU
@@ -200,10 +262,12 @@ class LayerExecutor:
         # Main layer loop
         for i, layer in enumerate(self.components['layers']):
             t0 = time.perf_counter()
-            next_idx = i + 1
-            # Enable prefetching for both prefill and decode to maintain pipeline speed
-            if next_idx < self.num_layers:
-                self.loader.prefetch_async(self.layer_paths[next_idx])
+            # Prefetch prefetch_depth layers ahead so the disk stays saturated
+            # while the GPU/CPU computes the current layer.
+            for d in range(1, self.loader.prefetch_depth + 1):
+                next_idx = i + d
+                if next_idx < self.num_layers:
+                    self.loader.prefetch_async(self.layer_paths[next_idx])
             
             layer_dict = self.loader.get_weights(self.layer_paths[i])
             self.tracker.record_layer_load(time.perf_counter() - t0)

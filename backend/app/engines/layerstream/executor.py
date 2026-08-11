@@ -3,6 +3,7 @@ import asyncio
 import time
 import os
 import gc
+import glob
 from typing import Dict, Any, AsyncGenerator, Optional
 
 import torch
@@ -16,6 +17,23 @@ from .layer_executor import LayerExecutor
 from .sampler import Sampler
 
 _STREAM_WINDOW = 8  # tokens; BPE subword merges stay local to a few tokens
+
+
+def _default_cache_budget_mb(weights_dir: str) -> float:
+    """Layer-cache budget: enough for the prefetch window + headroom.
+
+    Scaled to the largest per-layer file on disk (from the split dir) with a
+    floor, so small models cache fully and big models stay bounded.
+    """
+    try:
+        sizes = [os.path.getsize(p) for p in glob.glob(os.path.join(weights_dir, "layer_*.safetensors"))]
+        if not sizes:
+            return 512.0
+        max_layer_mb = max(sizes) / (1024 ** 2)
+        # window (current + depth ahead) x 1.5 headroom, floor 256 MB
+        return max(256.0, max_layer_mb * 4.5)
+    except Exception:
+        return 512.0
 
 
 def _stream_delta(tokenizer, all_tokens, emitted, window=_STREAM_WINDOW) -> str:
@@ -151,8 +169,8 @@ class LayerStreamEngine(BaseEngine):
 
         # Determine TurboQuant config: explicit arg > settings > disabled
         tq_config = self.turboquant_config
+        from app.config import settings as sov_settings
         if tq_config is None:
-            from app.config import settings as sov_settings
             if sov_settings.turboquant_enabled:
                 tq_config = {
                     "bits_per_coord": sov_settings.turboquant_bits,
@@ -165,14 +183,22 @@ class LayerStreamEngine(BaseEngine):
         if layer_types is None:
             layer_types = getattr(self.ls_config, 'layer_types', None)
 
+        prefetch_depth = getattr(sov_settings, "layerstream_prefetch_depth", 3)
+        cache_budget_mb = getattr(sov_settings, "layerstream_cache_budget_mb", None)
+        if cache_budget_mb is None:
+            cache_budget_mb = _default_cache_budget_mb(self.weights_dir)
+
         self.layer_executor = LayerExecutor(
             self.components, self.ls_config, self.weights_dir, self.device,
             turboquant_config=tq_config, layer_types=layer_types,
+            prefetch_depth=prefetch_depth, cache_budget_mb=cache_budget_mb,
         )
         
         self.loaded = True
         self.stats["load_time"] = time.time() - start_time
         print(f"Loaded {self.model_path} LayerStream in {self.stats['load_time']:.1f}s")
+
+
 
     
     async def unload(self):

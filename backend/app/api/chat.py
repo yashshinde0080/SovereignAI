@@ -217,6 +217,25 @@ async def stream_response(
         )
         return f"data: {json.dumps(data.model_dump())}\n\n"
 
+    # Batch several engine tokens per SSE frame instead of one frame per token.
+    # Cuts frame count + JSON serialization ~10x; deltas stay in order and the
+    # frontend's rAF flush already coalesces renders. ponytail: fixed char
+    # budget, tune only if frame latency ever matters more than frame count.
+    BATCH_CHARS = 96
+    pending_c: list[str] = []
+    pending_r: list[str] = []
+    pending_chars = 0
+
+    def _take_pending() -> str:
+        nonlocal pending_c, pending_r, pending_chars
+        if not pending_c and not pending_r:
+            return ""
+        frame = _emit("".join(pending_c), "".join(pending_r))
+        pending_c = []
+        pending_r = []
+        pending_chars = 0
+        return frame
+
     async for chunk in engine.generate_stream(
         input_data=prompt,
         max_tokens=request.max_tokens,
@@ -242,12 +261,26 @@ async def stream_response(
             r_out = reasoning[rsent:]
             rsent = len(reasoning)
         if c_out or r_out:
-            yield _emit(c_out, r_out)
+            pending_c.append(c_out)
+            pending_r.append(r_out)
+            pending_chars += len(c_out) + len(r_out)
+            if pending_chars >= BATCH_CHARS:
+                frame = _take_pending()
+                if frame:
+                    yield frame
 
         if finish is not None:
+            frame = _take_pending()
+            if frame:
+                yield frame
             yield _emit("", "", finish)
             sent, rsent = 0, 0
             full_text = ""
+
+    # Flush any remaining batched deltas before the metadata/DONE trailers.
+    frame = _take_pending()
+    if frame:
+        yield frame
 
     if rag_metadata:
         meta_chunk = StreamChunk(

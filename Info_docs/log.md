@@ -236,3 +236,15 @@ One commit (`bbe44f6`): added `reviews/autoplan-report-2026-08-12.md` (453 lines
 - **T2 — Task modules**: Hide from nav now (recommended) vs Delete outright
 
 **Gate: APPROVED AS-IS** — report written per user request. Suggestions S1–S11 delivered (pick wedge A, measure LayerStream honestly, execute approved cleanup, close security boundary, park TurboQuant, error paths, stop button, docs reality, chat lifecycle, ship like product, repo hygiene).
+
+## [2026-08-13] docs | Wiki Index Sync + Repo Hygiene
+Two commits (`2645279`, `d86d053`), both pushed to `origin/main` (verified 0 ahead / 0 behind). Lightweight housekeeping day — no engine or frontend code changes.
+
+### Repo hygiene (commit `2645279`)
+- **`.gitignore`**: added `.zed/` to ignore directory — excludes Zed editor workspace/recommendation metadata from the tree.
+
+### Wiki index sync (commit `d86d053`)
+- **`Info_docs/INDEX.md`**: bumped `updated:` frontmatter `2026-08-09` → `2026-08-12`; added catalog entry under **Workflow** — `[[workflow/Autoplan Review 2026-08-12|Autoplan Review 2026-08-12]]` cross-linked to the new review page (`reviews/autoplan-report-2026-08-12.md`).
+- **`Info_docs/log.md`**: back-filled the missing `## [2026-08-12] review | Whole-Project Autoplan Review` block (CEO/Design/Eng/DX four-phase dual-voice review; 106 tests passing; TurboQuant parked as research; wedge = OpenAI-compatible offline server). This is the log entry that should have shipped with commit `bbe44f6` but only landed today.
+
+**Net effect**: wiki index and timeline now reflect the 2026-08-12 whole-project review; repo ignores Zed IDE artifacts. No functional/build impact.

@@ -207,3 +207,32 @@ Per `reviews/perf-research-2026-08-11.md` (new, 204 lines — end-to-end perf re
   | our affine 4-bit (report) | 0.0050 | 0.026 |
   Verdict: reference codebook is **5× better than ours** (0.028 vs 0.143 at 3-bit) but lands **in the affine regime that already FAILED the gate** (ref 4-bit 0.0087 ≈ affine 4-bit 0.0050 → 3017–4201% ppl deg). QJL hurts (TurboQuant 3-bit 0.068 vs PolarQuant 3-bit 0.028); norm correction ~no-op. **Layer-0 confirmation** on the extreme channel-structure layer (K cv 1.84): identical regime (ref 3-bit 0.0333 vs our 0.1343). Codebook swap alone cannot pass the gate.
 - **`TODOS.md`** (`8050804`): reference-codebook comparison ✅ DONE, llama.cpp tbq eval ✅ DONE; remaining: ≥1B model gate (TinyLlama-1.1B), per-vector non-scalar codecs (spherical VQ / product quantization). Removed `llama-cpp-pr` submodule pointer.
+
+## [2026-08-12] review | Whole-Project Autoplan Review (CEO + Design + Eng + DX)
+One commit (`bbe44f6`): added `reviews/autoplan-report-2026-08-12.md` (453 lines) — a comprehensive whole-project review across four phases with dual-voice consensus (primary + independent reviewer per phase). **Baseline verified**: `backend/.venv` pytest **106 passed** (48.95s, 1 Pydantic deprecation warning); test_dummy.py removed; LayerStream duplicate engines deleted.
+
+### Phase 1 — CEO Review (Strategic)
+**Premises challenged:** P1 (70B-on-8GB usable) remains **unvalidated** — never measured end-to-end, dev machine can't run 7B; TurboQuant 6× claim **FAILED 4 eval gates** (polar, affine@Qwen2, affine@Pythia, reference codebook). **Wedge decision**: recommended **OpenAI-compatible offline server** (Wedge A) over RAG-first (B) or status quo (C). **TurboQuant**: park as research (evidence: scalar quantizers structurally cannot pass 2% gate on small models; reference codebook 5× better but still fails). **Cross-phase themes**: (1) Approved 08-05 cleanup never executed, (2) Breadth before validation, (3) Unvalidated headline claims, (4) Offline story leaks at edges.
+
+### Phase 2 — Design Review (7-dimension litmus)
+**Scores:** Hierarchy 5/10 (home leads with hardware cards, not chat), States 4/10 (**no stop button**, no loading/OOM/no-model states), First-run 5/10, Responsive 8/10, A11y 4/10 (no `aria-live`, skip-link, contrast unverified), Identity 5/10, Design-system 7/10.
+**Critical findings:** D1 — No stop/abort during generation (unkillable = worst UX failure on slow local engine); D2 — Missing 5-state chat lifecycle; D3 — 7 speculative task modules shipped (audio/vision/QA/embedding) that engines cannot execute; D4 — Home hardware-first vs chat-first (taste); D5 — No first-run empty state; D6 — No live t/s readout; D7 — A11y gaps.
+
+### Phase 3 — Eng Review (Architecture + Tests + Security)
+**Test coverage:** 106 passed but **zero coverage** on highest-risk paths: LayerStream executor, FullRAM executor + fallback, chat e2e with real model, plugin sandbox, RAG/vectorstore, websocket, auth, frontend. **Still open from 08-05**: ManualStream wired (loads full state dict — defeats low-memory premise), DEBUG print in `engine_factory.py:61`, task_router **32 entries** (shrink to 2), no auth on LAN bind, no `is_disconnected`, no OOM/507, `delete_model` rmtree on registry path, 145 `print()` calls, `reload=True` in main, docs drift (readme "Vite", TRD "llama.cpp", AGENTS.md deleted files).
+**Eng consensus:** Architecture CHALLENGED (factory coupling, ManualStream, 32-entry map), Tests CHALLENGED (executors + sandbox + RAG uncovered), Security CHALLENGED (no auth on LAN, rmtree path, sandbox), Error paths CHALLENGED (OOM/disconnect/disk-full unbuilt).
+
+### Phase 3.5 — DX Review (Developer Journey)
+**TTHW ~45 min** (vs Ollama ~2 min); claims "zero-config, no pip install" contradicted by multi-GB torch download. No offline `sovereign import <gguf>`. OpenAI-compat shape unproven; `delta.reasoning` undocumented. 145 prints, no error catalog. No tags/releases/migration notes. **DX scorecard overall: 3.75/10** (Getting started 3/10, Error messages 3/10, Docs 3/10, Upgrade path 3/10, Dev env 4/10, First-run 3/10).
+
+### Cross-Phase Themes & Implementation Tasks (28 items, P1→P3)
+**P1 Critical:** Delete ManualStream, Stop button + disconnect cancellation, LayerStream small-model benchmark, Gate/hide 7 task modules, Reconcile stale docs, Auth + path safety, OOM→507/disk-full/concurrent-lock.
+**P2:** Real engine tests (@slow), OpenAI-compat contract test, Fail loudly on unknown configs, Shrink task_router 32→2, Split EngineFactory create/load + remove DEBUG print, Pydantic v2 migration, 5-state chat lifecycle + OOM card.
+**P3:** `sovereign import <local.gguf>`, Structured logging, Tags/releases/pinned installer/CHANGELOG, Repo hygiene, gguf IQ2_BN pin, reload gating, MemoryManager zone verification, Home page chat-first + first-run + a11y, TurboQuant research backlog, Sub-project ownership docs.
+
+### Final Gate Decisions (User Calls)
+- **U1 — TurboQuant**: Park as research (recommended) vs Keep active lane (TinyLlama gate becomes P1)
+- **T1 — Home hierarchy**: Chat-first (recommended) vs Hardware dashboard-first
+- **T2 — Task modules**: Hide from nav now (recommended) vs Delete outright
+
+**Gate: APPROVED AS-IS** — report written per user request. Suggestions S1–S11 delivered (pick wedge A, measure LayerStream honestly, execute approved cleanup, close security boundary, park TurboQuant, error paths, stop button, docs reality, chat lifecycle, ship like product, repo hygiene).

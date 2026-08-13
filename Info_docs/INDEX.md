@@ -1,5 +1,5 @@
 ---
-updated: 2026-08-09
+updated: 2026-08-12
 ---
 
 # Wiki Index
@@ -32,6 +32,7 @@ updated: 2026-08-09
 - [[workflow/Mindmap|Mindmap]] — Project mindmap overview (updated 2026-07-21)
 - [[workflow/Ponytail Review|Ponytail Review]] — Complexity audit, ~3800 lines of unnecessary bloat flagged (updated 2026-07-24)
 - [[workflow/Ponytail Audit|Ponytail Audit]] — Full-project ponytail audit: ~5000 lines removable across backend + frontend (updated 2026-07-24)
+- [[workflow/Autoplan Review 2026-08-12|Autoplan Review 2026-08-12]] — Whole-project review (CEO/Design/Eng/DX) with dual-voice consensus; 106 tests pass; TurboQuant parked; LayerStream unvalidated; wedge=OpenAI-compat server (updated 2026-08-12)
 
 ## Algorithms
 - [[algorithms/Algorithms|Algorithms]] — Core algorithms used throughout the system (updated 2026-07-21)

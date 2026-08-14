@@ -104,6 +104,7 @@ def help():
         ("system", "Hardware profile, server status, model recommendations", "sovereign system"),
         ("list", "List installed models", "sovereign list"),
         ("pull <model>", "Download a model (-q/--quant)", "sovereign pull llama3:8b"),
+        ("import <path.gguf>", "Import a local GGUF (offline)", "sovereign import model.gguf"),
         ("run <model>", "Load a model + chat TUI (server must be running)", "sovereign run llama3:8b"),
         ("chat <model>", "Auto-start the server if needed, then chat", "sovereign chat llama3:8b"),
         ("benchmark", "Run inference benchmark (-n iters, -t tokens)", "sovereign benchmark -n 5"),
@@ -307,6 +308,52 @@ def pull(
                 console.print("Make sure the backend is running: 'sovereign serve'")
 
     asyncio.run(_pull())
+
+
+@app.command(name="import")
+def import_model(
+    path: str = typer.Argument(..., help="Path to a local .gguf file to import"),
+):
+    """Import a local GGUF model file (offline model acquisition)"""
+    src = Path(path).expanduser()
+    if not src.is_file():
+        console.print(f"[red]Error:[/red] Not a file: {path}")
+        raise typer.Exit(code=1)
+    if not src.suffix.lower() in (".gguf", ".gguf.enc"):
+        console.print(
+            "[red]Error:[/red] Only .gguf (or encrypted .gguf.enc) files can be "
+            "imported. Convert the model with llama.cpp/GGUF first."
+        )
+        raise typer.Exit(code=1)
+
+    # Copy into the portable models dir (works on the same machine as the
+    # server; the CLI and server share the workspace).
+    dest_dir = Path(__file__).resolve().parents[3] / "workspace" / "models" / "installed"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / src.name
+    try:
+        import shutil
+        shutil.copy2(src, dest)
+    except OSError as e:
+        console.print(f"[red]Error copying file:[/red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(f"[green]✓ Imported[/green] [cyan]{src.name}[/cyan] → {dest}")
+
+    # Tell the running server to rescan; if it's down, the next server start
+    # picks the file up via scan_installed anyway.
+    try:
+        with httpx.Client(timeout=10) as client:
+            r = client.post(f"{API_BASE}/models/refresh")
+            if r.status_code == 200:
+                count = r.json().get("count", "?")
+                console.print(f"[green]✓ Registry refreshed[/green] ({count} models installed)")
+            else:
+                console.print("[yellow]Model copied, but registry refresh failed — "
+                              "restart the server or run 'sovereign list' later.[/yellow]")
+    except httpx.ConnectError:
+        console.print("[yellow]Server not running — model will appear after "
+                      "'sovereign serve' scans the models dir.[/yellow]")
 
 
 @app.command()

@@ -1,6 +1,9 @@
 """Models API Endpoints"""
+import logging
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from app.schemas.models import (
     ModelInfo,
@@ -11,7 +14,6 @@ from app.schemas.models import (
     RecommendRequest,
     RecommendResult,
 )
-from app.core.engine_factory import EngineFactory
 
 
 router = APIRouter()
@@ -67,8 +69,19 @@ async def recommend_models(
         # llmfit not installed -- return static fallback
         return _fallback_recommendations(rec)
     except Exception as e:
-        print(f"llmfit recommend failed: {e}")
+        logger.warning("llmfit recommend failed, using fallback: %s", e)
         return _fallback_recommendations(rec)
+
+
+def _is_capacity_error(msg: str) -> bool:
+    """True for OOM / disk-full style errors — mapped to HTTP 507."""
+    lowered = msg.lower()
+    return any(
+        k in lowered
+        for k in ("out of memory", "insufficient memory", "not enough memory",
+                  "cuda out of memory", "no space left", "not enough free disk",
+                  "disk space", "cannot allocate memory")
+    )
 
 
 def _fallback_recommendations(rec: RecommendRequest) -> list[RecommendResult]:
@@ -160,15 +173,26 @@ async def load_model(request: Request, load_request: LoadRequest):
         if "not found" in msg.lower():
             raise HTTPException(status_code=404, detail=msg)
         raise HTTPException(status_code=400, detail=f"Model configuration error: {msg}")
+    except MemoryError as e:
+        # Out-of-memory during load — client should pick a smaller quant / LayerStream
+        raise HTTPException(status_code=507, detail=f"Insufficient memory: {e}")
     except RuntimeError as e:
         msg = str(e)
         # Unsupported arch/format is a client-side model choice issue, not a server crash
         if "not supported" in msg.lower() or "architecture" in msg.lower():
             raise HTTPException(status_code=422, detail=msg)
+        # OOM / disk-full are capacity errors, not crashes — 507 so the client
+        # can distinguish "try again" from "change what you asked for"
+        if _is_capacity_error(msg):
+            raise HTTPException(status_code=507, detail=msg)
         raise HTTPException(status_code=500, detail=f"Failed to load model: {msg}")
+    except OSError as e:
+        # e.g. "No space left on device" mid-download/extract
+        if _is_capacity_error(str(e)):
+            raise HTTPException(status_code=507, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to load model: {e}")
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to load model %s", load_request.model)
         raise HTTPException(status_code=500, detail=f"Failed to load model: {str(e)}")
 
 

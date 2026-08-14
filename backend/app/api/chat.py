@@ -1,10 +1,13 @@
 """Chat API Endpoints"""
 import asyncio
 import json
+import logging
 import re
 from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
+
+logger = logging.getLogger(__name__)
 
 from app.schemas.chat import (
     ChatRequest, 
@@ -12,7 +15,6 @@ from app.schemas.chat import (
     Message,
     StreamChunk
 )
-from app.core.engine_factory import EngineFactory
 
 
 
@@ -107,7 +109,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
                         messages_dicts.insert(0, {"role": "system", "content": augmented_content})
         except Exception as e:
             # If RAG fails, continue with original message
-            print(f"RAG error: {e}")
+            logger.warning("RAG context build failed, continuing without it: %s", e)
             
     prompt = ""
     if tokenizer and hasattr(tokenizer, "apply_chat_template"):
@@ -125,11 +127,13 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     
     if chat_request.stream:
         return StreamingResponse(
-            stream_response(app.state.active_engine, prompt, chat_request, rag_metadata_out),
+            stream_response(app.state.active_engine, prompt, chat_request, rag_metadata_out, request),
             media_type="text/event-stream"
         )
     
     # Non-streaming response
+    if await request.is_disconnected():
+        raise HTTPException(status_code=499, detail="Client disconnected")
     response = await app.state.active_engine.generate(
         input_data=prompt,
         max_tokens=chat_request.max_tokens,
@@ -188,7 +192,8 @@ async def stream_response(
     engine, 
     prompt: str, 
     request: ChatRequest,
-    rag_metadata: list = None
+    rag_metadata: list = None,
+    http_request: Request = None,
 ) -> AsyncGenerator[str, None]:
     """Stream tokens, splitting <think>...</think> reasoning out of content.
 
@@ -242,6 +247,11 @@ async def stream_response(
         temperature=request.temperature,
         top_p=request.top_p
     ):
+        # Stop generating when the client goes away: an abandoned stream would
+        # otherwise run to completion on a slow local engine, stealing RAM/CPU.
+        # The engine's generator is closed by GC on return.
+        if http_request is not None and await http_request.is_disconnected():
+            return
         token = chunk.get("token", "")
         finish = chunk.get("finish_reason")
         if not token and finish is None:
@@ -387,6 +397,5 @@ async def switch_mode(request: Request, mode: str):
         )
         return result
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        logger.exception("Mode switch failed")
         raise HTTPException(status_code=500, detail=str(e))

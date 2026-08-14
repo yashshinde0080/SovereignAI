@@ -16,6 +16,22 @@ def _workspace_dir(app) -> str:
     return os.path.abspath(d)
 
 
+def _snapshot_path(app, snap_id: str) -> str:
+    """Resolve a snapshot id to its file, rejecting path traversal."""
+    if (
+        not snap_id
+        or "/" in snap_id
+        or "\\" in snap_id
+        or ".." in snap_id
+    ):
+        raise HTTPException(status_code=400, detail="Invalid snapshot id")
+    sess_dir = os.path.abspath(_workspace_dir(app))
+    path = os.path.abspath(os.path.join(sess_dir, f"{snap_id}.json"))
+    if os.path.dirname(path) != sess_dir:
+        raise HTTPException(status_code=400, detail="Invalid snapshot id")
+    return path
+
+
 @router.post("/save")
 async def save_workspace(request: Request):
     """Save current workspace state as a snapshot"""
@@ -27,7 +43,7 @@ async def save_workspace(request: Request):
         "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     snap_id = f"snap-{int(time.time())}"
-    path = os.path.join(_workspace_dir(app), f"{snap_id}.json")
+    path = _snapshot_path(app, snap_id)
     with open(path, "w") as f:
         json.dump(data, f)
     return {"id": snap_id, **data}
@@ -55,7 +71,7 @@ async def list_workspaces(request: Request):
 @router.get("/{snap_id}")
 async def load_workspace(request: Request, snap_id: str):
     """Load a workspace snapshot"""
-    path = os.path.join(_workspace_dir(request.app), f"{snap_id}.json")
+    path = _snapshot_path(request.app, snap_id)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Snapshot not found")
     with open(path) as f:
@@ -66,7 +82,7 @@ async def load_workspace(request: Request, snap_id: str):
 @router.delete("/{snap_id}")
 async def delete_workspace(request: Request, snap_id: str):
     """Delete a workspace snapshot"""
-    path = os.path.join(_workspace_dir(request.app), f"{snap_id}.json")
+    path = _snapshot_path(request.app, snap_id)
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Snapshot not found")
     os.remove(path)

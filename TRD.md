@@ -10,15 +10,15 @@ The core objective of the **SovereignAI Edge** platform is to provide a zero-con
 - **Language:** Python 3.10+ (Bundled as an embedded standalone executable via PyInstaller or similar to avoid host OS dependencies).
 - **Core Frameworks:** 
   - FastAPI (for serving local REST / WebSocket API).
-  - Llama.cpp Python bindings (for underlying GGML/GGUF tensor operations).
+  - PyTorch + transformers (FullRAM engine via AutoModelForCausalLM; GGUF fallback via llama-cpp-python).
   - Pydantic (for strictly typed configurations and API models).
 - **Database:** SQLite3 (Local, serverless, file-based database for chat history and plugin states).
 
 ### 2.2 Frontend / UI layer
-- **Language/Framework:** Node.js 18+, React.js 18, TypeScript.
-- **State Management:** Zustand or React Context for local state.
-- **Styling:** Tailwind CSS for responsive and portable styling.
-- **Build Tool:** Vite (for fast local bundling).
+- **Language/Framework:** Node.js 18+, React.js 19, TypeScript.
+- **State Management:** Zustand for local state.
+- **Styling:** Tailwind CSS v4 for responsive and portable styling.
+- **Build Tool:** Next.js 16 (static export; no Vite).
 
 ### 2.3 Desktop Wrapper
 - **Framework:** Electron.js.
@@ -50,7 +50,7 @@ Since the application runs off external drives, absolute paths cannot be used. O
 ```mermaid
 graph LR
     subgraph UI ["Frontend / UI Layer"]
-        React["React 18 + Vite"]
+        React["React 19 + Next.js 16"]
         Tailwind["Tailwind CSS"]
         Electron_UI["Electron Shell"]
     end

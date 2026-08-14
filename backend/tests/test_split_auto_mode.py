@@ -27,6 +27,9 @@ class _FakeEngine:
     mode = "fullram"
     task_metadata = {}
 
+    async def load(self):
+        pass
+
     async def unload(self):
         pass
 
@@ -48,6 +51,7 @@ class _FakeFactory:
 def _make_manager(monkeypatch, models):
     """ModelManager with a stubbed registry, no real DB/engines/app involved."""
     manager = ModelManager.__new__(ModelManager)  # skip the heavy __init__
+    manager._load_lock = asyncio.Lock()
     app = types.SimpleNamespace(
         state=types.SimpleNamespace(
             hardware_profile={},

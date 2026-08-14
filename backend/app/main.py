@@ -1,5 +1,7 @@
 """Main FastAPI Application"""
 import asyncio
+import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from enum import IntEnum
@@ -16,6 +18,19 @@ from app.websocket.metrics import router as metrics_router
 from app.core.hardware_llmfit import detect_hardware as detect_hardware
 from app.services.model_manager import ModelManager
 from app.plugins.manager import PluginManager
+from app.security.middleware import lan_auth_middleware
+
+logger = logging.getLogger(__name__)
+
+
+def _configure_logging():
+    """One structured format for all app logs; level via SOVEREIGN_LOG_LEVEL."""
+    level = os.environ.get("SOVEREIGN_LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, level, logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
 
 def _patch_gguf_quant_types():
@@ -36,6 +51,7 @@ def _patch_gguf_quant_types():
     # Check if IQ2_BN already exists (newer gguf version)
     if hasattr(old, 'IQ2_BN'):
         return
+    logger.info("gguf %s lacks IQ2_BN — applying compatibility patch", getattr(gguf, "__version__", "?"))
 
     # Build extended enum with IQ2_BN (BitNet b1.58 2-bit block-normalized)
     members = {m.name: m.value for m in old}
@@ -47,7 +63,7 @@ def _patch_gguf_quant_types():
     for mod_name, mod in list(sys.modules.items()):
         if mod and hasattr(mod, 'GGMLQuantizationType') and mod.GGMLQuantizationType is old:
             mod.GGMLQuantizationType = new
-    print("GGUF: patched IQ2_BN quantization type support")
+    logger.info("GGUF: patched IQ2_BN quantization type support")
 
 
 # Rate limiter — per-IP, local-first (falls back to remote_address)
@@ -58,8 +74,9 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 async def lifespan(app: FastAPI):
     """Application Lifespan Events"""
     # Startup
+    _configure_logging()
     _patch_gguf_quant_types()
-    print(f"Starting {settings.app_name} v{settings.app_version}")
+    logger.info("Starting %s v%s", settings.app_name, settings.app_version)
 
     # Initialize database
     from app.database.manager import DatabaseManager
@@ -77,7 +94,7 @@ async def lifespan(app: FastAPI):
 
     # Detect hardware (llmfit-powered, falls back to legacy)
     app.state.hardware_profile = detect_hardware()
-    print(f"Hardware: {app.state.hardware_profile}")
+    logger.info("Hardware: %s", app.state.hardware_profile)
 
     # Initialize model manager
     app.state.model_manager = ModelManager()
@@ -93,10 +110,10 @@ async def lifespan(app: FastAPI):
         startup_model = general.get("startup_model")
         mode = general.get("default_mode", "auto")
         if startup_model:
-            print(f"Loading startup model: {startup_model} (mode={mode})")
+            logger.info("Loading startup model: %s (mode=%s)", startup_model, mode)
             await app.state.model_manager.load_model(startup_model, mode=mode)
     except Exception as e:
-        print(f"Startup model error: {e}")
+        logger.error("Startup model error: %s", e)
 
     # Initialize plugin manager
     app.state.plugin_manager = PluginManager()
@@ -110,7 +127,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    print("Shutting down...")
+    logger.info("Shutting down...")
     if app.state.active_engine:
         await app.state.active_engine.unload()
     if hasattr(app.state, 'db'):
@@ -138,6 +155,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Auth boundary: token required when bound beyond localhost. Localhost stays
+# auth-free so Electron/CLI loopback keeps working (E2, 08-05 F6).
+app.middleware("http")(lan_auth_middleware)
 
 # API Routes
 app.include_router(api_router, prefix="/v1")

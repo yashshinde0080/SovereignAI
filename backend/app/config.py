@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, ConfigDict
 
 
 class Settings(BaseSettings):
@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Security
     encryption_enabled: bool = True
     audit_logging: bool = True
+    # Execute custom modeling code shipped inside a model repo (can run
+    # arbitrary Python). Off by default — enable only for trusted repos.
+    trust_remote_code: bool = False
     
     # Custom model catalog (enterprise / USB YAML definitions)
     catalog_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "plugins" / "user" / "models")
@@ -50,9 +53,7 @@ class Settings(BaseSettings):
     turboquant_qjl_enabled: bool = True
     turboquant_rotation: str = "random"
 
-    class Config:
-        env_prefix = "SOVEREIGN_"
-        env_file = ".env"
+    model_config = ConfigDict(env_prefix="SOVEREIGN_", env_file=".env")
 
 
 settings = Settings()

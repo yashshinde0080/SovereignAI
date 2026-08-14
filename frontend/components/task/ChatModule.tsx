@@ -19,7 +19,7 @@ import { useChat } from '@/hooks/useChat';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
-import { Download, Trash2, FileText, X, Sparkles, Brain } from 'lucide-react';
+import { Download, Trash2, FileText, X, Sparkles, Brain, Square } from 'lucide-react';
 import { errMsg } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -47,6 +47,7 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
     sendMessage,
     editAndResend,
     regenerate,
+    stop,
     clearMessages,
     exportChat,
   } = useChat();
@@ -273,6 +274,18 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
             aria-label="Toggle thinking mode"
           />
         </div>
+        {isLoading && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={stop}
+            className="w-full mb-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            title="Stop generating"
+          >
+            <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
+            Stop generating
+          </Button>
+        )}
         <PromptInput
           onSend={handleSend}
           disabled={isLoading}

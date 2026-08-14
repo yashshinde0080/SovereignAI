@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { Cpu, HardDrive, ArrowRight, Gauge, Sparkles, Rocket } from 'lucide-react';
 import Link from 'next/link';
 import { ModelControlPanel } from '@/components/models/ModelControlPanel';
+import { ChatModule } from '@/components/task/ChatModule';
 import type { Recommendation } from '@/types';
 
 export default function HomePage() {
@@ -48,6 +49,19 @@ export default function HomePage() {
 
   const noModelLoaded = !systemStatus?.model_loaded;
 
+  // Chat-first: the core act is chat. Once a model is loaded the home surface
+  // IS the chat; the hardware dashboard is first-run material only.
+  if (!noModelLoaded) {
+    return (
+      <div className="h-full -m-6">
+        <ChatModule
+          taskType={systemStatus?.task_type || ''}
+          model={systemStatus?.current_model || ''}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -79,12 +93,17 @@ export default function HomePage() {
                 </Badge>
               ))}
             </div>
-            <Link href="/models">
-              <Button size="sm">
-                Browse Models
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
+            <div className="flex items-center gap-3">
+              <Link href="/models">
+                <Button size="sm">
+                  Browse Models
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+              <span className="text-xs text-muted-foreground">
+                Have a GGUF file? Offline: run <code className="font-mono">sovereign import model.gguf</code>
+              </span>
+            </div>
           </CardContent>
         </Card>
       )}

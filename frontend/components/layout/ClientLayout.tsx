@@ -17,10 +17,17 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {/* Skip link: keyboard users jump past the sidebar/topbar to content */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-primary focus:text-primary-foreground focus:text-sm"
+      >
+        Skip to content
+      </a>
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar />
-        <main className="flex-1 overflow-auto p-6">
+        <main id="main-content" className="flex-1 overflow-auto p-6">
           {children}
         </main>
       </div>

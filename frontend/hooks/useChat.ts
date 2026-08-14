@@ -94,6 +94,11 @@ export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  // AbortController for the in-flight request — lets the user stop an
+  // unkillable generation on a slow local engine (D1). Aborting rejects the
+  // fetch with AbortError, which the catch block swallows as a normal stop.
+  const abortRef = useRef<AbortController | null>(null);
+
   // Live messages in a ref so sendMessage/editAndResend/regenerate keep stable
   // identities (they read current state without re-creating themselves every
   // render). Stable callbacks let MessageItem (React.memo) skip re-rendering
@@ -170,10 +175,16 @@ export function useChat() {
     // the appended error message with partial content.
     let flushRaf: number | null = null;
 
+    // Fresh controller per request; abort() from stop() cancels the fetch and
+    // the reader loop below.
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const response = await fetch(`${API_BASE}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           messages: messagesToSend,
           stream: true,
@@ -188,7 +199,11 @@ export function useChat() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Chat request failed');
+        const err = new Error(errorData.detail || 'Chat request failed');
+        // Keep the HTTP status on the error so the catch can distinguish
+        // capacity failures (507 OOM / disk-full) from other errors.
+        (err as Error & { status?: number }).status = response.status;
+        throw err;
       }
 
       if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
@@ -232,60 +247,69 @@ export function useChat() {
         // Add placeholder message
         setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        // Abort while streaming: the reader.read() rejects with AbortError.
+        // If the user stopped mid-answer, keep whatever partial content
+        // arrived — fall through to the final patch below instead of letting
+        // the error bubble up into an Error bubble.
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
+            buffer += decoder.decode(value, { stream: true });
 
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6).trim();
-              if (data === '[DONE]') continue;
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6).trim();
+                if (data === '[DONE]') continue;
 
-              try {
-                const chunk = JSON.parse(data);
+                try {
+                  const chunk = JSON.parse(data);
 
-                // Handle Stream Metadata (Sources / RAG). Sources become
-                // structured chips on the assistant message, not appended text.
-                if (chunk.choices?.[0]?.delta?.rag_metadata) {
-                  const sources = chunk.choices[0].delta.rag_metadata as RagSource[];
-                  if (sources && sources.length > 0) {
-                    const seen = new Set();
-                    const uniqueSources = sources.filter((s: RagSource) => {
-                      if (seen.has(s.filename)) return false;
-                      seen.add(s.filename);
-                      return true;
-                    });
+                  // Handle Stream Metadata (Sources / RAG). Sources become
+                  // structured chips on the assistant message, not appended text.
+                  if (chunk.choices?.[0]?.delta?.rag_metadata) {
+                    const sources = chunk.choices[0].delta.rag_metadata as RagSource[];
+                    if (sources && sources.length > 0) {
+                      const seen = new Set();
+                      const uniqueSources = sources.filter((s: RagSource) => {
+                        if (seen.has(s.filename)) return false;
+                        seen.add(s.filename);
+                        return true;
+                      });
 
-                    setMessages((prev) => {
-                      const newMessages = [...prev];
-                      newMessages[newMessages.length - 1] = {
-                        ...newMessages[newMessages.length - 1],
-                        content: assistantContent,
-                        sources: uniqueSources,
-                      };
-                      return newMessages;
-                    });
+                      setMessages((prev) => {
+                        const newMessages = [...prev];
+                        newMessages[newMessages.length - 1] = {
+                          ...newMessages[newMessages.length - 1],
+                          content: assistantContent,
+                          sources: uniqueSources,
+                        };
+                        return newMessages;
+                      });
+                    }
+                    continue;
                   }
-                  continue;
-                }
 
-                // Reasoning (thinking) deltas arrive before content for
-                // reasoning models; both accumulate into the same message.
-                const reasoningToken = chunk.choices?.[0]?.delta?.reasoning || '';
-                const token = chunk.choices?.[0]?.delta?.content || '';
-                if (reasoningToken) assistantReasoning += reasoningToken;
-                if (token) assistantContent += token;
-                if (reasoningToken || token) scheduleFlush();
-              } catch (e) {
-                console.error('JSON parse error:', e, data);
+                  // Reasoning (thinking) deltas arrive before content for
+                  // reasoning models; both accumulate into the same message.
+                  const reasoningToken = chunk.choices?.[0]?.delta?.reasoning || '';
+                  const token = chunk.choices?.[0]?.delta?.content || '';
+                  if (reasoningToken) assistantReasoning += reasoningToken;
+                  if (token) assistantContent += token;
+                  if (reasoningToken || token) scheduleFlush();
+                } catch (e) {
+                  console.error('JSON parse error:', e, data);
+                }
               }
             }
           }
+        } catch (e) {
+          if ((e as Error)?.name !== 'AbortError') throw e;
+          // Stop requested — keep partial content, fall through to final patch.
         }
 
         // If the model stopped mid-think (reasoning but no answer text),
@@ -322,17 +346,38 @@ export function useChat() {
         ]);
       }
     } catch (error) {
-      console.error('Chat error:', error);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: `**Error:** ${errMsg(error) || 'Sorry, an error occurred.'}` },
-      ]);
+      // A deliberate stop is not an error: keep the partial reply (flushed
+      // below) instead of appending an Error bubble.
+      if ((error as Error)?.name !== 'AbortError') {
+        console.error('Chat error:', error);
+        const status = (error as Error & { status?: number })?.status;
+        // OOM / disk-full (507): tell the user what to change instead of a
+        // bare traceback — smaller quant, FullRAM vs LayerStream, free disk.
+        const body =
+          status === 507
+            ? `${errMsg(error) || 'Not enough memory or disk space.'} \n\n**How to fix:** load a smaller quant (Q4_K_M), or switch mode (FullRAM ↔ LayerStream) — and make sure the drive has room for the model + swap cache.`
+            : `**Error:** ${errMsg(error) || 'Sorry, an error occurred.'}`;
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: body },
+        ]);
+      }
     } finally {
+      abortRef.current = null;
       if (flushRaf !== null) {
         cancelAnimationFrame(flushRaf);
         flushRaf = null;
       }
       setIsLoading(false);
+    }
+  }, []);
+
+  // User pressed Stop: cancel the in-flight request. Partial content already
+  // streamed stays on the message (the catch/finally handle the cleanup).
+  const stop = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
     }
   }, []);
 
@@ -410,6 +455,7 @@ export function useChat() {
     sendMessage,
     editAndResend,
     regenerate,
+    stop,
     clearMessages,
     exportChat,
   };

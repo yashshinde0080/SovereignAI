@@ -8,7 +8,6 @@ from app.core.memory_manager import MemoryManager
 from app.engines.base import BaseEngine
 from app.engines.fullram.executor import FullRAMEngine
 from app.engines.layerstream.executor import LayerStreamEngine
-from app.engines.manualstream.executor import ManualStreamEngine
 
 
 class EngineFactory:
@@ -58,8 +57,6 @@ class EngineFactory:
             model_size = model_path.stat().st_size if model_path.exists() and model_path.is_file() else 0
             engine_model_path_str = str(model_path)
             
-        print(f"DEBUG: EngineFactory creating engine for {engine_model_path_str}, size: {model_size/(1024**2):.2f} MB")
-        
         # 1. Resolve task to determine if streaming is possible
         from app.core.task_resolver import TaskResolver
         task_metadata = TaskResolver.resolve(engine_model_path_str)
@@ -109,17 +106,8 @@ class EngineFactory:
                 memory_manager=self.memory_manager,
                 quant_method=quant_method
             )
-        elif mode == "manualstream":
-            engine = ManualStreamEngine(
-                model_path=engine_model_path_str,
-                hardware=self.hardware,
-                memory_manager=self.memory_manager
-            )
         else:
             raise ValueError(f"Unknown mode: {mode}")
-        
-        # Initialize
-        await engine.load()
         
         return engine
     

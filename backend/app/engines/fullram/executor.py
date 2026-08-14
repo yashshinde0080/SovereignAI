@@ -2,8 +2,11 @@
 import asyncio
 import time
 import os
+import logging
 from typing import Dict, Any, AsyncGenerator, Optional
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 import torch
 from transformers import AutoProcessor, AutoTokenizer, TextIteratorStreamer, AutoImageProcessor
@@ -13,6 +16,7 @@ import psutil
 from app.engines.base import BaseEngine
 from app.core.task_resolver import TaskResolver
 from app.core.task_router import TaskRouter
+from app.config import settings
 
 
 class _IkModelWrapper:
@@ -56,16 +60,15 @@ class FullRAMEngine(BaseEngine):
             input_modality = self.task_metadata["input_modality"]
             is_generative = self.task_metadata["is_generative"]
             
-            # 2. Get Appropriate Class
-            model_class = TaskRouter.TASK_CLASS_MAP.get(task_type)
-            if not model_class:
-                raise ValueError(f"Unsupported task type: {task_type}")
-                
+            # 2. Get Appropriate Class — fails loudly for tasks no engine runs
+            model_class = TaskRouter.get_model_class(task_type)
+            
             model_kwargs = {
-                "trust_remote_code": True,
+                # Remote code execution is gated behind an explicit opt-in
+                # (settings.trust_remote_code / SOVEREIGN_TRUST_REMOTE_CODE).
+                "trust_remote_code": settings.trust_remote_code,
                 "low_cpu_mem_usage": True,
                 "ignore_mismatched_sizes": True
-
             }
             
             if self.device == "cuda":
@@ -93,7 +96,7 @@ class FullRAMEngine(BaseEngine):
             if input_modality == "text" or is_generative:
                 try:
                      tok_kwargs = {
-                         "trust_remote_code": True,
+                         "trust_remote_code": settings.trust_remote_code,
                      }
                      if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
                          tok_kwargs["gguf_file"] = os.path.basename(self.model_path)
@@ -105,18 +108,18 @@ class FullRAMEngine(BaseEngine):
                      if not self.tokenizer.pad_token:
                          self.tokenizer.pad_token = self.tokenizer.eos_token
                 except Exception as e:
-                     print(f"Failed loading tokenizer from repo natively: {e}")
+                     logger.warning("Failed loading tokenizer from repo natively: %s", e)
                      pass
                      
             if input_modality in ["image", "multimodal"]:
                 try:
                     self.processor = AutoProcessor.from_pretrained(
-                        self.model_path, trust_remote_code=True
+                        self.model_path, trust_remote_code=settings.trust_remote_code
                     )
                 except Exception:
                     try:
                         self.processor = AutoImageProcessor.from_pretrained(
-                            self.model_path, trust_remote_code=True
+                            self.model_path, trust_remote_code=settings.trust_remote_code
                         )
                     except:
                         raise RuntimeError(f"Missing required processor for vision task")
@@ -124,14 +127,14 @@ class FullRAMEngine(BaseEngine):
             if input_modality == "audio":
                 try:
                     self.processor = AutoProcessor.from_pretrained(
-                        self.model_path, trust_remote_code=True
+                        self.model_path, trust_remote_code=settings.trust_remote_code
                     )
                 except:
                     raise RuntimeError("Missing processor for audio task")
                 
             self.loaded = True
             self.stats["load_time"] = time.time() - start_time
-            print(f"Loaded {self.model_path} [{task_type}] in {self.mode} on {self.device}")
+            logger.info("Loaded %s [%s] in %s on %s", self.model_path, task_type, self.mode, self.device)
             
         except Exception as e:
             self.loaded = False
@@ -144,33 +147,33 @@ class FullRAMEngine(BaseEngine):
                 # Try ik_llama.cpp first (handles BitNet / IQ2_BN models)
                 try:
                     from ik_llama_cpp import IkLlama
-                    print(f"ik_llama.cpp: loading {self.model_path}")
+                    logger.info("ik_llama.cpp: loading %s", self.model_path)
                     self.model = _IkModelWrapper(IkLlama(model_path=self.model_path, n_ctx=2048, verbose=False))
                     self.is_llama_cpp = True
                     self.is_ik_backend = True
                     self.loaded = True
                     self.task_metadata = {"task_type": "causal_lm", "is_generative": True, "input_modality": "text"}
                     self.stats["load_time"] = time.time() - start_time
-                    print(f"Loaded {self.model_path} [ik_llama.cpp] in {self.mode}")
+                    logger.info("Loaded %s [ik_llama.cpp] in %s", self.model_path, self.mode)
                     return
                 except ImportError:
-                    print("ik_llama.cpp not installed, trying llama_cpp fallback")
+                    logger.info("ik_llama.cpp not installed, trying llama_cpp fallback")
                 except Exception as ik_err:
-                    print(f"ik_llama.cpp fallback failed: {ik_err}")
+                    logger.warning("ik_llama.cpp fallback failed: %s", ik_err)
 
                 # Fall back to standard llama_cpp
                 try:
                     from llama_cpp import Llama
-                    print(f"llama_cpp fallback: loading {self.model_path}")
+                    logger.info("llama_cpp fallback: loading %s", self.model_path)
                     self.model = Llama(model_path=self.model_path, n_ctx=2048, verbose=False)
                     self.is_llama_cpp = True
                     self.loaded = True
                     self.task_metadata = {"task_type": "causal_lm", "is_generative": True, "input_modality": "text"}
                     self.stats["load_time"] = time.time() - start_time
-                    print(f"Loaded {self.model_path} [llama_cpp fallback] in {self.mode}")
+                    logger.info("Loaded %s [llama_cpp fallback] in %s", self.model_path, self.mode)
                     return
                 except Exception as llama_err:
-                    print(f"llama_cpp fallback failed: {llama_err}")
+                    logger.warning("llama_cpp fallback failed: %s", llama_err)
 
                 # Both backends failed — give a targeted error
                 if is_ik_only:
@@ -327,64 +330,30 @@ class FullRAMEngine(BaseEngine):
             device=self.device
         )
         
-        # 3. Process outputs dynamically for user reporting
+        # 3. Process output (generative only — TaskRouter.execute raises for
+        # any other task, so the QA/masked_lm decode branches are gone).
         output_res = result.get("output")
         confidence = result.get("confidence", 1.0)
         completion_tokens = 0
-        predictions = []  # structured top-k candidates (masked_lm)
-        message = None  # plain-text note for non-generative tasks (masked_lm)
+        predictions = []
+        message = None
         finish_reason = "stop"
         
-        if is_generative:
-            output_ids = output_res[0]  # TaskRouter returns output_ids for generative
-            # Strip the prompt for all generative modalities (text, multimodal/vision2seq);
-            # prompt_tokens == 0 is a no-op. Previously only text was sliced, so vision2seq
-            # (e.g. Qwen3.5) echoed the whole rendered prompt in the response.
-            if prompt_tokens > 0 and len(output_ids) >= prompt_tokens:
-                output_ids = output_ids[prompt_tokens:]
-            
-            output_res = self.tokenizer.decode(output_ids, skip_special_tokens=True)
-            completion_tokens = len(output_ids)
-            # Honest truncation signal: hitting max_new_tokens means "length".
-            # (Previously always reported "stop", which hid thinking-mode
-            # truncation — reasoning eats the whole budget and content comes
-            # out empty.)
-            if completion_tokens >= max_tokens:
-                finish_reason = "length"
-            
-        elif task_type == "question_answering":
-            # Extract text from QA logits
-            start_logits = result["start_logits"]
-            end_logits = result["end_logits"]
-            answer_start = torch.argmax(start_logits)
-            answer_end = torch.argmax(end_logits) + 1
-            answer_tokens = processed_inputs["input_ids"][0][answer_start:answer_end]
-            output_res = self.tokenizer.decode(answer_tokens)
-            completion_tokens = len(answer_tokens)
-            
-        elif task_type == "masked_lm":
-            # BERT-style [MASK] prediction — structured top-k candidates per mask position.
-            # Plain-text cases go to the dedicated 'message' field; 'output' stays empty.
-            output_res = ""
-            mask_token_id = getattr(self.tokenizer, "mask_token_id", None)
-            input_ids = processed_inputs["input_ids"][0]
-            if mask_token_id is None:
-                message = "Tokenizer has no mask_token_id; cannot predict [MASK]."
-            else:
-                mask_positions = (input_ids == mask_token_id).nonzero(as_tuple=True)[0]
-                if len(mask_positions) == 0:
-                    message = "No [MASK] tokens found in input."
-                else:
-                    logits = result["logits"][0]  # [seq_len, vocab]
-                    probs = logits.softmax(dim=-1)
-                    for pos in mask_positions:
-                        topk_vals, topk_ids = probs[pos].topk(5)
-                        tokens = self.tokenizer.convert_ids_to_tokens(topk_ids.tolist())
-                        candidates = [
-                            {"token": t, "probability": round(float(p), 4)}
-                            for t, p in zip(tokens, topk_vals.tolist())
-                        ]
-                        predictions.append({"position": int(pos.item()), "candidates": candidates})
+        output_ids = output_res[0]  # TaskRouter returns output_ids for generative
+        # Strip the prompt for all generative modalities; prompt_tokens == 0 is
+        # a no-op. Previously only text was sliced, so multimodal (e.g. Qwen3.5)
+        # echoed the whole rendered prompt in the response.
+        if prompt_tokens > 0 and len(output_ids) >= prompt_tokens:
+            output_ids = output_ids[prompt_tokens:]
+        
+        output_res = self.tokenizer.decode(output_ids, skip_special_tokens=True)
+        completion_tokens = len(output_ids)
+        # Honest truncation signal: hitting max_new_tokens means "length".
+        # (Previously always reported "stop", which hid thinking-mode
+        # truncation — reasoning eats the whole budget and content comes
+        # out empty.)
+        if completion_tokens >= max_tokens:
+            finish_reason = "length"
 
         elapsed = time.perf_counter() - start_time
         
@@ -401,7 +370,7 @@ class FullRAMEngine(BaseEngine):
             "metadata": {
                 "ram_usage": f"{self.get_memory_usage()['ram_used_gb']:.2f}GB",
                 "latency": f"{elapsed:.3f}s",
-                "tokens_generated": str(completion_tokens) if is_generative else "N/A"
+                "tokens_generated": str(completion_tokens)
             }
         }
     

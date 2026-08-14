@@ -224,9 +224,6 @@ class LayerExecutor:
         embed = self.components['embed']
         self.assign_weights(embed, embed_dict)
         hidden_states = embed(input_ids)
-        
-        if hasattr(self, "DEBUG") and self.DEBUG:
-            print(f"DEBUG: execute_forward embed max: {hidden_states.max().item()}")
         self.offload_weights(embed)
         
         # Removed aggressive CUDA sync/empty_cache here for speed.
@@ -305,8 +302,6 @@ class LayerExecutor:
                 hidden_states = layer_outputs[0]
             else:
                 hidden_states = layer_outputs
-            if hasattr(self, "DEBUG") and self.DEBUG:
-                print(f"DEBUG: layer {i} max: {hidden_states.max().item()}")
             
             self.offload_weights(layer)
             

@@ -162,6 +162,9 @@ class DataControlsSettings(BaseModel):
 class SecuritySettings(BaseModel):
     require_password: bool = False
     password_hash: Optional[str] = None
+    # Bearer token enforced by the auth middleware whenever the API is bound
+    # beyond localhost (bind_localhost_only=false). Empty = no enforcement.
+    api_token: Optional[str] = None
     encrypt_models: bool = True
     bind_localhost_only: bool = True
     api_port: int = Field(default=8000, ge=1024, le=65535)

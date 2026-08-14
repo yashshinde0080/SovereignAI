@@ -9,13 +9,12 @@ import Link from 'next/link';
 
 // Import task modules
 import { ChatModule } from '@/components/task/ChatModule';
-import { ClassificationModule } from '@/components/task/ClassificationModule';
-import { QAModule } from '@/components/task/QAModule';
-import { VisionModule } from '@/components/task/VisionModule';
-import { AudioModule } from '@/components/task/AudioModule';
-import { EmbeddingModule } from '@/components/task/EmbeddingModule';
-import { MaskedLMModule } from '@/components/task/MaskedLMModule';
 import { ModeSwitcher } from '@/components/chat/ModeSwitcher';
+
+// NOTE: the non-chat task modules (Classification/QA/MaskedLM/Vision/Audio/
+// Embedding) are intentionally not rendered — no engine executes those tasks
+// end-to-end, so shipping their UIs would promise features that don't work.
+// The components still exist in components/task/ if an engine ever lands.
 
 import { useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -134,28 +133,10 @@ function ConsoleContent() {
                 initialAsk={initialAsk ?? undefined}
             />
          }
-         {!activeIsGen && activeTask.includes('classification') && !activeTask.includes('vision') && !activeTask.includes('audio') && !activeTask.includes('image') &&
-            <ClassificationModule taskType={activeTask} />
-         }
-         {!activeIsGen && activeTask === 'question_answering' &&
-            <QAModule />
-         }
-         {!activeIsGen && activeTask === 'masked_lm' &&
-            <MaskedLMModule />
-         }
-         {!activeIsGen && (activeTask.includes('image') || activeTask.includes('vision') || activeTask === 'object_detection') &&
-            <VisionModule taskType={activeTask} />
-         }
-         {!activeIsGen && activeTask.includes('audio') &&
-            <AudioModule taskType={activeTask} />
-         }
-         {!activeIsGen && activeTask === 'text_encoding' &&
-            <EmbeddingModule />
-         }
          
-         {!activeIsGen && activeTask !== 'unknown' && !activeTask.includes('classification') && activeTask !== 'question_answering' && activeTask !== 'masked_lm' && !activeTask.includes('vision') && !activeTask.includes('audio') && !activeTask.includes('image') && activeTask !== 'text_encoding' &&
+         {!activeIsGen && activeTask !== 'unknown' &&
             <div className="flex-1 flex flex-col justify-center items-center">
-                <h2>No UI module exists for this explicit task yet ({activeTask}). However, you can still execute via API.</h2>
+                <h2>This model's task ({activeTask}) is not executable yet. Load a chat/instruct model instead.</h2>
             </div>
          }
 

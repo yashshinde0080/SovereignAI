@@ -194,6 +194,9 @@ const MessageItem = memo(function MessageItem({
           isEditing && message.role === 'user' &&
             'ring-2 ring-brand-accent/50 ring-offset-2 ring-offset-background shadow-md'
         )}
+        // Screen readers announce the streaming reply as it grows, instead of
+        // silence until the generation finishes.
+        aria-live={isLoading && isLast && message.role === 'assistant' ? 'polite' : undefined}
       >
         <CopyMessageButton
           text={message.content}

@@ -3,17 +3,31 @@ import os
 import json
 import hashlib
 import asyncio
+import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import aiohttp
 import aiofiles
 
+logger = logging.getLogger(__name__)
+
 from app.config import settings
 from app.services.registry import ModelRegistry
 from app.security.encryption import ModelEncryption
 from app.providers.huggingface import HuggingFaceProvider
 from app.providers.custom_catalog import CustomModelCatalog
+
+
+def _model_size_bytes(model: Dict[str, Any]) -> int:
+    """Approximate model size in bytes from registry metadata (0 = unknown)."""
+    size_gb = model.get("size_gb")
+    if size_gb:
+        try:
+            return int(float(size_gb) * (1024**3))
+        except (TypeError, ValueError):
+            pass
+    return 0
 
 
 def _fuzzy_match_model(models: List[Dict[str, Any]], model_id: str) -> Optional[Dict[str, Any]]:
@@ -55,6 +69,10 @@ class ModelManager:
         
         self.download_status: Dict[str, Dict[str, Any]] = {}
         self._download_tasks: Dict[str, asyncio.Task] = {}
+        # Serialize model loads: two concurrent load requests would both unload
+        # the active engine and fight over app.state (one wins, one leaks).
+        # ponytail: single global lock, per-model locks if concurrency matters.
+        self._load_lock = asyncio.Lock()
         
         self.provider = HuggingFaceProvider()
     
@@ -68,7 +86,7 @@ class ModelManager:
         catalog = CustomModelCatalog()
         n = catalog.load_directory(settings.catalog_dir)
         if n:
-            print(f"Custom model catalog: {n} models loaded from {settings.catalog_dir}")
+            logger.info("Custom model catalog: %s models loaded from %s", n, settings.catalog_dir)
 
         # Scan for models
         await self.scan_installed()
@@ -108,7 +126,7 @@ class ModelManager:
                 metadata = await self._discover_model(model_dir)
             
             if metadata:
-                print(f"SCAN: Found model {metadata['id']} at {metadata['path']}")
+                logger.info("SCAN: Found model %s at %s", metadata['id'], metadata['path'])
                 # Always register/update to sync DB with disk
                 await self.registry.add_model(metadata)
                 installed_ids.append(metadata["id"])
@@ -128,7 +146,7 @@ class ModelManager:
                 "modes_supported": ["fullram", "layerstream"],
                 "created_at": datetime.now().isoformat()
             }
-            print(f"SCAN: Found GGUF model {model_id} at {gguf_path}")
+            logger.info("SCAN: Found GGUF model %s at %s", model_id, gguf_path)
             await self.registry.add_model(metadata)
             installed_ids.append(model_id)
         
@@ -166,7 +184,7 @@ class ModelManager:
                                 "created_at": datetime.now().isoformat()
                             }
                         
-                        print(f"SCAN: Found split model {model_id} at {metadata['path']}")
+                        logger.info("SCAN: Found split model %s at %s", model_id, metadata['path'])
                         await self.registry.add_model(metadata)
                         installed_ids.append(model_id)
 
@@ -236,7 +254,7 @@ class ModelManager:
         """Unified load logic with hardware check"""
         from app.core.engine_factory import EngineFactory
         
-        print(f"LOAD: Request for model {model_id} (mode={mode})")
+        logger.info("LOAD: Request for model %s (mode=%s)", model_id, mode)
         model = await self.get_model(model_id)
         
         if not model:
@@ -244,16 +262,22 @@ class ModelManager:
             all_models = await self.list_models()
             model = _fuzzy_match_model(all_models, model_id)
             if model:
-                print(f"LOAD: Fuzzy matched {model_id} to {model['id']}")
+                logger.info("LOAD: Fuzzy matched %s to %s", model_id, model['id'])
                 model_id = model["id"]
                     
         if not model:
-            print(f"LOAD: Model {model_id} not found in registry")
+            logger.warning("LOAD: Model %s not found in registry", model_id)
             raise ValueError(f"Model {model_id} not found in registry")
             
         if not self.app:
             raise RuntimeError("ModelManager not linked to FastAPI application state")
-            
+        
+        async with self._load_lock:
+            return await self._load_model_locked(model_id, mode, model)
+
+    async def _load_model_locked(self, model_id: str, mode: str, model: Dict[str, Any]) -> Dict[str, Any]:
+        """Body of load_model, run under the concurrent-load lock."""
+        from app.core.engine_factory import EngineFactory
         # Unload current if any
         await self.unload_model()
         
@@ -285,16 +309,35 @@ class ModelManager:
                     break
             
             if base_model:
-                print(f"LOAD: Switching to base model {base_model['id']} path for fullram mode")
+                logger.info("LOAD: Switching to base model %s path for fullram mode", base_model['id'])
                 model_path = base_model["path"]
 
-        # Initialize engine (pass metadata for llmfit scoring)
+        # Disk-full preflight for LayerStream: swap needs ~model-size of free
+        # disk in the offload cache; fail before loading, not mid-generation.
+        if mode == "layerstream":
+            import shutil
+            free_bytes = shutil.disk_usage(settings.workspace_dir).free
+            need_bytes = _model_size_bytes(model)
+            if need_bytes and free_bytes < need_bytes:
+                raise RuntimeError(
+                    "Not enough free disk space for LayerStream swap cache "
+                    f"(need ~{need_bytes / (1024**3):.1f} GB, have "
+                    f"{free_bytes / (1024**3):.1f} GB). Free space or use FullRAM."
+                )
+
+        # Initialize engine (pass metadata for llmfit scoring). EngineFactory
+        # only creates; the caller owns load() so error mapping stays here.
         factory = EngineFactory(self.app.state.hardware_profile)
         engine = await factory.create_engine(
             model_path=model_path,
             mode=mode,
             model_metadata=model,
         )
+        try:
+            await engine.load()
+        except Exception:
+            await engine.unload()
+            raise
         
         # Update app state
         self.app.state.active_engine = engine
@@ -436,8 +479,7 @@ class ModelManager:
             self.download_status[model_name]["progress"] = 100
             
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.exception("Download failed for %s", model_name)
             self.download_status[model_name]["status"] = "error"
             self.download_status[model_name]["error"] = str(e)
             
@@ -460,6 +502,14 @@ class ModelManager:
             
         if model_dir.exists():
             import shutil
+            # Path-root guard: never rmtree outside the models directory, even
+            # if registry metadata was tampered with.
+            root = self.models_dir.resolve()
+            resolved = model_dir.resolve()
+            if resolved != root and root not in resolved.parents:
+                raise RuntimeError(
+                    f"Refusing to delete path outside models directory: {model_dir}"
+                )
             shutil.rmtree(model_dir)
         
         # Remove from registry

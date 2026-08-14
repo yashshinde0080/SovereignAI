@@ -33,10 +33,13 @@ def get_server_config():
 
 if __name__ == "__main__":
     host, port = get_server_config()
-    print(f"Launching SovereignAI Server on {host}:{port}")
+    # Hot-reload is a dev convenience; it doubles startup cost and can mask
+    # state bugs in production. Dev-only via env flag.
+    reload = os.environ.get("SOVEREIGN_RELOAD", "").lower() in ("1", "true", "yes")
+    print(f"Launching SovereignAI Server on {host}:{port} (reload={reload})")
     uvicorn.run(
         "app.main:app",
         host=host,
         port=port,
-        reload=True
+        reload=reload
     )

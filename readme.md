@@ -57,7 +57,7 @@ graph TB
 Loads the entire model checkpoint into active memory. Best for systems with high VRAM/RAM (e.g., NVIDIA RTX series, Apple Silicon).
 
 ### 2. LayerStream Engine
-A proprietary fallback engine that iteratively loads and unloads individual neural network layers from Disk to RAM. Enables 70B+ parameter models on machines with as little as **8GB of RAM**.
+A fallback engine that iteratively loads and unloads individual neural network layers from Disk to RAM, so models larger than free RAM still run. Sweet spot: **3-8B Q4 models on 8GB RAM** (measured: 1.9GB model → 2.3GB peak RSS). Large models (70B+) run but slowly — see [reviews/benchmark-2026-08-14.md](reviews/benchmark-2026-08-14.md) for honest numbers.
 
 ---
 
@@ -65,8 +65,8 @@ A proprietary fallback engine that iteratively loads and unloads individual neur
 
 ```text
 SovereignAI/
-├── 📁 backend/       # FastAPI & Inference Logic
-├── 📁 frontend/      # React & Vite Source
+├── 📁 backend/       # FastAPI & Inference Logic (Python 3.10+, PyTorch/transformers)
+├── 📁 frontend/      # Next.js 16 + React 19 (static export, no Vite)
 ├── 📁 electron/      # Desktop Wrapper
 ├── 📁 models/        # Place your .gguf models here
 ├── 📁 plugins/       # Custom Python plugins
@@ -95,6 +95,22 @@ SovereignAI/
 ![Privacy Shield](./Info_docs/assets/privacy.png)
 
 SovereignAI Edge ensures that **zero bytes** leave your local machine. All prompts, documents, and chat histories are stored in your local encrypted SQLite instance.
+
+---
+
+## 🔌 OpenAI-Compatible API
+
+`POST http://127.0.0.1:8000/v1/chat/completions` is a drop-in OpenAI
+`/chat/completions` endpoint — any OpenAI SDK/client works by pointing
+`base_url` at it (no API key needed on localhost).
+
+**Supported request params:** `messages`, `model`, `max_tokens`, `temperature`,
+`top_p`, `stream`, `use_rag`, `enable_thinking`.
+
+**Extension:** thinking-mode models stream reasoning in
+`choices[0].delta.reasoning` alongside `content`; standard OpenAI clients
+ignore the extra key. Shapes are pinned by
+`backend/tests/test_openai_compat.py`.
 
 ---
 

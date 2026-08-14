@@ -50,8 +50,9 @@ User (React/Electron/CLI)
     → REST/WebSocket (localhost:8000)
     → FastAPI Gateway (/v1/*)
         → Engine Router → Hardware Profiler → Auto-select FullRAM or LayerStream
-    → llama.cpp Python bindings (via transformers)
-    → File I/O: ./models/*.gguf, ./database/*.db
+    → PyTorch + transformers (FullRAM) / PyTorch layer-by-layer (LayerStream);
+      llama-cpp-python only as a GGUF fallback for unsupported architectures
+    → File I/O: ./workspace/models/*.gguf, ./workspace/database/*.db
 ```
 
 ### Key files:
@@ -60,8 +61,8 @@ User (React/Electron/CLI)
 - **FastAPI app:** `backend/app/main.py` — lifespan setup: DB, vector store, hardware detect, model manager, plugin manager
 - **API routes:** `backend/app/api/router.py` — mounts chat, models, system, benchmark, RAG, plugins, settings routers under `/v1/*`
 - **Engine ABC:** `backend/app/engines/base.py` — `BaseEngine` with `load()`, `unload()`, `generate()`, `generate_stream()`, `get_memory_usage()`
-- **LayerStream engine:** `backend/app/engines/layerstream/` — 15 files, includes 3 nearly-duplicate engine implementations (major gotcha, see below)
-- **FullRAM engine:** `backend/app/engines/fullram/` — executor, kv_cache, loader
+- **LayerStream engine:** `backend/app/engines/layerstream/` — single `LayerStreamEngine` (duplicate engines deleted 08-05)
+- **FullRAM engine:** `backend/app/engines/fullram/` — executor (hand-rolled GGUF parser removed)
 - **CLI:** `backend/app/cli/main.py`
 
 ### Data flow:
@@ -75,17 +76,13 @@ User (React/Electron/CLI)
 
 ## Non-Obvious Gotchas (Critical)
 
-### 1. LayerStream has 3 duplicate engines — only 1 is active
+### 1. LayerStream is a single engine now
 
-- `executor.py` (309 lines) — the main `LayerStreamEngine`
-- `eviction.py` (267 lines) — SECOND engine, apparently unused/tested
-- `layer_by_layer_inference.py` (245-428) — THIRD partial engine, `LayerByLayerEngine`
+`backend/app/engines/layerstream/` holds one `LayerStreamEngine` (executor + layer_executor + loader + splitter + prefetch). The duplicate engines (`eviction.py`, `layer_by_layer_inference.py`) and `ManualStreamEngine` were deleted. If you're fixing bugs in LayerStream, the routed engine is `executor.py:LayerStreamEngine`.
 
-The ponytail review (in `issue.md`) flags this as a major over-engineering problem. If you're fixing bugs in LayerStream, confirm which engine is actually registered/routed to. The others may have drifted out of sync.
+### 2. Real test suite (106 tests, not empty)
 
-### 2. `backend/tests/test_dummy.py` is the only test file — empty test suite
-
-`test_dummy.py` contains `def test_dummy(): pass`. There is no real test coverage. If you're asked to run tests, `pytest` passes instantly because it tests nothing. Do not assume tests exercise real code.
+`backend/tests/` has 10 files covering CLI, SSE, stream batching, think-strip, fuzzy model match, split-auto mode, layerstream loader, turboquant. `pytest` takes ~25-50s. Coverage gaps remain: LayerStream executor, FullRAM fallback, plugin sandbox, RAG, chat e2e — see `reviews/autoplan-report-2026-08-12.md`.
 
 ### 3. Engine selection is in `ModelManager`, not in the engines themselves
 
@@ -105,9 +102,9 @@ No absolute paths anywhere. The app runs from USB drives. All runtime storage li
 
 Top-level `proxy.py` is NOT the app proxy — it's a standalone FastAPI server that translates Anthropic API format to NVIDIA NIM API (`nvapi-...` key hardcoded). It runs independently on its own port, not part of the main app.
 
-### 6. The engine stack bypasses llama.cpp for Python
+### 6. PyTorch/transformers is the real tensor engine; llama.cpp is a fallback
 
-The TRD specifies "llama.cpp Python bindings" as the underlying tensor engine, but the LayerStream engine works with raw PyTorch + safetensors (layer-by-layer loading). `backend/app/engines/fullram/loader.py` has a hand-rolled GGUF parser (`GGUFLoader`, flagged as replacing with `transformers.AutoModel`). If you're adding GGUF support to LayerStream, check whether `llama.cpp` is actually wired or just specified.
+The FullRAM engine loads via `transformers.AutoModelForCausalLM` (GGUF files via the `gguf_file` kwarg); the LayerStream engine is raw PyTorch + safetensors (layer-by-layer). `llama-cpp-python` / `ik-llama-cpp-python` are only used as a fallback for architectures transformers can't load (e.g. BitNet IQ2_BN GGUF files).
 
 ### 7. Frontend uses Tailwind v4 with shadcn/ui
 

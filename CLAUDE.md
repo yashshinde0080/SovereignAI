@@ -186,7 +186,7 @@ sovereign serve          # Start API server
 - `backend/app/engines/layerstream/` - Layer-by-layer streaming
 
 **Database:**
-- `backend/app/database/models.py` - SQLAlchemy models
+- `backend/app/database/manager.py` - custom DatabaseManager (SQLAlchemy is NOT used; 7 typed table classes)
 - `backend/app/config/storage.toml` - Storage configuration
 
 ## Tech Stack
@@ -217,7 +217,7 @@ sovereign serve          # Start API server
 - `engines/` — FullRAM, LayerStream, Engine Algorithms, KV Cache, GGUF, Hardware Profiler
 - `workflow/` — Working, Working Flow, Flowcharts, Pipelines, Schedulers, Visuals, Mindmap
 - `algorithms/` — Algorithms
-- `tech-stack/` — FastAPI, React, SQLite, Pydantic, Zustand, Tailwind CSS, Vite, Electron, Plugin System, Hugging Face
+- `tech-stack/` — FastAPI, React, SQLite, Pydantic, Zustand, Tailwind CSS, Next.js, Electron, Plugin System, Hugging Face
 
 ### Wiki Page Format
 ```markdown

@@ -91,6 +91,12 @@ pnpm-debug.log*
 # TypeScript
 *.tsbuildinfo
 
+# Build/error artifacts (were committed once — keep them out)
+frontend/ts_errors*.txt
+frontend/build_output*.txt
+electron/build_*_output.txt
+backend/build_*_output.txt
+
 # Lock files (keep ONE, delete the others if you standardize)
 # package-lock.json
 # yarn.lock

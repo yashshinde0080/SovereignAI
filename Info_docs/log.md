@@ -248,3 +248,40 @@ Two commits (`2645279`, `d86d053`), both pushed to `origin/main` (verified 0 ahe
 - **`Info_docs/log.md`**: back-filled the missing `## [2026-08-12] review | Whole-Project Autoplan Review` block (CEO/Design/Eng/DX four-phase dual-voice review; 106 tests passing; TurboQuant parked as research; wedge = OpenAI-compatible offline server). This is the log entry that should have shipped with commit `bbe44f6` but only landed today.
 
 **Net effect**: wiki index and timeline now reflect the 2026-08-12 whole-project review; repo ignores Zed IDE artifacts. No functional/build impact.
+
+## [2026-08-14] implement | Autoplan Backlog Execution (P1+P2+P3 from the 08-12 review)
+Seven commits (`208c54e` → `d3db7fa`), one tranche (22:25–22:26 IST), all pushed to `origin/main` (`d3db7fa` = remote tip — verified via GitHub API + `0 ahead / 0 behind`). This is the execution of the 22 actionable items in `reviews/autoplan-report-2026-08-12.md` / `reviews/TODO-2026-08-12.md` — the closeout lives in [[reviews/completed-2026-08-12-to-2026-08-15]]. **Verification: backend suite 112 tests pass** (106 baseline + 6 new) · frontend `npm run build` green · CLI `sovereign --help` registers `import`.
+
+### P1 — critical (commits `208c54e`, `f196247`)
+- **Stop + disconnect cancellation**: `AbortController`/`stop()` in `frontend/hooks/useChat.ts`, Stop button in `ChatModule.tsx`; `Request.is_disconnected()` guard in `backend/app/api/chat.py`.
+- **ManualStream deleted**: `backend/app/engines/manualstream/executor.py` gone (257 lines, commit `f196247`) — it loaded the full state dict and defeated the low-memory premise; factory import + branch removed.
+- **Auth + path safety**: new `backend/app/security/middleware.py` Bearer middleware (LAN exposure only), `api_token` setting, `delete_model` rmtree root guard, snapshot traversal rejection in `workspace.py`.
+- **OOM→507 + disk preflight + load lock**: 507 mapping in `/v1/models/load` (`models.py`), disk-space preflight, `asyncio.Lock` around loads; `settings.trust_remote_code` off by default (gates remote code execution).
+- **LayerStream benchmark**: `backend/benchmark_layerstream.py` (new, 68 lines) + `reviews/benchmark-2026-08-14.md` — **0.40 tok/s, 2.30 GB peak** on Qwen3.5-0.8B (10→32 tokens). Sub-1 tok/s as predicted: the "70B on 8GB" headline is **not supported by measurement**; pitch re-positioned to **"3-8B Q4 on 8GB"** (true + measurable). RAM economics work as designed (1.9 GB model → 2.30 GB peak).
+- **Hide speculative task modules** + **reconcile stale docs** landed in P1 tranche tail (commits `e85cdce`, `d3db7fa`): console renders ChatModule only; readme/TRD/AGENTS.md/CLAUDE.md corrected — Next.js 16/React 19, honest LayerStream pitch, no-SQLAlchemy, single engine.
+
+### P2 (commits `4cd177a`, `9425152`, `f196247`)
+- **Real-engine tests**: `backend/tests/test_plugin_sandbox.py` (49 lines, timeout containment) + `test_openai_compat.py` (4 tests) + `test_load_status_agree.py`/`test_split_auto_mode.py` touched.
+- **Fail loudly + shrink task_router**: `TaskRouter` 32 entries → `{causal_lm, seq2seq_lm}` (commit `4cd177a`, task_router −137 lines); `get_model_class()` raises on unknown/non-generative tasks.
+- **Factory create/load split**: `engine_factory.py` no longer loads; `ModelManager` owns load + error mapping; the DEBUG print at `engine_factory.py:61` is gone.
+- **Pydantic v2 + structured logging**: `class Config` → `model_config = ConfigDict` (`settings/schemas.py`); fullram executor `print()`s → stdlib `logging` (commit `3e2b86f`).
+- **Chat lifecycle + OOM card**: 507 errors render a "how to fix" bubble; input gated while generating.
+
+### P3 (commits `4cd177a`, `9425152`)
+- **`sovereign import <local.gguf>`**: new CLI command in `backend/app/cli/main.py` (+47 lines, copy + registry refresh).
+- **Structured logging / reload gating**: stdlib `logging` on error paths (`SOVEREIGN_LOG_LEVEL`); `backend/main.py` reload dev-only (`SOVEREIGN_RELOAD=1`).
+- **MemoryManager zones**: dead zone bookkeeping deleted (memory_manager −84 lines); `suggest_mode` kept.
+- **Repo hygiene** (commit `e85cdce`): deleted `frontend/ts_errors.txt`/`ts_errors2.txt`/`ts_errors_current.txt`, `frontend/build_output*.txt` (×3), `electron/build_linux_output.txt` — and gitignored them.
+
+**Commits at a glance**: `208c54e` API hardening · `4cd177a` CLI import + router/memory cleanup · `3e2b86f` FullRAM refactor/print→logging · `f196247` delete ManualStream + security middleware · `9425152` benchmark + 3 test files · `e85cdce` frontend chat lifecycle + repo hygiene · `d3db7fa` docs + review markers.
+
+## [2026-08-15] implement | LayerStream Round-Trip + Rotary Bug Fix + GPU Benchmark Follow-Up + Settings UI Auth
+Today's tranche is **not yet committed** (working-tree changes only — remote tip is still `d3db7fa`). Three threads: a real-engine round-trip test that caught a latent LayerStream bug, a GPU-kernel availability check that closed out the 08-14 benchmark, and the security settings UI that finished the P1 auth story's frontend half.
+
+- **LayerStream round-trip test** (`backend/tests/test_layerstream_roundtrip.py`, new): `@slow` full executor round-trip on a freshly-split tiny Llama — copies the tokenizer, runs `generate_stream`, and unloads. Closed the "zero coverage on high-risk LayerStream executor" gap from the 08-12 Phase 3 eng review. A `slow` pytest marker was registered in `backend/pyproject.toml` so these real-engine tests run with `-m slow` and skip by default.
+- **Bug the round-trip exposed** (`backend/app/engines/layerstream/layer_executor.py`, +11): `execute_forward` crashed on `rotary_emb.to(device)` for **any non-hybrid Llama/Qwen2 model** — the `inv_freq` buffer arrives as a meta tensor (`init_empty_weights`) and `.to()` on a meta tensor raises *"Cannot copy out of meta tensor"*. Fix materializes `inv_freq` from `rope_theta` first (same formula as `assign_weights`' meta-buffer branch) before relocating. This would have failed the first `generate` on every standard Llama/Qwen2 split — masked until now because the 08-14 benchmark used the hybrid Qwen3.5 (path without this branch).
+- **GPU benchmark follow-up** (`backend/benchmark_layerstream.py` +10, `reviews/benchmark-2026-08-14.md` +26): re-ran on the box's GTX 1650 (torch 2.5.1+cu124 + `triton-windows` + `flash-linear-attention 0.2.2`, all venv-local). **0.38 tok/s ≈ CPU (0.40)** — zero delta, because transformers' Qwen3_5 fast path needs **both** fla and `causal-conv1d`; `causal-conv1d` has no Windows wheels (PyPI or GitHub) and the box has no `nvcc`/MSVC. Kernel availability now printed by the runner (`cuda=… fla=… causal_conv1d=…`). Fast-attention delta is **parked, not abandoned** — needs a Linux CUDA box or a global CUDA Toolkit install.
+- **Settings UI auth** (`frontend/components/settings/SecuritySettings.tsx` +43, `frontend/lib/api.ts` +13): API Token field + LAN-exposure warning (shown when `bind_localhost_only=false`); the API client now sends `Authorization: Bearer` from localStorage — the frontend half of the P1 auth+path-safety item, completing the middleware added 08-14.
+- **Closeout report** (`reviews/completed-2026-08-12-to-2026-08-15.md`, new): the full 22-item done/deferred ledger for the 08-12 review application — 112 tests passing, lists the three left-open decisions (gguf IQ2_BN patch, TurboQuant parked, tags/releases pending, fast-attention delta needs Linux CUDA).
+
+**Status**: uncommitted. To finalize, stage the 6 modified + 2 new files and commit; then the remote tip advances and this entry's "not yet committed" caveat drops.

@@ -237,7 +237,16 @@ class LayerExecutor:
         position_embeddings = None
         rotary_emb = self.components.get("rotary_emb")
         if rotary_emb is not None:
-             # Ensure rotary_emb buffers are in the right place
+             # Ensure rotary_emb buffers are in the right place. Buffers arrive
+             # meta (init_empty_weights) and .to() on a meta tensor raises
+             # ("Cannot copy out of meta tensor"), so materialize inv_freq from
+             # rope_theta first — same formula as assign_weights' meta-buffer
+             # branch.
+             if (getattr(rotary_emb, "inv_freq", None) is not None
+                     and rotary_emb.inv_freq.device.type == "meta"):
+                 dim = rotary_emb.inv_freq.shape[0] * 2
+                 base = getattr(self.config, "rope_theta", 10000.0)
+                 rotary_emb.inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=self.device) / dim))
              rotary_emb.to(self.device)
              # Modern transformers expect (cos, sin) tuple
              # Note: Some architectures differ, but this is the standard for Qwen2/Llama3

@@ -20,6 +20,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
     require_password: false,
     encrypt_models: true,
     bind_localhost_only: true,
+    api_token: "",
     api_port: 8000,
     enable_cors: false,
     allowed_origins: ["http://localhost:3000"],
@@ -43,6 +44,17 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
   }
 
   const update = (key: string, value: unknown) => {
+    // Mirror the API token into localStorage immediately so the very next
+    // request (including the settings PUT that stores it) carries the
+    // Authorization header the backend will then demand.
+    if (key === "api_token") {
+      const token = String(value ?? "");
+      if (token) {
+        window.localStorage.setItem("sovereign_api_token", token);
+      } else {
+        window.localStorage.removeItem("sovereign_api_token");
+      }
+    }
     setForm((prev) => ({ ...prev, [key]: value }) as typeof form);
   };
 
@@ -170,12 +182,31 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
         </div>
 
         {!form.bind_localhost_only && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-red-950/20 border border-red-500/20">
-            <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-            <p className="text-xs text-red-400">
-              Warning: Disabling localhost-only binding exposes the API to your
-              network. Only do this if you understand the security implications.
-            </p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-950/20 border border-red-500/20">
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-400">
+                Warning: Disabling localhost-only binding exposes the API to
+                your network. Any client on the LAN can reach it — set an API
+                token below; requests without{" "}
+                <code className="font-mono">Authorization: Bearer &lt;token&gt;</code>{" "}
+                will be rejected.
+              </p>
+            </div>
+            <div>
+              <Label className="text-sm text-slate-300">API Token</Label>
+              <Input
+                type="password"
+                className="bg-slate-900 border-slate-700"
+                placeholder="Empty = no token enforcement"
+                value={form.api_token ?? ""}
+                onChange={(e) => update("api_token", e.target.value)}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Required by LAN clients (curl, scripts, other devices). Keep it
+                secret — it grants full API access.
+              </p>
+            </div>
           </div>
         )}
 

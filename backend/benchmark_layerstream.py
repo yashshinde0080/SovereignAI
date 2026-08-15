@@ -12,6 +12,8 @@ import os
 import sys
 import time
 
+import torch
+
 from app.core.memory_manager import MemoryManager
 from app.engines.layerstream.executor import LayerStreamEngine
 
@@ -25,6 +27,7 @@ MAX_TOKENS = 32
 
 async def main(model_path: str) -> None:
     import psutil
+    from transformers.utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 
     engine = LayerStreamEngine(model_path, {}, MemoryManager())
     t0 = time.perf_counter()
@@ -48,6 +51,9 @@ async def main(model_path: str) -> None:
     print("\n=== LayerStream benchmark ===")
     print(f"model            : {os.path.basename(model_path)}")
     print(f"device           : {engine.device}")
+    print(f"kernels          : cuda={torch.cuda.is_available()} "
+          f"fla={is_flash_linear_attention_available()} "
+          f"causal_conv1d={is_causal_conv1d_available()}")
     print(f"load time        : {load_s:.1f}s")
     print(f"generation       : {tokens} tokens in {gen_s:.2f}s")
     print(f"tokens/second    : {tokens / gen_s:.2f} tok/s")
@@ -55,7 +61,9 @@ async def main(model_path: str) -> None:
     print(f"disk read time   : {stats['disk_read_time_total']:.2f}s "
           f"({stats['num_layer_loads']} layer loads, avg {stats['layer_load_time_avg']*1000:.0f} ms)")
     print(f"compute time     : {stats['compute_time']:.2f}s")
-    print("note: single-user CPU box; tok/s is honest raw decode, not marketing.")
+    note = ("single-user CPU box" if engine.device == "cpu"
+            else f"GPU box ({engine.device}); tok/s is honest raw decode, not marketing.")
+    print(f"note              : {note}")
 
     await engine.unload()
 

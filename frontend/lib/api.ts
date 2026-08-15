@@ -18,6 +18,17 @@ import type {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
+// API token set in Security settings — enforced by the backend whenever the
+// API is bound beyond localhost. Held in localStorage so every request (incl.
+// the settings PUT that stores it) carries the header.
+const API_TOKEN_KEY = 'sovereign_api_token';
+
+function authHeaders(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const token = window.localStorage.getItem(API_TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -35,6 +46,7 @@ class ApiClient {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders(),
         ...options.headers,
       },
     });
@@ -139,6 +151,7 @@ class ApiClient {
 
     const response = await fetch(`${this.baseUrl}/v1/rag/upload`, {
       method: 'POST',
+      headers: authHeaders(),
       body: formData,
     });
 

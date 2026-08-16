@@ -145,6 +145,8 @@ export interface CurrentModel {
   model: string;
   task_type: string;
   mode: string;
+  /** True when the active engine is experimental (LayerStream). */
+  experimental?: boolean;
   is_generative: boolean;
 }
 

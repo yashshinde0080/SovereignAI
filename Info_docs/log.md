@@ -276,12 +276,82 @@ Seven commits (`208c54e` → `d3db7fa`), one tranche (22:25–22:26 IST), all pu
 **Commits at a glance**: `208c54e` API hardening · `4cd177a` CLI import + router/memory cleanup · `3e2b86f` FullRAM refactor/print→logging · `f196247` delete ManualStream + security middleware · `9425152` benchmark + 3 test files · `e85cdce` frontend chat lifecycle + repo hygiene · `d3db7fa` docs + review markers.
 
 ## [2026-08-15] implement | LayerStream Round-Trip + Rotary Bug Fix + GPU Benchmark Follow-Up + Settings UI Auth
-Today's tranche is **not yet committed** (working-tree changes only — remote tip is still `d3db7fa`). Three threads: a real-engine round-trip test that caught a latent LayerStream bug, a GPU-kernel availability check that closed out the 08-14 benchmark, and the security settings UI that finished the P1 auth story's frontend half.
+Committed (13d26c9, 158ac51, 483b0ec). Three threads: a real-engine round-trip test that caught a latent LayerStream bug, a GPU-kernel availability check that closed out the 08-14 benchmark, and the security settings UI that finished the P1 auth story's frontend half.
 
-- **LayerStream round-trip test** (`backend/tests/test_layerstream_roundtrip.py`, new): `@slow` full executor round-trip on a freshly-split tiny Llama — copies the tokenizer, runs `generate_stream`, and unloads. Closed the "zero coverage on high-risk LayerStream executor" gap from the 08-12 Phase 3 eng review. A `slow` pytest marker was registered in `backend/pyproject.toml` so these real-engine tests run with `-m slow` and skip by default.
+- **LayerStream round-trip test** (`backend/tests/test_layerstream_roundtrip.py`, new): `@slow` full executor round-trip on a freshly-split tiny Llama — copies the tokenizer, runs `generate_stream`, and unloads. Closed the "zero coverage on high-risk LayerStream executor" gap from the 08-12 Phase 3 eng review. A `slow` pytest marker registered in `backend/pyproject.toml` so these real-engine tests run with `-m slow` and skip by default.
+
 - **Bug the round-trip exposed** (`backend/app/engines/layerstream/layer_executor.py`, +11): `execute_forward` crashed on `rotary_emb.to(device)` for **any non-hybrid Llama/Qwen2 model** — the `inv_freq` buffer arrives as a meta tensor (`init_empty_weights`) and `.to()` on a meta tensor raises *"Cannot copy out of meta tensor"*. Fix materializes `inv_freq` from `rope_theta` first (same formula as `assign_weights`' meta-buffer branch) before relocating. This would have failed the first `generate` on every standard Llama/Qwen2 split — masked until now because the 08-14 benchmark used the hybrid Qwen3.5 (path without this branch).
+
 - **GPU benchmark follow-up** (`backend/benchmark_layerstream.py` +10, `reviews/benchmark-2026-08-14.md` +26): re-ran on the box's GTX 1650 (torch 2.5.1+cu124 + `triton-windows` + `flash-linear-attention 0.2.2`, all venv-local). **0.38 tok/s ≈ CPU (0.40)** — zero delta, because transformers' Qwen3_5 fast path needs **both** fla and `causal-conv1d`; `causal-conv1d` has no Windows wheels (PyPI or GitHub) and the box has no `nvcc`/MSVC. Kernel availability now printed by the runner (`cuda=… fla=… causal_conv1d=…`). Fast-attention delta is **parked, not abandoned** — needs a Linux CUDA box or a global CUDA Toolkit install.
+
 - **Settings UI auth** (`frontend/components/settings/SecuritySettings.tsx` +43, `frontend/lib/api.ts` +13): API Token field + LAN-exposure warning (shown when `bind_localhost_only=false`); the API client now sends `Authorization: Bearer` from localStorage — the frontend half of the P1 auth+path-safety item, completing the middleware added 08-14.
+
 - **Closeout report** (`reviews/completed-2026-08-12-to-2026-08-15.md`, new): the full 22-item done/deferred ledger for the 08-12 review application — 112 tests passing, lists the three left-open decisions (gguf IQ2_BN patch, TurboQuant parked, tags/releases pending, fast-attention delta needs Linux CUDA).
 
-**Status**: uncommitted. To finalize, stage the 6 modified + 2 new files and commit; then the remote tip advances and this entry's "not yet committed" caveat drops.
+## [2026-08-16] implement | Engine Benchmark Suite + LayerStream Performance Decision + Honest Pitch Correction
+Committed (2463d94, d9fc444, dfc2a3b, be00932, 9733608, cc4c6be, 324d7e1, bf3f39d, 9a80f2f). Major benchmarking tranche across all three engines + the design decision that re-positions the product pitch around measured numbers.
+
+### Engine Benchmark Master Report (`reviews/benchmark-engines-2026-08-16.md`)
+Consolidated cross-engine comparison on the 8 GB dev box:
+| Engine | Model | tok/s | Peak RAM delta | RAM/file |
+|---|---|---|---|---|
+| LayerStream (CPU) | 0.8B FP16 split | 0.40 | 2.30 GB | — |
+| FullRAM CPU (fp32) | 0.5B Q4 | **3.84** | +1.93 GB | **4.1x** |
+| FullRAM CUDA (fp16) | 0.5B Q4 | **7.03** | +2.25 GB | **4.8x** |
+| llama.cpp CPU | 0.5B Q4 | **24.05** | +0.48 GB | **1.0x** |
+| llama.cpp --gpu-layers | 0.5B Q4 | 28.95 | +0.48 GB | 1.0x |
+| llama.cpp CPU | **3B Q4** | **5.44** | **+2.27 GB** | **1.2x** |
+
+**Key findings:**
+- LayerStream compute = 98% of wall time; I/O is 9% (already overlapped). No I/O fix produces 4x.
+- FullRAM/transformers dequantizes Q4 to fp32/fp16 at ~4x file size → 3B Q4 needs ~9.7 GB (OOM on this box).
+- llama.cpp keeps weights quantized in RAM (1.0-1.2x file) → **3B Q4 runs at 5.44 tok/s on 8 GB**, the only engine that can.
+- Speedup: llama.cpp 60x LayerStream, 6.3x FullRAM CPU on 0.5B Q4.
+- Corrected pitch: **"0.5-1B Q4 in RAM via FullRAM; 3-8B Q4 via llama.cpp at ~5 tok/s on 8 GB."**
+
+### LayerStream Performance Decision (`reviews/design-layerstream-perf-2026-08-16.md`)
+Office-hours outcome:
+- **Diagnosis**: Compute 98%, I/O 9% (prefetch already overlaps). Torch layer-by-layer cannot beat llama.cpp fused kernels.
+- **Approach A (shipping)**: FullRAM Q4 0.5-1B is the product wedge. LayerStream off-by-default, experimental badge in UI.
+- **Approach B (next, 1-2 weeks)**: llama.cpp mmap offload for beyond-RAM GGUF. Beyond-RAM becomes usable (10-50x faster than LayerStream).
+- **Approach C (parked)**: torch.compile/CUDA graphs/fused kernels — reopens only if spike shows within ~3x of llama.cpp.
+- **Parked I/O list** (revisit triggers in `reviews/parked-io-fixes-2026-08-16.md`): Q4/Q8 weight quantization, deeper prefetch, GDS/O_DIRECT, LLM-in-a-Flash, causal-conv1d Linux setup.
+
+### FullRAM Q4 Benchmark Detail (`reviews/benchmark-fullram-2026-08-16.md`)
+Measured `qwen2.5-0.5b-instruct-q4_k_m.gguf` (469 MB):
+- CPU fp32: 3.84 tok/s, 63.4 s load, +1.93 GB RAM (4.1x file)
+- CUDA fp16: 7.03 tok/s, 66.8 s load, +2.25 GB RAM (4.8x file)
+- Projection: 3B Q4 ~8-10 GB (no), 8B Q4 ~20 GB (no). FullRAM ceiling = ~1B Q4.
+- Load time = UX killer (minutes for 3B+). llama.cpp mmap = seconds.
+
+### llama.cpp Offload Spike (`reviews/spike-llamacpp-offload-2026-08-16.md`)
+Validated Approach B mechanism:
+- 3B Q4 on 1.17 GB free RAM: 5.44 tok/s, 2.31 GB RSS (1.2x file), 5.6 s load.
+- FullRAM/transformers cannot run this model at all (~9.7 GB fp32).
+- Integration note: existing llama_cpp fallback only triggers on transformers "not supported yet" — needs explicit beyond-RAM router decision.
+
+### Implementation landed (dfc2a3b, be00932)
+- `MemoryManager.suggest_mode` now uses honest 4x GGUF residency so "auto" picks FullRAM only for models that fit; LayerStream flagged experimental (engine attr, API fields, UI badges).
+- Fixed suggest_mode crash (`a and b or c` precedence: None metadata raised AttributeError).
+- New runners: `backend/benchmark_fullram.py`, `backend/benchmark_llamacpp.py` (mirror LayerStream runner).
+- New test: `backend/tests/test_suggest_mode.py` (7 tests).
+- 112 backend tests pass; frontend typecheck clean.
+
+### Frontend/UI (cc4c6be, 324d7e1)
+- ModeSwitcher: experimental badge for LayerStream, improved FullRAM/LayerStream labels.
+- ModelTable: engine badge column.
+- GeneralSettings: engine select shows experimental warning.
+- Types: `types/index.ts` added `experimental` flag to engine info.
+
+### Repo hygiene (2463d94)
+- Deleted `Info_docs/Excalidraw/SovereignAI.excalidraw.md` (314 lines) and `Info_docs/Kanban_board.md` (34 lines) — stale design artifacts.
+
+### Documentation created
+- `reviews/benchmark-engines-2026-08-16.md` — master cross-engine report (224 lines)
+- `reviews/benchmark-fullram-2026-08-16.md` — FullRAM detail (136 lines)
+- `reviews/design-layerstream-perf-2026-08-16.md` — design decision (121 lines, updated +51)
+- `reviews/spike-llamacpp-offload-2026-08-16.md` — Approach B spike (70 lines)
+- `reviews/parked-io-fixes-2026-08-16.md` — parked I/O list with revisit triggers (102 lines)
+
+### Status
+DONE_WITH_CONCERNS — FullRAM benchmark measured, pitch corrected, engine routing implemented, Approach B validated. Open: Approach B router wiring (beyond-RAM GGUF -> llama.cpp).

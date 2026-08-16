@@ -74,6 +74,11 @@ export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, l
                   {(Array.isArray(model.modes_supported) ? model.modes_supported : [model.modes_supported || 'auto']).map((mode, idx) => (
                     <Badge key={`${mode}-${idx}`} variant="secondary" className="text-xs">
                       {mode}
+                      {mode === 'layerstream' && (
+                        <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+                          exp
+                        </span>
+                      )}
                     </Badge>
                   ))}
                 </div>

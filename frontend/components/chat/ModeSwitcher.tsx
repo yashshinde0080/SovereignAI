@@ -16,7 +16,7 @@ import { errMsg } from '@/lib/utils';
 
 const modes = [
   { id: 'fullram', label: 'Full RAM', icon: Cpu, description: 'Fastest, uses more memory' },
-  { id: 'layerstream', label: 'Layer Stream', icon: Layers, description: 'Lower memory usage' },
+  { id: 'layerstream', label: 'Layer Stream', icon: Layers, description: 'Experimental: low memory for models that do not fit in RAM', experimental: true },
   { id: 'auto', label: 'Auto', icon: Sparkles, description: 'Automatic selection' },
 ];
 
@@ -70,7 +70,14 @@ export function ModeSwitcher() {
           >
             <mode.icon className="h-4 w-4 mt-0.5" />
             <div>
-              <p className="font-medium">{mode.label}</p>
+              <p className="font-medium">
+                {mode.label}
+                {'experimental' in mode && mode.experimental && (
+                  <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+                    Experimental
+                  </span>
+                )}
+              </p>
               <p className="text-xs text-muted-foreground">{mode.description}</p>
             </div>
           </DropdownMenuItem>

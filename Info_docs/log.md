@@ -276,7 +276,7 @@ Seven commits (`208c54e` → `d3db7fa`), one tranche (22:25–22:26 IST), all pu
 **Commits at a glance**: `208c54e` API hardening · `4cd177a` CLI import + router/memory cleanup · `3e2b86f` FullRAM refactor/print→logging · `f196247` delete ManualStream + security middleware · `9425152` benchmark + 3 test files · `e85cdce` frontend chat lifecycle + repo hygiene · `d3db7fa` docs + review markers.
 
 ## [2026-08-15] implement | LayerStream Round-Trip + Rotary Bug Fix + GPU Benchmark Follow-Up + Settings UI Auth
-Today's tranche is **not yet committed** (working-tree changes only — remote tip is still `d3db7fa`). Three threads: a real-engine round-trip test that caught a latent LayerStream bug, a GPU-kernel availability check that closed out the 08-14 benchmark, and the security settings UI that finished the P1 auth story's frontend half.
+Three threads: a real-engine round-trip test that caught a latent LayerStream bug, a GPU-kernel availability check that closed out the 08-14 benchmark, and the security settings UI that finished the P1 auth story's frontend half. **Committed 2026-08-16 in `2463d94`** — the "not yet committed" caveat below is now historical.
 
 - **LayerStream round-trip test** (`backend/tests/test_layerstream_roundtrip.py`, new): `@slow` full executor round-trip on a freshly-split tiny Llama — copies the tokenizer, runs `generate_stream`, and unloads. Closed the "zero coverage on high-risk LayerStream executor" gap from the 08-12 Phase 3 eng review. A `slow` pytest marker was registered in `backend/pyproject.toml` so these real-engine tests run with `-m slow` and skip by default.
 - **Bug the round-trip exposed** (`backend/app/engines/layerstream/layer_executor.py`, +11): `execute_forward` crashed on `rotary_emb.to(device)` for **any non-hybrid Llama/Qwen2 model** — the `inv_freq` buffer arrives as a meta tensor (`init_empty_weights`) and `.to()` on a meta tensor raises *"Cannot copy out of meta tensor"*. Fix materializes `inv_freq` from `rope_theta` first (same formula as `assign_weights`' meta-buffer branch) before relocating. This would have failed the first `generate` on every standard Llama/Qwen2 split — masked until now because the 08-14 benchmark used the hybrid Qwen3.5 (path without this branch).
@@ -285,3 +285,33 @@ Today's tranche is **not yet committed** (working-tree changes only — remote t
 - **Closeout report** (`reviews/completed-2026-08-12-to-2026-08-15.md`, new): the full 22-item done/deferred ledger for the 08-12 review application — 112 tests passing, lists the three left-open decisions (gguf IQ2_BN patch, TurboQuant parked, tags/releases pending, fast-attention delta needs Linux CUDA).
 
 **Status**: uncommitted. To finalize, stage the 6 modified + 2 new files and commit; then the remote tip advances and this entry's "not yet committed" caveat drops.
+
+## [2026-08-16] docs | 08-15 Finalization + Repository Guidelines Rewrite
+Three commits (`2463d94`, `02daaaa`, `991f5ca`), finalizing the previously-uncommitted 08-15 tranche and regenerating the agent-facing guidelines from source. Working tree clean; `991f5ca` 1 ahead of `origin/main` (pending push).
+
+### 08-15 tranche committed (commit `2463d94`, 15:14 IST)
+Stage of the 6 modified + 2 new files the 08-15 entry flagged as uncommitted — the 08-15 "not yet committed" caveat now drops:
+- **Logged**: the `## [2026-08-15]` block was appended to `Info_docs/log.md` (+39) — this is the entry above.
+- **Stale wiki cleanup**: deleted `Info_docs/Excalidraw/SovereignAI.excalidraw.md` (314 lines) + `Info_docs/Kanban_board.md` (34 lines) — obsolete artifacts predating the wiki restructure.
+- The LayerStream round-trip test (`backend/tests/test_layerstream_roundtrip.py` +102), rotary `inv_freq` materialization fix (`backend/app/engines/layerstream/layer_executor.py` +11), GPU benchmark follow-up (`backend/benchmark_layerstream.py` +10, `reviews/benchmark-2026-08-14.md` +26), `slow` marker (`backend/pyproject.toml` +3), settings UI auth (`frontend/components/settings/SecuritySettings.tsx` +43, `frontend/lib/api.ts` +13), and closeout report (`reviews/completed-2026-08-12-to-2026-08-15.md` +66) all land here.
+
+### Repo hygiene (commit `02daaaa`, 21:54 IST)
+- **`.gitignore`**: added `.omp/` — excludes the local agent-harness workspace metadata directory (not part of the SovereignAI runtime app).
+
+### Repository Guidelines rewrite (commit `991f5ca`, 22:23 IST)
+- **`AGENTS.md`** (+207/-144): replaced the stale agent guide with a fresh source-grounded synthesis. Generated via 4 parallel research scout agents (core source, tests, configs/build, scripts/docs) and verified against the actual tree.
+- **Corrections vs the old guide**:
+  - `proxy.py` claimed as a standalone NVIDIA NIM proxy — **file does not exist**; removed. Only a stale `__pycache__/proxy.cpython-314.pyc` remains.
+  - Gotcha #8 ("debug/test scripts litter repo root") — **already cleaned**; corrected.
+  - Test suite — **13 files** (not 10), ~106+ tests; documented the `slow` marker, `asyncio_mode="auto"`, no `conftest.py`, fast-loop `-m "not slow"`, and real coverage gaps.
+  - Engine selection flow — traced through `EngineFactory.create_engine()` → `TaskResolver.resolve()` → `MemoryManager.suggest_mode()` (llmfit scoring + threshold fallback).
+  - `BaseEngine` — **5 abstract methods** (not 6).
+  - New gotcha: launch scripts (`launch.bat`/`launch.sh`) hardcode `127.0.0.1:8000` and **bypass** `backend/main.py:get_server_config()`, which reads the settings DB — they disagree on host/port.
+  - New gotcha: TurboQuant experimental/default-off, eval gate **FAILS** (codebook uses uniform centroids, not Beta Lloyd-Max; QJL decode scaling near-no-op; ~0.98× not 6× compression).
+  - New gotcha: `llama-cpp-tq/` is a **vendored separate package** with its own pytest suite — not run by the backend `python -m pytest`.
+  - `config/storage.toml` referenced by code but **does not exist** — falls back to `Settings` defaults.
+  - `frontend/tailwind.config.js` flagged as a **legacy v3 leftover** — `app/globals.css` `@theme inline` is the authoritative Tailwind v4 path.
+  - `Info_docs/tech-stack/Vite.md` stale — codebase is Next.js 16, not Vite.
+- **Structure**: Project Overview · Architecture & Data Flow · Key Directories · Development Commands · Code Conventions & Common Patterns · Important Files · Runtime & Tooling Preferences · Non-Obvious Gotchas · Testing & QA · Key Dependencies · Package Managers.
+
+**Net effect**: the 08-15 work is committed and the agent-facing guidelines now match the actual repository state (tests real, proxy.py gone, debug scripts gone, TurboQuant parked, engine flow accurate).

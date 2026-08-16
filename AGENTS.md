@@ -114,6 +114,18 @@ The FullRAM engine loads via `transformers.AutoModelForCausalLM` (GGUF files via
 
 Files like `debug_*.py`, `test_*.py`, `verify_*.py`, `reproduce_*.py`, `dl_err.txt`, `log.txt` are historical artifacts. They test specific model loading, layer execution, and API calls against real models. Some may be useful for reproduction, but many are stale.
 
+### 9. LayerStream is experimental; the I/O fix list is parked with triggers
+
+Measured 08-14/08-15: LayerStream is 0.40 tok/s, compute is 98% of wall time,
+and disk I/O (~9%) is already overlapped behind compute — so the I/O fix list
+(quantize splits, deeper prefetch, GDS/io_uring, LLM-in-a-Flash, etc.) is
+parked, not wrong. Each item has an explicit, checkable revisit trigger:
+`reviews/parked-io-fixes-2026-08-16.md`. FullRAM is the default for fitting
+models (honest ~4x-Q4-file residency check in `MemoryManager.suggest_mode`);
+llama.cpp is the validated beyond-RAM path (24 tok/s on the dev box, see
+`reviews/spike-llamacpp-offload-2026-08-16.md`). Don't tune the prefetch
+window or add I/O machinery until a benchmark shows disk read > 30% of wall.
+
 ---
 
 ## Code Organization

@@ -312,6 +312,15 @@ class ModelManager:
                 logger.info("LOAD: Switching to base model %s path for fullram mode", base_model['id'])
                 model_path = base_model["path"]
 
+        # LayerStream is experimental: FullRAM is the default for models that
+        # fit (measured 2026-08-16: 3.84 tok/s FullRAM CPU vs 0.40 LayerStream).
+        # Flag it loudly so experimental loads are visible in server logs.
+        if mode == "layerstream":
+            logger.warning(
+                "LOAD: LayerStream is experimental (measured ~0.4 tok/s on the dev box); "
+                "FullRAM is the default for fitting models"
+            )
+
         # Disk-full preflight for LayerStream: swap needs ~model-size of free
         # disk in the offload cache; fail before loading, not mid-generation.
         if mode == "layerstream":
@@ -348,6 +357,7 @@ class ModelManager:
             "status": "loaded",
             "model": model_id,
             "mode": engine.mode,
+            "experimental": getattr(engine, "experimental", False),
             "metadata": getattr(engine, "task_metadata", {})
         }
         

@@ -43,6 +43,7 @@ class FullRAMEngine(BaseEngine):
     def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any):
         super().__init__(model_path, hardware, memory_manager)
         self.mode = "fullram"
+        self.experimental = False
         self.processor = None
         self.tokenizer = None
         self.model = None

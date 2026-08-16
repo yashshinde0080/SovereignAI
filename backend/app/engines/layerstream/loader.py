@@ -59,6 +59,12 @@ class LayerWeightLoader:
         are reaped to make room; a full window of in-flight loads is left for
         the caller to retry on the next layer step (the window slides forward
         as ``get_weights`` consumes futures).
+
+        PARKED (2026-08-16): deeper windows, batched group reads, GDS,
+        O_DIRECT, io_uring are second-order — I/O is ~9% of wall and already
+        overlapped behind compute (measured 08-14/08-15). Revisit triggers:
+        reviews/parked-io-fixes-2026-08-16.md. Do not tune this window until
+        a benchmark shows disk read > 30% of wall.
         """
         if path in self.cpu_cache or path in self.futures:
             return

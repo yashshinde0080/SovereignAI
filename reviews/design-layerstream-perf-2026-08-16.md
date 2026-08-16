@@ -148,8 +148,8 @@ DONE_WITH_CONCERNS — design approved; FullRAM benchmark measured; Approach B
 spike validated (see reviews/spike-llamacpp-offload-2026-08-16.md): llama.cpp
 holds Q4 at 1.0x file size in RAM and decodes at 24 tok/s on the same box
 (60x LayerStream, 6x transformers CPU). Open items: engine-router wiring for
-beyond-RAM GGUF -> llama.cpp; 3B Q4 end-to-end number (download-bandwidth
-blocked, resumable).
+beyond-RAM GGUF -> llama.cpp. 3B Q4 end-to-end measured 2026-08-16: 5.44
+tok/s, 2.3 GB RSS on the 8 GB box (see reviews/spike-llamacpp-offload-2026-08-16.md).
 
 ## Implementation status (Approach A config, 2026-08-16)
 
@@ -161,4 +161,5 @@ and UI badges (mode switcher, models table, settings select). Also fixed a
 pre-existing crash in suggest_mode (``a and b or c`` precedence: None
 metadata raised AttributeError on the ``or`` arm). 112 backend tests pass;
 frontend typecheck clean. Still open: Approach B router wiring (beyond-RAM
-GGUF -> llama.cpp) and the 3B Q4 end-to-end run.
+GGUF -> llama.cpp). The 3B Q4 end-to-end run is done: 5.44 tok/s at 2.3 GB
+RSS on the 8 GB box.

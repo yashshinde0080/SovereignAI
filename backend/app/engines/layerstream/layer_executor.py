@@ -269,7 +269,11 @@ class LayerExecutor:
         for i, layer in enumerate(self.components['layers']):
             t0 = time.perf_counter()
             # Prefetch prefetch_depth layers ahead so the disk stays saturated
-            # while the GPU/CPU computes the current layer.
+            # while the GPU/CPU computes the current layer. This overlap is
+            # what hides disk I/O behind compute (measured: wall ~= compute,
+            # disk read ~9% of wall). PARKED (2026-08-16): deeper prefetch,
+            # batched reads, GDS/io_uring are second-order until compute stops
+            # dominating — triggers in reviews/parked-io-fixes-2026-08-16.md.
             for d in range(1, self.loader.prefetch_depth + 1):
                 next_idx = i + d
                 if next_idx < self.num_layers:

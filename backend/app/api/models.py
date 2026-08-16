@@ -233,6 +233,7 @@ async def get_current_model(request: Request):
         "loaded": True,
         "model": app.state.active_model,
         "mode": app.state.active_mode,
+        "experimental": getattr(engine, "experimental", False),
         "task_type": task_info.get("task_type", "unknown"),
         "input_modality": task_info.get("input_modality", "text"),
         "is_generative": task_info.get("is_generative", False),

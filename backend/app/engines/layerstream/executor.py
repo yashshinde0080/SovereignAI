@@ -80,6 +80,10 @@ class LayerStreamEngine(BaseEngine):
                  turboquant_config: Any = None):
         super().__init__(model_path, hardware, memory_manager)
         self.mode = "layerstream"
+        # Experimental engine: 0.40 tok/s measured on the 8 GB dev box vs
+        # 3.84 (FullRAM CPU) / 24 (llama.cpp). Off the default path; surfaced
+        # to the UI via /v1/models/current.
+        self.experimental = True
         self.quant_method = quant_method
         self.turboquant_config = turboquant_config
 

@@ -87,7 +87,9 @@ product default.
 - causal-conv1d / Linux CUDA fast-attention setup
 
 Revisit trigger: a paying user requests beyond-RAM models before B ships, or
-a compute spike lands within ~3x of llama.cpp.
+a compute spike lands within ~3x of llama.cpp. Per-item triggers, measured
+criteria, and a sequencing rule live in the canonical record:
+reviews/parked-io-fixes-2026-08-16.md.
 
 ## Risks
 
@@ -99,6 +101,25 @@ a compute spike lands within ~3x of llama.cpp.
   users. SovereignAI's differentiation must be integration (portable USB,
   UI, plugins, privacy), not raw engine speed.
 
+## Benchmark results (measured 2026-08-16)
+
+FullRAM Q4, `qwen2.5-0.5b-instruct-q4_k_m.gguf` (469 MB), same box/prompt as
+the LayerStream ref. See reviews/benchmark-fullram-2026-08-16.md.
+
+| Metric | FullRAM CPU | FullRAM CUDA | LayerStream ref |
+|---|---|---|---|
+| Tokens/second | 3.84 | 7.03 | 0.40 |
+| Load time | 63.4 s | 66.8 s | 4.4 s |
+| Peak RAM delta | +1.93 GB | +2.25 GB | 2.30 GB |
+
+Outcome: FullRAM is ~10-18x faster than LayerStream and keeps the memory
+bound, but transformers dequantizes GGUF to fp32/fp16, so RAM scales at ~4x
+file size. Projection kills the "3-8B Q4 on 8GB RAM" claim: 3B Q4 needs
+~7-12 GB, 8B Q4 ~16-19 GB. The realistic FullRAM ceiling on this box is
+~1B Q4. Only a llama.cpp-style backend (B) keeps weights quantized in RAM
+(3B ~2 GB, 8B ~5 GB), so B is now required for the headline claim, not
+optional.
+
 ## What I noticed
 
 The builder has domain expertise (built the layer-streaming engine, knows
@@ -107,7 +128,7 @@ re-positioned already), and demonstrated taste (honest read of the numbers,
 "memory economics work as designed"). The signal to watch: the pull toward
 engine-deep work is strong; the discipline here is shipping the wedge first.
 
-## The Assignment
+## The Assignment (completed 2026-08-16)
 
 Run `backend/benchmark_layerstream.py`-style benchmark on the **FullRAM Q4**
 path (3-8B GGUF on the 8 GB box) and record real tok/s + peak RAM. One
@@ -115,7 +136,29 @@ session, one model. The pitch gets rewritten off those numbers: if 3B Q4
 chats at usable speed, that is the launch claim. LayerStream stays
 experimental until B (llama.cpp offload) lands.
 
+Result: done in reviews/benchmark-fullram-2026-08-16.md via new runner
+`backend/benchmark_fullram.py`. 0.5B Q4 measured at 3.84 tok/s CPU / 7.03
+CUDA. The 3-8B claim does not fit via transformers (fp32/fp16 dequant ~4x
+file size); pitch corrected to "0.5-1B Q4 in RAM, 3-8B Q4 via llama.cpp
+backend (B)".
+
 ## Status
 
-DONE_WITH_CONCERNS — design approved; open items: FullRAM Q4 benchmark
-numbers not yet measured, llama.cpp offload backend not yet scheduled.
+DONE_WITH_CONCERNS — design approved; FullRAM benchmark measured; Approach B
+spike validated (see reviews/spike-llamacpp-offload-2026-08-16.md): llama.cpp
+holds Q4 at 1.0x file size in RAM and decodes at 24 tok/s on the same box
+(60x LayerStream, 6x transformers CPU). Open items: engine-router wiring for
+beyond-RAM GGUF -> llama.cpp; 3B Q4 end-to-end number (download-bandwidth
+blocked, resumable).
+
+## Implementation status (Approach A config, 2026-08-16)
+
+Landed: MemoryManager.suggest_mode now uses honest FullRAM residency (~4x Q4
+file in RAM, measured; ~2x full repos) so auto picks FullRAM only for models
+that fit and LayerStream otherwise. LayerStream is flagged experimental:
+engine attr, load-result and /v1/models/current fields, server log warning,
+and UI badges (mode switcher, models table, settings select). Also fixed a
+pre-existing crash in suggest_mode (``a and b or c`` precedence: None
+metadata raised AttributeError on the ``or`` arm). 112 backend tests pass;
+frontend typecheck clean. Still open: Approach B router wiring (beyond-RAM
+GGUF -> llama.cpp) and the 3B Q4 end-to-end run.

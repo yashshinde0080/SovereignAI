@@ -317,7 +317,7 @@ Stage of the 6 modified + 2 new files the 08-15 entry flagged as uncommitted —
 **Net effect**: the 08-15 work is committed and the agent-facing guidelines now match the actual repository state (tests real, proxy.py gone, debug scripts gone, TurboQuant parked, engine flow accurate).
 
 ## [2026-08-17] docs | Research Results + Algorithms Reference + Wiki Frontmatter Fix
-One commit (`414c6f5` "17/8/2026", 16:00 IST), pushed to `origin/master` (0 ahead / 0 behind — verified via `git status`). Documentation-only day synthesizing the 08-09 → 08-15 research tranche into two paper-ready reference artifacts plus a small wiki frontmatter normalization.
+Two commits (`414c6f5` "17/8/2026" 16:00 IST, `85f6a12` "17/8/2026" 22:02 IST), both on `master`/`origin/master` (working tree clean — verified via `git status`; remote refs via `git ls-remote origin`: `master=85f6a12`, `main=f112e4a`). `master` is now 4 commits ahead of `main` (08-16 → 08-17 tranche pending merge). Documentation-only day synthesizing the 08-09 → 08-15 research tranche into two paper-ready reference artifacts plus a small wiki frontmatter normalization.
 
 ### Research results aggregation (`research-results.md`, new, 325 lines)
 - **Purpose**: single aggregate of all measured research, eval gates, and autoplan reviews performed 2026-08-09 through 2026-08-15. Every cell grounded in a cited `reviews/*.json` or `reviews/*.md` artifact — no fabricated values.
@@ -352,3 +352,8 @@ One commit (`414c6f5` "17/8/2026", 16:00 IST), pushed to `origin/master` (0 ahea
 - `Info_docs/BANK.base` (new, 10 lines): Obsidian Base view plugin config — table view ordering `file.name, tags, file.path, updated` with column sizing. IDE-local artifact committed alongside.
 
 **Net effect**: the 08-09 → 08-15 research + eval tranche now has two citable paper-ready reference artifacts in the repo root; wiki frontmatter uniform across pages. No functional/build/engine impact.
+
+### Log finalization (commit `85f6a12`, 22:02 IST)
+- Appended this `## [2026-08-17]` block to `Info_docs/log.md` (+38) — the self-referential log entry for the day's work; landed the research-results + algorithms references + frontmatter fix documented above.
+- **Cross-branch state**: `master` carries the 08-16 → 08-17 docs tranche (`414c6f5`, `d5461c1`, `991f5ca`, `85f6a12`) that `main` (`f112e4a`) has not merged — a `Merge branch 'master'` into `main` is pending to re-sync the default branch.
+- GitHub MCP cross-check was unavailable this session (`mcp__github_*` returned `Bad credentials`; REST API 404 on the private repo unauthed, `gh` CLI not installed). Remote verification fell back to `git ls-remote origin`, which is authoritative for ref state.

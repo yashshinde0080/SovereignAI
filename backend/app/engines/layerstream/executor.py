@@ -211,6 +211,7 @@ class LayerStreamEngine(BaseEngine):
             self.tokenizer = None
         if self.layer_executor:
             self.layer_executor.loader.clear_cache()
+            self.layer_executor.clear_device_cache()
             if self.layer_executor._is_hybrid:
                 self.layer_executor.cache.clear()
             else:

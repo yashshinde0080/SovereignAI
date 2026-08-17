@@ -315,3 +315,40 @@ Stage of the 6 modified + 2 new files the 08-15 entry flagged as uncommitted —
 - **Structure**: Project Overview · Architecture & Data Flow · Key Directories · Development Commands · Code Conventions & Common Patterns · Important Files · Runtime & Tooling Preferences · Non-Obvious Gotchas · Testing & QA · Key Dependencies · Package Managers.
 
 **Net effect**: the 08-15 work is committed and the agent-facing guidelines now match the actual repository state (tests real, proxy.py gone, debug scripts gone, TurboQuant parked, engine flow accurate).
+
+## [2026-08-17] docs | Research Results + Algorithms Reference + Wiki Frontmatter Fix
+One commit (`414c6f5` "17/8/2026", 16:00 IST), pushed to `origin/master` (0 ahead / 0 behind — verified via `git status`). Documentation-only day synthesizing the 08-09 → 08-15 research tranche into two paper-ready reference artifacts plus a small wiki frontmatter normalization.
+
+### Research results aggregation (`research-results.md`, new, 325 lines)
+- **Purpose**: single aggregate of all measured research, eval gates, and autoplan reviews performed 2026-08-09 through 2026-08-15. Every cell grounded in a cited `reviews/*.json` or `reviews/*.md` artifact — no fabricated values.
+- **Section 1 — LayerStream throughput**: Qwen3.5-0.8B CPU 0.40 tok/s, GPU+fla 0.38 tok/s (zero delta — kernels never engaged), peak RSS 2.30 GB, cost model $T = T_{\text{load}} + T_{\text{compute}}$ with measured values (864 loads, 9 ms avg, 77.83 s compute).
+- **Section 2 — TurboQuant eval gates (4 gates, all FAIL)**:
+  - Gate 1 (08-09) Qwen2-0.5B box+QJL: baseline ppl 7.86 → 1201–3434 (153×–437× worse), all miss needle.
+  - Gate 2 (08-10) Qwen2-0.5B affine: baseline 8.34 → 260–359 (31×–43× worse); asymmetric 4k6v best still 323.78.
+  - Gate 3 (08-10) Pythia-70m affine: baseline 39.17 → 555–582 (14× worse); cross-model bound confirms not a Qwen2-sharpness artifact.
+  - Gate 4 (08-10) tiny-Llama smoke: crash-smoke only (random model, ppl meaningless).
+  - Cross-gate summary table: 4 gates, threshold perplexity within 2% of baseline; all 4 FAIL on real models. Compression ~0.98× (target 6×). Default-OFF stays.
+- **Section 3 — whole-app perf**: 12-item ranking table with status (DONE/REJECTED/N/A), streaming hot-path cost model O(N)/tick → O(tail) after rAF+memo, SSE frame batching ~10×.
+- **Section 4 — TurboQuant autoplan consensus**: premises P1–P5 (P1 unverified, P5 default-on wrong), CEO/Eng/DX consensus tables, compression accounting (uint8 idx + int8 qjl + f32 scale = 2.03 B/coord vs FP16 2 B/coord → 0.98×), `update()` O(n²) root cause.
+- **Section 5 — whole-project autoplan**: premises, wedge matrix A/B/C (OpenAI-compat recommended), test coverage gaps (LayerStream executor + FullRAM + RAG + sandbox + frontend all zero), design litmus 7-dim scores (States 4/10, A11y 4/10).
+- **Section 6 — closeout**: 22-item done ledger (P1/P2/P3 tables), bug found by @slow test (rotary_emb meta-tensor crash), left-open decisions.
+- **Section 7 — honest status read**: LayerStream 0.40 tok/s unusable interactive; 70B-on-8GB unsupported by measurement; TurboQuant 4 gates FAIL; wedge = OpenAI-compat offline server.
+
+### Algorithms & formulas reference (`algorithms-and-formulas.md`, new, 210 lines)
+- **Purpose**: research-paper-ready reference of the three load-bearing algorithms with LaTeX formulas and `file:line` citations.
+- **Algorithm 1 — LayerStream layer-by-layer weight-swap** (`layer_executor.execute_forward:206-350`): data flow, token cost model, peak RSS accounting $W_{\text{resident}} \le \text{cache\_budget} + \sum_{\text{pinned}} W_p$, LRU byte-budget cache, prefetch depth 3.
+- **Algorithm 2 — TurboQuant compressed KV cache** (PolarQuant + QJL + Affine + bit-packing):
+  - PolarQuant `polarquant.py:6-15`: QR rotation $R_{\text{rot}} = QD$, normalize $\hat{x} = x / \|x\|$, rotate $\tilde{x} = \hat{x} R_{\text{rot}}^T$.
+  - Uniform codebook `codebook.py:17-20`: $c_j = -1 + 2j/(N-1)$, MSE $= \frac{1}{12}(2/(N-1))^2$ — NOT Beta Lloyd-Max (broken, replaced).
+  - QJL `qjl.py:21-68`: Rademacher projection $P \in \{-1, +1\}^{d'×d}$, encode $z = \text{sign}(rP^T)$, decode $\hat{r} = c \cdot zP$ with tuned scale $c = 1/32$ (NOT textbook $1/d'$ or $1/\sqrt{d'}$; ablation: 3.5-bit attn NMSE off 0.494 / shipped 0.463 / $c=1/32$ 0.275 / $c=1/16$ 0.574 cliff).
+  - Affine `affine.py:18-52` (KIVI-style): scale $s = \max|x|_{\text{axis}}$, half $h = (N-1)/2$, quantize $\text{idx} = \text{round}(x/s \cdot h + h)$ (round not truncate — 3× NMSE bias), exact inverse $\hat{x} = (\text{idx} - h)/h \cdot s$; K per-channel, V per-token.
+  - Incremental update `kv_cache.py:106-113`: O(chunk) work, chunk_size=64, history never re-quantized (fixes O(n²) shipped bug).
+  - Bit-packing `kv_cache.py:13-66`: $k = \lfloor 32/\log_2 N \rfloor$ codes per uint32 word; QJL 32 codes/word.
+- **Algorithm 3 — Top-K + Top-P nucleus sampling** (`sampler.py:1-36`): temperature scaling, Top-K mask, Top-P cumulative softmax with right-shift removal (keep first token), $\text{next} \sim \text{Categorical}(\text{softmax}(\text{logits}'))$. Clone-before-mutate invariant (`logits[:, -1, :].clone()`). Default $T=0.7, p=0.9, K=50$.
+- **Status table**: LayerStream shipping (1 @slow test), TurboQuant shipping (default OFF, 33 tests, 4 eval gates FAIL), Sampler shipping (exercised via @slow).
+
+### Wiki frontmatter normalization (commit `414c6f5`, `Info_docs/engines/Implemented Algorithms.md`)
+- Inline tag array `tags: [algorithm, reference, NLP, RAG, inference]` → block-list form to match the wiki schema in `CLAUDE.md` (other pages already use block form).
+- `Info_docs/BANK.base` (new, 10 lines): Obsidian Base view plugin config — table view ordering `file.name, tags, file.path, updated` with column sizing. IDE-local artifact committed alongside.
+
+**Net effect**: the 08-09 → 08-15 research + eval tranche now has two citable paper-ready reference artifacts in the repo root; wiki frontmatter uniform across pages. No functional/build/engine impact.

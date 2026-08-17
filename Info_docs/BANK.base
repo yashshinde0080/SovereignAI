@@ -1,0 +1,10 @@
+views:
+  - type: table
+    name: Table
+    order:
+      - file.name
+      - tags
+      - file.path
+      - updated
+    columnSize:
+      note.tags: 526

@@ -56,6 +56,38 @@ abandoned.
 Environment note: the backend venv now carries CUDA torch + triton-windows +
 fla (all venv-local; `requirements.txt` pins are unchanged).
 
+## Follow-up: device-cache fix, 2026-08-17
+
+Two bugs + one perf fix landed in `layer_executor.py`:
+
+1. **int4 crash (shape collapse)** — `offload_weights` replaces params with
+   `torch.empty(0)`, so on the 2nd pass `dequantize_on_device` reshaped to the
+   degenerate `(0,)` target and `embed`/layers became 1-D. Fixed by snapshotting
+   true param/buffer shapes from the meta model at init.
+2. **Bench splits had no tokenizer files** — `engine.load()` silently fell back
+   to a tokenizer that returned 0 tokens (crash deep in prefill). Copied the
+   Qwen2 tokenizer into the three `bench-Qwen-Qwen2-0.5B*` split dirs.
+3. **Per-token re-dequantization (the real ceiling)** — decode re-dequantized
+   the entire model on GPU every token: 259 ms of a 380 ms decode step (68%).
+   Added a bounded VRAM LRU cache of dequantized (compute-dtype) tensors
+   (budget = half of free VRAM; CPU boxes unchanged). After the first pass,
+   decode is pure forward pass.
+
+Measured on this box (GTX 1650, CUDA), `benchmark_layerstream.py`, 32 tokens:
+
+| Split | Before | After | Peak RAM |
+|---|---|---|---|
+| Qwen2-0.5B fp16 | 1.05 tok/s | **5.02 tok/s** | 1.89 GB |
+| Qwen2-0.5B int8 | 1.08 tok/s | **4.49 tok/s** | 1.65 GB |
+| Qwen2-0.5B int4 | 2.09 tok/s | **8.00 tok/s** | 1.73 GB |
+| Qwen3.5-0.8B hybrid | 0.13 tok/s | **0.48 tok/s** | 2.21 GB |
+
+RAM bounding is preserved (packed form stays in the CPU cache; only the
+compute-dtype form lives in VRAM, bounded by the budget). The 0.40 tok/s
+headline came from the Qwen3.5 hybrid: its 18 linear-attention layers still run
+pure-torch fallback kernels without `causal-conv1d` (unbuildable on Windows,
+see above) — that ceiling is kernel availability, not LayerStream I/O.
+
 ## Decision (from the 08-12 report)
 
 Re-position the pitch to what the hardware actually supports: **"3-8B Q4

@@ -1,11 +1,11 @@
 # SovereignAI Research Results — Aggregated Benchmark & Review Data
 
 > Aggregate of all measured research, eval gates, and autoplan reviews performed
-> 2026-08-09 through 2026-08-15. Numbers pulled verbatim from `reviews/*.json` and
+> 2026-08-09 through 2026-08-17. Numbers pulled verbatim from `reviews/*.json` and
 > `reviews/*.md`. No fabricated values — every cell below is grounded in a cited artifact.
 
 Sources:
-- `reviews/benchmark-2026-08-14.md` — LayerStream end-to-end throughput
+- `reviews/benchmark-2026-08-14.md` — LayerStream end-to-end throughput (incl. 08-17 device-cache fix)
 - `reviews/perf-research-2026-08-11.md` — whole-app perf audit
 - `reviews/eval_gate_2026-08-09.json` — TurboQuant box eval, Qwen2-0.5B
 - `reviews/eval_gate_affine_2026-08-10.json` — TurboQuant affine eval, Qwen2-0.5B
@@ -52,6 +52,29 @@ unbuildable on this box (0 Windows wheels on PyPI/GitHub, no nvcc/MSVC). All 18
 linear-attention layers ran pure-torch fallback on 4 GB Turing card ≈ CPU speed,
 plus per-token RAM→VRAM swap overhead. Needs Linux CUDA box or global CUDA Toolkit
 + VS Build Tools.
+
+### 1.3 Device-cache fix — 2026-08-17
+Per-token decode was re-dequantizing the entire model on GPU every token: profiled
+259 ms dequant/assign of a 380 ms decode step (68%) on Qwen2-0.5B int4. Added a
+bounded VRAM LRU of dequantized (compute-dtype) tensors (budget = half free VRAM;
+CPU boxes unchanged, budget 0). Also fixed an int4 shape-collapse crash
+(`offload_weights` shrinks params to `torch.empty(0)` → dequant reshape target
+became `(0,)` on the 2nd pass) and restored missing tokenizer files in the three
+`bench-Qwen-Qwen2-0.5B*` split dirs.
+
+Same box as 1.2 (GTX 1650, CUDA), `benchmark_layerstream.py`, 32 tokens:
+
+| Model / split | Before | After | Δ | Peak RAM |
+|---|---|---|---|---|
+| Qwen2-0.5B fp16 | 1.05 tok/s | **5.02 tok/s** | +4.8x | 1.89 GB |
+| Qwen2-0.5B int8 | 1.08 tok/s | **4.49 tok/s** | +4.2x | 1.65 GB |
+| Qwen2-0.5B int4 | 2.09 tok/s | **8.00 tok/s** | +3.8x | 1.73 GB |
+| Qwen3.5-0.8B hybrid | 0.13 tok/s | **0.48 tok/s** | +3.7x | 2.21 GB |
+
+RAM bounding preserved: packed form stays in the CPU cache, compute-dtype form in
+VRAM under the budget. The Qwen3.5 hybrid ceiling is still the missing
+`causal-conv1d` kernels (18 linear-attention layers on pure-torch fallback), not
+LayerStream I/O (disk = 2–9% of wall time throughout). 112 tests pass.
 
 ---
 
@@ -311,10 +334,14 @@ unload) exposed real bug: meta `rotary_emb` crash in `layer_executor.execute_for
 
 ## 7. Honest当前位置 — what the numbers say
 
-- **LayerStream usable today:** No. 0.40 tok/s CPU, 0.38 tok/s GPU (kernels unengaged).
-  Memory economics real (1.9 GB → 2.30 GB peak), but decode is wall.
+- **LayerStream usable today:** split by hardware. **CUDA + small model: yes** —
+  Qwen2-0.5B int4 at **8.0 tok/s** (2.09 before the 08-17 device-cache fix), fp16
+  5.0, int8 4.5; the 0.40 tok/s CPU number was a CPU-only box where the fix is
+  inactive (device cache is CUDA-only). **CPU-only: still compute-bound** — decode
+  is the wall, unchanged by this fix. **Hybrid Qwen3.5: 0.48 tok/s** — bounded by
+  missing `causal-conv1d` kernels, not I/O.
 - **70B-on-8GB claim:** unsupported by measurement. Re-positioned to **"3-8B Q4 on
-  8 GB RAM"** — true, useful, measurable.
+  8 GB RAM"** — true, useful, measurable (GPU throughput for that scale still unmeasured; the VRAM cache holds only a recency window when the model exceeds the budget).
 - **TurboQuant:** 4 eval gates FAIL on real models; perplexity 14x–437x worse;
   ~0.98x compression (target 6x). Default-OFF. Parked research.
 - **Whole-app perf:** streaming path fixed (rAF + memo + SSE batching); cold-start

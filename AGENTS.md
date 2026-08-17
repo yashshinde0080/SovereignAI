@@ -7,7 +7,7 @@
 SovereignAI Edge runs large language models fully offline on consumer hardware. Two inference engines back a unified FastAPI gateway:
 
 - **FullRAM** — fast path, loads the entire model into RAM/VRAM via `transformers.AutoModelForCausalLM`. `llama-cpp-python` / `ik-llama-cpp-python` are fallbacks only, for architectures transformers cannot load (e.g. BitNet IQ2_BN GGUF).
-- **LayerStream** — low-RAM path, swaps layer weights from disk per forward pass via raw PyTorch + safetensors. Enables 3–8B Q4 models on ~8GB RAM (the "70B on 8GB" claim was retracted in `reviews/benchmark-2026-08-14.md`, honest measured throughput 0.40 tok/s on Qwen2-0.5B).
+- **LayerStream** — low-RAM path, swaps layer weights from disk per forward pass via raw PyTorch + safetensors. Enables 3–8B Q4 models on ~8GB RAM (the "70B on 8GB" claim was retracted in `reviews/benchmark-2026-08-14.md`; after the 08-17 device-cache fix: 8.0 tok/s on Qwen2-0.5B int4, 0.48 tok/s on Qwen3.5-0.8B hybrid — the latter still bounded by missing `causal-conv1d` kernels).
 
 Three UIs: React Web (Next.js 16 + React 19), Electron 28 desktop wrapper, Python CLI (typer). All paths relative — no absolute paths anywhere, runs from USB.
 

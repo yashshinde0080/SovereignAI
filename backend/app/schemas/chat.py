@@ -1,4 +1,5 @@
 """Chat Schemas"""
+import time
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
@@ -38,6 +39,7 @@ class Usage(BaseModel):
 class ChatResponse(BaseModel):
     id: str
     object: str = "chat.completion"
+    created: int = Field(default_factory=lambda: int(time.time()))
     model: str
     choices: List[Dict[str, Any]]
     usage: Dict[str, int]
@@ -46,4 +48,5 @@ class ChatResponse(BaseModel):
 class StreamChunk(BaseModel):
     id: str
     object: str = "chat.completion.chunk"
+    created: int = Field(default_factory=lambda: int(time.time()))
     choices: List[Dict[str, Any]]

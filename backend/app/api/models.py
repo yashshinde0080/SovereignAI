@@ -1,5 +1,6 @@
 """Models API Endpoints"""
 import logging
+import time
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from typing import Optional
 
@@ -19,11 +20,22 @@ from app.schemas.models import (
 router = APIRouter()
 
 
-@router.get("/", response_model=ModelList)
+@router.get("/")
 async def list_models(request: Request):
-    """List installed models"""
+    """List installed models (OpenAI-compatible shape)."""
     models = await request.app.state.model_manager.list_models()
-    return ModelList(models=models)
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": m.get("name", m.get("id", "unknown")),
+                "object": "model",
+                "created": int(m.get("created_at", 0)) if m.get("created_at") else 0,
+                "owned_by": "local",
+            }
+            for m in models
+        ],
+    }
 
 
 @router.post("/recommend", response_model=list[RecommendResult])

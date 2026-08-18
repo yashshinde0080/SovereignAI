@@ -3,9 +3,10 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     if not app.state.active_engine:
         raise HTTPException(
             status_code=400,
-            detail="No model loaded. Use /v1/models/load first."
+            detail={"error": {"message": "No model loaded. Use /v1/models/load first.", "type": "invalid_request_error", "param": None, "code": None}}
         )
     
     # Build prompt from messages using tokenizer's template if possible
@@ -153,8 +154,8 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
         message["reasoning"] = reasoning
     
     return ChatResponse(
-        id=f"chat-{id(response)}",
-        model=app.state.active_model,
+        id=f"chatcmpl-{uuid.uuid4().hex[:24]}",
+        model=chat_request.model or app.state.active_model,
         choices=[{
             "index": 0,
             "message": message,
@@ -210,6 +211,9 @@ async def stream_response(
     rsent = 0  # chars of stripped reasoning already emitted
     chunk_no = 0
 
+    # Stable stream id — one per request, all chunks share it
+    stream_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+
     def _emit(content: str, reasoning: str = "", finish_reason: str = None) -> str:
         nonlocal chunk_no
         chunk_no += 1
@@ -217,7 +221,7 @@ async def stream_response(
         if reasoning and reasoning.strip():
             delta["reasoning"] = reasoning
         data = StreamChunk(
-            id=f"chunk-{chunk_no}",
+            id=stream_id,
             choices=[{"index": 0, "delta": delta, "finish_reason": finish_reason}]
         )
         return f"data: {json.dumps(data.model_dump())}\n\n"

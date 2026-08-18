@@ -5,8 +5,9 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from enum import IntEnum
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -142,6 +143,17 @@ app = FastAPI(
     description="Portable Offline AI Compute Platform",
     lifespan=lifespan
 )
+
+# OpenAI-compatible error shape: {"error": {"message": ..., "type": ..., "param": ..., "code": ...}}
+@app.exception_handler(HTTPException)
+async def _openai_error_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    if isinstance(detail, dict) and "error" in detail:
+        return JSONResponse(status_code=exc.status_code, content=detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"message": str(detail), "type": "invalid_request_error", "param": None, "code": None}}
+    )
 
 # Rate limiter setup
 app.state.limiter = limiter

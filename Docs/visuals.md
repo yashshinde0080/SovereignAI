@@ -80,7 +80,7 @@ A critical feature of the platform is its "Hardware Awareness." Before any infer
 ---
 
 ## 3. LayerStream Engine: Deep Dive
-The LayerStream engine enables running massive models (e.g., 70B) on low-memory hardware (e.g., 8GB RAM) by treating the SSD as virtualized layer memory.
+The LayerStream engine runs 3-8B Q4 models on 8GB RAM by treating the SSD as virtualized layer memory. Larger models (70B+) run but at sub-1 tok/s — see `reviews/benchmark-2026-08-14.md`.
 
 ```text
  PHYSICAL DISK (SSD)             SYSTEM RAM (Inference Loop)

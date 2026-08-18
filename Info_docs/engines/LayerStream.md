@@ -19,7 +19,7 @@ VRAM usage is limited to the size of a single layer (~1-2% of total model size).
 
 ## Key Points
 
-- Enables 70B+ models on 8GB RAM laptops
+- Runs 3-8B Q4 models on 8GB RAM (measured: 0.40 tok/s, 2.3GB peak RSS); larger models run but slowly
 - VRAM usage is size of single layer (~1-2% of model)
 - I/O-bound: throughput limited by PCIe/storage bandwidth
 - Custom two-phase computation pipeline (prefill + decode) bypasses Hugging Face `generate()`

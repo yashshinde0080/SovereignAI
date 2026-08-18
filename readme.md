@@ -114,6 +114,17 @@ ignore the extra key. Shapes are pinned by
 
 ---
 
+## ⚠️ Known Limitations
+
+| Area | Status |
+|------|--------|
+| **LayerStream speed** | Sub-1 tok/s on CPU (measured 0.40 tok/s on Qwen3.5-0.8B). GPU path blocked on Windows — no `causal-conv1d` wheel. |
+| **TurboQuant** | Parked. Default-off (`turboquant_enabled=false`). 4/4 eval gates failed on Qwen2-0.5B and Pythia-70m. See `reviews/eval_gate_*.json`. |
+| **FullRAM on low RAM** | Requires enough RAM to hold the entire model. No automatic fallback to LayerStream on OOM — use `mode=auto` in the load request. |
+| **Model formats** | Primary: safetensors via HuggingFace transformers. GGUF supported as fallback via llama-cpp-python. BitNet IQ2_BN requires ik-llama-cpp-python. |
+
+---
+
 <p align="center">
   Built with ❤️ for the Open Source AI Community.
 </p>

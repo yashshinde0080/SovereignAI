@@ -18,7 +18,7 @@
 
 ### 3.2. Dual Execution Engines
 - **FullRAM Engine:** For systems with high RAM/VRAM. Loads the entire model checkpoint into active memory for maximum tokens-per-second (t/s) speed.
-- **LayerStream Engine:** A proprietary fallback engine for extremely low-memory systems. Iteratively loads and unloads individual neural network layers from NVMe/SSD to RAM, enabling the execution of 70B+ parameter models on systems with as little as 8GB of RAM.
+- **LayerStream Engine:** A proprietary fallback engine for extremely low-memory systems. Iteratively loads and unloads individual neural network layers from NVMe/SSD to RAM, enabling 3-8B Q4 models on 8GB RAM (measured: 0.40 tok/s, 2.3GB peak RSS). Larger models run but slowly.
 
 ### 3.3. Cross-Platform & Portability
 - **USB-Bootable Execution:** Can run entirely from a portable Flash Drive or External SSD without leaving registry keys or configuration files on the host OS.

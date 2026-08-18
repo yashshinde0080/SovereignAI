@@ -11,7 +11,7 @@ The Info Dashboard serves as the entry point and navigation hub for the Sovereig
 
 Core documents include the [[PRD]] (product vision, target users, feature list) and [[TRD]] (tech stack, system requirements, portability layout). Architecture and engine coverage includes [[Technical Architecture]] (system layers and component interactions), [[Engines Overview]] (FullRAM vs LayerStream deep-dive with trade-offs), [[Engine Algorithms]] (pseudocode and formulas), and [[Implemented Algorithms]] (25 algorithms across NLP, RAG, memory, and frontend). Execution flow documentation covers session state machines, boot sequences, request handling flowcharts, end-to-end inference pipelines, and scheduler designs.
 
-The vault also provides a cross-reference map showing how PRD feeds into TRD which feeds into Technical Architecture, which in turn branches into Engines Overview, Pipelines, and Schedulers. Key concepts highlighted throughout the vault include FullRAM (max speed, 16GB+ needed), LayerStream (one layer at a time, runs 70B models on 8GB), dual-engine auto-selection via the hardware profiler, USB portability with relative paths, 100% offline operation with no telemetry, and a Python importlib-based plugin system.
+The vault also provides a cross-reference map showing how PRD feeds into TRD which feeds into Technical Architecture, which in turn branches into Engines Overview, Pipelines, and Schedulers. Key concepts highlighted throughout the vault include FullRAM (max speed, 16GB+ needed), LayerStream (one layer at a time, 3-8B Q4 on 8GB RAM, measured), dual-engine auto-selection via the hardware profiler, USB portability with relative paths, 100% offline operation with no telemetry, and a Python importlib-based plugin system.
 
 ## Key Points
 

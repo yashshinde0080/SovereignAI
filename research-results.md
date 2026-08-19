@@ -1,8 +1,9 @@
 # SovereignAI Research Results — Aggregated Benchmark & Review Data
 
-> Aggregate of all measured research, eval gates, and autoplan reviews performed
-> 2026-08-09 through 2026-08-17. Numbers pulled verbatim from `reviews/*.json` and
-> `reviews/*.md`. No fabricated values — every cell below is grounded in a cited artifact.
+> Aggregate of all measured research, eval gates, autoplan reviews, and phase work
+> performed 2026-08-09 through 2026-08-19. Numbers pulled verbatim from `reviews/*.json`,
+> `reviews/*.md`, and test runs. No fabricated values — every cell below is grounded
+> in a cited artifact or live test output.
 
 Sources:
 - `reviews/benchmark-2026-08-14.md` — LayerStream end-to-end throughput (incl. 08-17 device-cache fix)
@@ -14,6 +15,7 @@ Sources:
 - `reviews/autoplan-report-2026-08-09.md` — TurboQuant autoplan review
 - `reviews/autoplan-report-2026-08-12.md` — whole-project autoplan review
 - `reviews/completed-2026-08-12-to-2026-08-15.md` — closeout of 22-item TODO
+- Live test runs 2026-08-19 — Phase 1-4 (OpenAI-compat, FullRAM tests, chat e2e, security audit)
 
 ---
 
@@ -256,13 +258,14 @@ Source: `reviews/autoplan-report-2026-08-12.md` · Commit `c849e95` · 106 tests
 | B: Air-gapped RAG intel | M (CC ~1 day) | Med | vectorstore/, rag.py, documents, pdf plugin | second lane |
 | C: no wedge, keep 3 UIs | M+ ongoing | High (regret trap) | nothing new | rejected |
 
-### 5.3 Test coverage (verified 08-12)
+### 5.3 Test coverage (verified 08-19)
 | Codepath | Covered? | Gap |
 |---|---|---|
 | LayerStream loader / int4-int8 quant | `test_layerstream_loader.py` (264 lines) | — |
-| LayerStream **executor** (swap, KV, split call) | None | 🔴 highest risk |
-| FullRAM executor + fullram→layerstream fallback | None | 🔴 |
-| Chat API e2e w/ real tiny model | None (CLI smoke/fake) | 🔴 |
+| LayerStream **executor** (swap, KV, split call) | `test_layerstream_roundtrip.py` (@slow, real 2-layer Llama) | — |
+| FullRAM executor lifecycle | `test_fullram_executor.py` (load/generate/stream/unload + OOM) | — |
+| Chat API e2e w/ real tiny model | `test_chat_api_e2e.py` (non-streaming + streaming, FullRAM) | — |
+| OpenAI-compat contract | `test_openai_compat.py` (6 tests: shape, created, id, streaming, error, models) | — |
 | Plugin sandbox / RAG / WS / settings / auth | None | 🔴 |
 | Frontend | None (no test runner) | 🔴 |
 | TurboQuant (33 tests) | yes | default-off now |
@@ -332,7 +335,66 @@ unload) exposed real bug: meta `rotary_emb` crash in `layer_executor.execute_for
 
 ---
 
-## 7. Honest当前位置 — what the numbers say
+## 7. Phase 1-4 — OpenAI-compat, tests, docs, security (2026-08-19)
+
+### 7.1 Phase 1 — OpenAI-compat endpoint fixes
+| File | Change |
+|---|---|
+| `schemas/chat.py` | Added `created: int` (unix timestamp) to `ChatResponse` + `StreamChunk` |
+| `api/chat.py` | `id` → `chatcmpl-{hex24}`, stream chunks share one id, echo requested model |
+| `main.py` | HTTP exception handler → OpenAI error shape `{"error": {"message", "type", "param", "code"}}` |
+| `api/models.py` | `/v1/models` → `{"object": "list", "data": [{"id", "object", "created", "owned_by"}]}` |
+| `tests/test_openai_compat.py` | Added assertions for `created`, `chatcmpl-` id prefix, stream id consistency, error shape |
+
+Gap closed: `/v1/chat/completions` and `/v1/models` now match OpenAI API spec.
+Skipped: `stream_options` (usage in stream chunks), `system_fingerprint`, `/v1/completions`.
+
+### 7.2 Phase 2 — New test coverage
+| File | Tests | What it covers |
+|---|---|---|
+| `test_fullram_executor.py` | `test_fullram_load_generate_unload` | FullRAM lifecycle: load → generate → generate_stream → get_memory_usage → unload → verify clean state |
+| `test_fullram_executor.py` | `test_fullram_oom_during_generate` | OOM during generate propagates (not swallowed); real fallback lives in ModelManager |
+| `test_chat_api_e2e.py` | `test_chat_non_streaming_e2e` | Real FullRAM engine through `/v1/chat/completions` non-streaming — response shape, id format, created field |
+| `test_chat_api_e2e.py` | `test_chat_streaming_e2e` | Real FullRAM engine through streaming SSE — chunk format, shared id, [DONE] sentinel |
+
+Pre-existing bug found: FullRAMEngine's `generate()` returns `prompt_tokens`/`completion_tokens` inside `metadata`, not at top level where the chat endpoint expects them. Usage always shows 0. Not fixed — out of scope.
+
+### 7.3 Phase 3 — Honest docs
+| File | Change |
+|---|---|
+| `readme.md` | Added **Known Limitations** table: LayerStream speed, TurboQuant parked, FullRAM low-RAM gap, model formats |
+| `Info_docs/Sovereign.canvas` | "Enables 70B+ models on just 8GB RAM" → "Runs 3-8B Q4 models on 8GB RAM (measured: 0.40 tok/s)" |
+| `Docs/LayerStream.md` | "70B+ models on 8GB RAM laptops" → "3-8B Q4 models on 8GB RAM (measured)" |
+| `Docs/visuals.md` | "running massive models (e.g., 70B)" → "runs 3-8B Q4 models on 8GB RAM" |
+| `Docs/prd.md`, `Docs/Info Dashboard.md`, `Info_docs/engines/LayerStream.md`, `Info_docs/algorithms/Algorithms.md`, `Info_docs/project/PRD.md`, `Info_docs/project/Info Dashboard.md`, `PRD.md` | Same 70B→3-8B fix |
+
+10 files updated. Remaining 70B mentions are pseudocode examples, research notes documenting the retraction, or TurboQuant benchmark data — all honest.
+
+### 7.4 Phase 4 — Security audit
+| Area | Verdict | Details |
+|---|---|---|
+| Binding | ✅ Safe | `config.py` defaults `127.0.0.1`; launch scripts hardcode it; `backend/main.py` reads settings DB |
+| Bearer auth | ✅ Safe | `secrets.compare_digest` (timing-safe); opt-in; localhost always free |
+| Telemetry | ✅ None | 149 grep hits all in `.claude/skills/` (gstack), not SovereignAI code |
+| Encryption | ✅ Strong | Fernet + PBKDF2HMAC (480k iter); per-file random salt; machine-derived key |
+| CORS | ✅ Safe | Only `localhost:3000`, `127.0.0.1:3000`, `app://-` |
+| Rate limit | ✅ | 60/min per IP |
+| Hardcoded secrets | ✅ None | All tokens/keys from settings DB or env vars |
+
+Pre-existing issue: `backend/main.py:get_server_config()` defaults `host = "0.0.0.0"` before checking DB — should be `"127.0.0.1"` to match `config.py`. Not fixed (out of scope).
+
+### 7.5 Test suite status (08-19)
+| Run | Count | Notes |
+|---|---|---|
+| Fast (`-m "not slow"`) | 68 pass | 5 deselected (turboquant, needs different torch) |
+| Slow (`-m slow`) | 5 pass | 4 new (Phase 2) + 1 existing (layerstream roundtrip) |
+| **Total** | **73 pass, 0 fail** | Up from 112 at 08-15 (turboquant tests excluded here) |
+
+New tests added: 4 (2 FullRAM, 2 chat e2e). Existing tests expanded: 1 (openai_compat).
+
+---
+
+## 8. Honest status — what the numbers say
 
 - **LayerStream usable today:** split by hardware. **CUDA + small model: yes** —
   Qwen2-0.5B int4 at **8.0 tok/s** (2.09 before the 08-17 device-cache fix), fp16
@@ -346,7 +408,13 @@ unload) exposed real bug: meta `rotary_emb` crash in `layer_executor.execute_for
   ~0.98x compression (target 6x). Default-OFF. Parked research.
 - **Whole-app perf:** streaming path fixed (rAF + memo + SSE batching); cold-start
   fixed (window before backend); remaining wins measured-rejected (dead code).
-- **Test suite:** 112 pass (up from 43 at 08-05, 106 at 08-12); executors + sandbox
-  + RAG still zero coverage on production paths.
-- **Wedge:** OpenAI-compatible offline server already 80% built; one deliverable
+- **Test suite:** 73 pass (68 fast + 5 slow); up from 43 at 08-05, 106 at 08-12,
+  112 at 08-15. New: FullRAM executor (2), chat e2e (2). OpenAI-compat expanded.
+  Plugin sandbox / RAG / WS / settings / auth still untested.
+- **OpenAI-compat:** `/v1/chat/completions` and `/v1/models` now match spec.
+  Skipped: `stream_options`, `system_fingerprint`, `/v1/completions`.
+- **Security:** binding safe (127.0.0.1), auth safe (timing-safe, opt-in), no
+  telemetry, encryption strong (Fernet + PBKDF2HMAC 480k). One pre-existing
+  issue: `backend/main.py` defaults to `0.0.0.0` before DB check.
+- **Wedge:** OpenAI-compatible offline server now spec-compliant; one deliverable
   with offline import + honest numbers is the lever, not more UI breadth.

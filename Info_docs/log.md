@@ -351,9 +351,51 @@ Two commits (`414c6f5` "17/8/2026" 16:00 IST, `85f6a12` "17/8/2026" 22:02 IST), 
 - Inline tag array `tags: [algorithm, reference, NLP, RAG, inference]` → block-list form to match the wiki schema in `CLAUDE.md` (other pages already use block form).
 - `Info_docs/BANK.base` (new, 10 lines): Obsidian Base view plugin config — table view ordering `file.name, tags, file.path, updated` with column sizing. IDE-local artifact committed alongside.
 
+### LayerStream device-cache fix (commit `770d761`, 22:43 IST)
+Big engineering day on the LayerStream engine — landed a real decode-speed fix plus two crash fixes in `backend/app/engines/layerstream/layer_executor.py` (+141/−25) and a one-line cleanup in `executor.py`. Per the day's `reviews/benchmark-2026-08-14.md` follow-up and `research-results.md` §1.3:
+- **Per-token re-dequantization (the real ceiling)**: decode re-dequantized the entire model on GPU every single token — profiled at 259 ms of a 380 ms decode step (**68%**) on Qwen2-0.5B int4. Fixed by adding a **bounded VRAM LRU cache of dequantized (compute-dtype) tensors** (`_dev_cache`, budget = half of free VRAM at init; CPU boxes unchanged, budget 0 since the cache is CUDA-only). After the first pass, decode becomes a pure forward pass. `_dev_tensors_for()` returns a cache hit and skips the packed form entirely; `_store_dev()` evicts least-recently-used under budget.
+- **int4 shape-collapse crash**: `offload_weights` replaces params with `torch.empty(0)`, so on the 2nd pass `dequantize_on_device` reshaped to a degenerate `(0,)` target and embed/layers became 1-D. Fixed by snapshotting true param/buffer shapes from the meta model at init (`_param_shapes`, taken before any offload runs) — `dequantize_on_device` now reshapes against the real target.
+- **Missing tokenizer in bench splits**: the three `bench-Qwen-Qwen2-0.5B*` split dirs had no tokenizer files, so `engine.load()` silently fell back to one returning 0 tokens (crash deep in prefill). Copied the Qwen2 tokenizer into each.
+- `executor.py` now calls `self.layer_executor.clear_device_cache()` on unload alongside `loader.clear_cache()`.
+- **Measured (GTX 1650, CUDA, `benchmark_layerstream.py`, 32 tokens)**: Qwen2-0.5B fp16 **1.05 → 5.02 tok/s** (+4.8×), int8 **1.08 → 4.49** (+4.2×), int4 **2.09 → 8.00** (+3.8×); Qwen3.5-0.8B hybrid **0.13 → 0.48** (+3.7×, still kernel-bound by missing `causal-conv1d`). RAM bounding preserved (packed form in CPU cache, compute-dtype form in VRAM under budget).
+
+### Fix-It TODO + research/benchmark update (commit `c3d91d3`, 22:43 IST)
+- **`TODOS.md` rewrite** (+113/−9): replaced the stale 5-line TurboQuant-only list with a structured **5-phase "FIX-IT TODO"** for Claude Code — Phase 0 guardrails (read `reviews/*`, don't re-touch DONE/REJECTED perf items or TurboQuant beyond default-off), Phase 1 OpenAI-Compat Wedge, Phase 2 critical test gaps, Phase 3 honest docs, Phase 4 security P1, Phase 5 LayerStream perf (CUDA-only). Includes an explicit "DO NOT DO" no-list.
+- **`research-results.md`** (+37): added §1.3 "Device-cache fix — 2026-08-17" with the tok/s table above; updated §7 honest-status read — LayerStream is now "usable on CUDA + small model" (Qwen2-0.5B int4 8.0 tok/s) while CPU-only stays compute-bound and hybrid Qwen3.5 stays kernel-bound; reworded the 70B claim caveat and VRAM recency-window note.
+- **`reviews/benchmark-2026-08-14.md`** (+32): appended "Follow-up: device-cache fix, 2026-08-17" documenting the 3 fixes and the before/after tok/s table.
+- **`AGENTS.md`** (+1/−1): refreshed one line to reflect the device-cache fix reality.
+
 **Net effect**: the 08-09 → 08-15 research + eval tranche now has two citable paper-ready reference artifacts in the repo root; wiki frontmatter uniform across pages. No functional/build/engine impact.
 
 ### Log finalization (commit `85f6a12`, 22:02 IST)
 - Appended this `## [2026-08-17]` block to `Info_docs/log.md` (+38) — the self-referential log entry for the day's work; landed the research-results + algorithms references + frontmatter fix documented above.
 - **Cross-branch state**: `master` carries the 08-16 → 08-17 docs tranche (`414c6f5`, `d5461c1`, `991f5ca`, `85f6a12`) that `main` (`f112e4a`) has not merged — a `Merge branch 'master'` into `main` is pending to re-sync the default branch.
 - GitHub MCP cross-check was unavailable this session (`mcp__github_*` returned `Bad credentials`; REST API 404 on the private repo unauthed, `gh` CLI not installed). Remote verification fell back to `git ls-remote origin`, which is authoritative for ref state.
+
+## [2026-08-18] implement | OpenAI-Compat Wedge + Critical Test Coverage + Honest Docs
+Five commits (`2399eff` → `73c7945`, all "18/8/2026", 20:06–20:07 IST), one tranche advancing the Phase 1 "OpenAI-Compat Wedge" from `TODOS.md`. Local `master` and `origin/master` both tip at `73c7945` (verified against the GitHub MCP commit listing — SHAs/dates match exactly). GitHub remote confirms the same 5 SHAs at 14:36–14:37 UTC. This is the start of executing the 08-17 FIX-IT TODO phases: OpenAI-compat hardening, the two critical test gaps (FullRAM executor + chat API e2e), and honest-claims doc edits.
+
+### OpenAI-compatible API hardening (commit `34a0aac`, 20:07 IST)
+Brought the chat/models endpoints into OpenAI shape — directly addresses FIX-IT TODO Phase 1 items 2–4:
+- **`backend/app/api/chat.py`** (+14/−5): no-model error now returns the OpenAI error object `{"error": {"message": ..., "type": "invalid_request_error", "param": null, "code": null}}` instead of a bare string; chat completion id changed to `chatcmpl-<uuid>` (was `chat-<id>`); `model` falls back to `chat_request.model` when supplied; streaming chunks share one stable `stream_id = chatcmpl-<uuid>` across all chunks (was per-chunk `chunk-<n>` — broke SDK accumulation); imported `uuid` + `JSONResponse`.
+- **`backend/app/api/models.py`** (+18/−3): `GET /v1/models` now returns the OpenAI list shape `{object: "list", data: [{id, object: "model", created, owned_by: "local"}]}` instead of the internal `ModelList` — needed for SDK `client.models.list()`.
+- **`backend/app/main.py`** (+14/−1): added a global `HTTPException` handler returning the OpenAI error object; `ChatResponse`/`StreamChunk` schemas (`backend/app/schemas/chat.py`, +3) get `created: int = int(time.time())` so each response carries a real timestamp (OpenAI clients expect it).
+- **Net**: the server is now SDK-shaped for the three OpenAI-compatible paths (chat completions streaming + non-streaming, model listing). 507/OOM already mapped from the 08-14 P1 work; this closes the rest of the Phase 1 field-mismatch items.
+
+### Critical test coverage — Phase 2 part 1 (commit `6f51d2f`, 20:07 IST)
+Closed the two highest-risk zero-coverage paths flagged in the 08-12 autoplan Phase 3 eng review (the same gap class the 08-15 `@slow` round-trip test caught the rotary_emb crash in):
+- **`backend/tests/test_fullram_executor.py`** (new, 118 lines): real tiny model → load → generate → unload, asserts no leaked handles/memory and LayerStream fallback on simulated OOM.
+- **`backend/tests/test_chat_api_e2e.py`** (new, 178 lines): real tiny model through `/v1/chat/completions` end-to-end (unmocked), covering both FullRAM and LayerStream engine paths.
+- **`backend/tests/test_openai_compat.py`** (+28/−6): extended to cover non-stream + stream completion, model listing, invalid-model error, invalid-payload error — the Phase 1 item 5 coverage matrix.
+- Combined **+318/−6**. Suite still green (continues the 112+ baseline from 08-14/08-15).
+
+### Docs honesty — Phase 3 part 1 (commit `73c7945`, 20:07 IST)
+Replaced aspirational claims with measured ones, per FIX-IT TODO Phase 3 item 2:
+- **`PRD.md`** (+1/−1): LayerStream line now reads "enabling 3-8B Q4 models on 8GB RAM (measured: 0.40 tok/s, 2.3GB peak RSS). Larger models run but slowly." — kills the "70B+ on 8GB" claim.
+- **`readme.md`** (+11): new "⚠️ Known Limitations" table covering LayerStream CPU speed (0.40 tok/s; GPU blocked on Windows by missing `causal-conv1d` wheel), TurboQuant parked/default-off with 4/4 gates failed, FullRAM no auto-OOM-fallback (use `mode=auto`), and model-format support (safetensors/HF primary, GGUF + BitNet IQ2_BN fallback).
+
+### Wiki / source frontmatter touch-ups (commits `2399eff`, `71c5c28`, 20:06–20:07 IST)
+- **`2399eff`**: 4 source files under `Docs/` (+4/−4) — frontmatter/timestamp normalization.
+- **`71c5c28`**: 5 `Info_docs/` wiki pages (`Sovereign.canvas`, `algorithms/Algorithms.md`, `engines/LayerStream.md`, `project/Info Dashboard.md`, `project/PRD.md`) (+5/−5) — propagated the same frontmatter/date normalization into the wiki layer. (These are cosmetic — no content change to the substance logged above.)
+
+**Status / cross-branch**: `master` tip `73c7945` is 9 commits ahead of `main` (`f112e4a`) — the 08-16 → 08-18 tranche (docs finalization + device-cache fix + OpenAI-compat wedge + tests + honest docs) is pending a `Merge branch 'master'` into `main` to re-sync the default branch. Working tree clean; GitHub MCP commit listing cross-checked and matches local `git log` for every Aug 17–18 SHA.

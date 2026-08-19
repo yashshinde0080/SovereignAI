@@ -1,6 +1,7 @@
 """Models API Endpoints"""
 import logging
 import time
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
 from typing import Optional
 
@@ -17,6 +18,18 @@ from app.schemas.models import (
 )
 
 
+def _to_epoch(created_at) -> int:
+    """Convert created_at (int, float, ISO string, or None) to Unix epoch seconds."""
+    if created_at is None:
+        return 0
+    if isinstance(created_at, (int, float)):
+        return int(created_at)
+    try:
+        return int(datetime.fromisoformat(str(created_at)).replace(tzinfo=timezone.utc).timestamp())
+    except (ValueError, TypeError, OverflowError):
+        return 0
+
+
 router = APIRouter()
 
 
@@ -26,11 +39,12 @@ async def list_models(request: Request):
     models = await request.app.state.model_manager.list_models()
     return {
         "object": "list",
+        "models": models,
         "data": [
             {
                 "id": m.get("name", m.get("id", "unknown")),
                 "object": "model",
-                "created": int(m.get("created_at", 0)) if m.get("created_at") else 0,
+                "created": _to_epoch(m.get("created_at")),
                 "owned_by": "local",
             }
             for m in models

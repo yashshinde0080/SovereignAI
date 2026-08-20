@@ -399,3 +399,15 @@ Replaced aspirational claims with measured ones, per FIX-IT TODO Phase 3 item 2:
 - **`71c5c28`**: 5 `Info_docs/` wiki pages (`Sovereign.canvas`, `algorithms/Algorithms.md`, `engines/LayerStream.md`, `project/Info Dashboard.md`, `project/PRD.md`) (+5/−5) — propagated the same frontmatter/date normalization into the wiki layer. (These are cosmetic — no content change to the substance logged above.)
 
 **Status / cross-branch**: `master` tip `73c7945` is 9 commits ahead of `main` (`f112e4a`) — the 08-16 → 08-18 tranche (docs finalization + device-cache fix + OpenAI-compat wedge + tests + honest docs) is pending a `Merge branch 'master'` into `main` to re-sync the default branch. Working tree clean; GitHub MCP commit listing cross-checked and matches local `git log` for every Aug 17–18 SHA.
+
+## [2026-08-19] docs / git | Log update + git/github commits (caveman mode)
+- **Info_docs/log.md**: appended this block (today's entry). No prior 08-19 entry existed.
+- **Git commits today** (`master` branch, 4 commits ahead of `origin/main`):
+  - `873074b` (19/8/2026): `backend/app/core/task_router.py` (+3 lines) — task router update.
+  - `d8f9d5e`: `AGENTS.md` (+19), `TODOS.md` (+513/-9), `research-results.md` (+90/-8), `sys_arc_mermaid.txt` (new, +108) — docs/research updates.
+  - `03eed5c`: deleted 11 review files (`reviews/*`, 1682 lines removed) — cleanup.
+  - `f19c0c1`: added new `engine/` package (+3976 lines, 29 new files) — engine module.
+- **GitHub / remote state**: `origin` = `https://github.com/yashshinde0080/SovereignAI.git`. `gh` CLI not installed; GitHub MCP (`mcp__github_*`) returned bad credentials / 404 (private repo unauthenticated). **No push or PR created.** Remote verification via `git ls-remote origin` only.
+- **Branch**: `master` (current working branch); `main` (`f112e4a`) 9 commits behind. Pending `Merge branch 'master'` into `main`.
+- **Working tree**: clean (`git status --short` empty).
+- **Note**: user invoked caveman mode (`/caveman full`). Log entry kept terse per skill rules; technical terms/code/commit SHAs preserved verbatim.

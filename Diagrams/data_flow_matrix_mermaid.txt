@@ -1,0 +1,16 @@
+```mermaid
+flowchart LR
+    subgraph MatrixRows["Data Flow Matrix — Component → Input → Transformation → Output"]
+        direction TB
+        R1["UI (React/Electron/CLI) — messages[] / settings / file uploads"] --> T1["HTTP/WebSocket / CLI argv → JSON"] --> O1["ChatRequest / SettingsPayload / PluginAction"]
+        O1 --> R2["FastAPI Gateway (router.py / chat.py) — Request + auth token"] --> T2["lifespan init; stream_response(); _split_think; apply_chat_template"] --> O2["SSE frames (data: {...}) / JSON response / error HTTPException"]
+        O2 --> R3["ModelManager (services/model_manager.py) — display name / path / mode"] --> T3["_load_model_locked() → fuzzy_match + split: prefix + disk-full check + mode mismatch"] --> O3["loaded engine (FullRAMEngine / LayerStreamEngine) + active_model + active_mode"]
+        O3 --> R4["TaskResolver (core/task_resolver.py) — model_path string"] --> T4["AutoConfig.from_pretrained() → architectures / model_type / vision_config"] --> O4["{is_generative, task_type, modality, input_modality}"]
+        O4 --> R5["MemoryManager (core/memory_manager.py) — model_size_bytes + metadata"] --> T5["llmfit.score_model_fit() OR threshold: CUDA VRAM 1.1x / RAM 1.1x / 0.1x"] --> O5["mode recommendation: fullram / layerstream / insufficient"]
+        O5 --> R6["EngineFactory (core/engine_factory.py) — mode + quant_method"] --> T6["FullRAMEngine (transformers) OR LayerStreamEngine (layer-by-layer) + quant: none/int8/int4/gguf"] --> O6["BaseEngine instance — load()/generate()/generate_stream()/get_memory_usage()"]
+        O6 --> R7["LayerStream internals (loader / executor / sampler / kv_cache) — weights_dir + device + prefetch_depth"] --> T7["WeightSplitter.load → ThreadPoolExecutor.prefetch → LayerExecutor.execute_forward → Sampler.sample → KVCache update → _stream_delta"] --> O7["token_ids (decode) / logits (prefill) + emitted_text + KV_state"]
+        O7 --> R8["Post-process (chat.py) — generated text + reasoning split"] --> T8["_split_think() → (content, reasoning); _trim_tag_prefix() → clean suffix; SSE batching (~96 chars)"] --> O8["UI-rendered stream: content token + optional reasoning tag"]
+    end
+```
+
+`ponytail:` this is item 9 (`Data flow matrix`) — maps every component pair (UI → Gateway → ModelManager → TaskResolver → MemoryManager → EngineFactory → Engine → LayerStream internals → Post-process) with exact input/transformation/output strings. Reused `stream_response()`, `_split_think()`, `_trim_tag_prefix()`, `fuzzy_match()`, `AutoConfig.from_pretrained()`, `score_model_fit()`, `execute_forward()`, `Sampler.sample()`, `_stream_delta()` — all named in `sys_arc_mermaid.txt` or source (`chat.py`, `task_resolver.py`, `memory_manager.py`, `engine_factory.py`, `layer_executor.py`, `loader.py`). Created `data_flow_matrix_mermaid.txt` in root (`D:\SovereignAI`). No new abstractions; pure mapping of `Visuals.md` line 19 (`Data flow matrix maps components to their input, transformation, and output types`). Skipped: security encryption details (`ModelEncryption` / Fernet) and plugin sandbox isolation — add when user asks. Check: matrix covers 9 stages (UI/Gateway/ModelManager/TaskResolver/Memory/Factory/Engine/LayerStream internals/Post-process) matching the architecture in AGENTS.md; output types match actual return values (`SSE frames`, `token_ids`, `content/reasoning` split).

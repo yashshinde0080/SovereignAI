@@ -1,0 +1,27 @@
+```mermaid
+flowchart TD
+    subgraph SystemSummary["11. System Design Summary — 5 layers, 2 engines, 3 UIs, relative paths"]
+        direction TB
+        L_UI["UI Layer: React (Next.js 16) / Electron 28 / CLI (typer)"]
+        L_GW["Gateway Layer: FastAPI + 8 subrouters (/v1/*) + lifespan init + opt-in Bearer"]
+        L_ENG["Engine Layer: BaseEngine ABC → FullRAM (transformers) + LayerStream (layer-by-layer) + GGUF fallback"]
+        L_DATA["Data Layer: 2 SQLite WAL DBs + FAISS RAG + workspace/runtime storage (all relative, USB)"]
+        L_INFRA["Infra Layer: uv (py) / npm (js) + electron-builder (win/mac/linux) + pytest (asyncio_mode=auto, 1 @slow marker)"]
+
+        L_UI --> L_GW
+        L_GW --> L_ENG
+        L_ENG --> L_DATA
+        L_DATA --> L_INFRA
+
+        subgraph KeyConstraints["Key constraints — ponytail simplifications documented"]
+            C1["All paths relative (no absolute paths) — workspace/ root"]
+            C2["No Docker / no compose — 100% local/offline"]
+            C3["TurboQuant default OFF — eval gate FAILS (uniform centroids, not Beta Lloyd-Max)"]
+            C4["PluginSandbox timeout-only — no FS/network isolation on Windows (documented gap)"]
+            C5["Launch scripts bypass backend/main.py settings (hardcode 127.0.0.1:8000)"]
+            C6["Stale spots: Info_docs/Vite.md; root readme.md FS layout; proxy.py deleted (only .pyc remains); config/storage.toml missing"]
+        end
+    end
+```
+
+`ponytail:` item 11 (`System Design Summary`) — single 5-layer summary diagram combining UI/Gateway/Engine/Data/Infra with the 6 key constraints from AGENTS.md (`all relative`, `no Docker`, `turboquant OFF`, `plugin sandbox gap`, `launch scripts bypass settings`, `stale spots`). No new code or abstractions; pure consolidation of the 10 previous diagrams. Created `system_summary_mermaid.txt` in root (`D:\SovereignAI`). Reused layer names (`BaseEngine`, `FullRAM`, `LayerStream`, `FAISS`, `workspace/`) from `sys_arc_mermaid.txt`. Check: all 6 constraints verified against source — `turboquant_enabled=False` in `app/config.py`; plugin sandbox docstring in `tests/test_plugin_sandbox.py`; `launch.sh` line 73 hardcodes host/port; stale spots listed in AGENTS.md `Stale spots` section and `NotInRepo` subgraph of `sys_arc_mermaid.txt`.

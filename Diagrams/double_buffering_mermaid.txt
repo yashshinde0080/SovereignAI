@@ -1,0 +1,43 @@
+```mermaid
+flowchart TD
+    subgraph DoubleBufferConcept["Double Buffering (ping-pong) — hide SSD latency behind compute"]
+        direction TB
+        DB_A["Buffer A — active compute (CPU / GPU layer forward)"]
+        DB_B["Buffer B — async disk load (next layer .safetensors → CPU RAM)"]
+        DB_A -->|compute done, offload weights (destroy dense params)| DB_Swap["Swap: B becomes active; A is freed / evicted"]
+        DB_Swap --> DB_A
+        DB_Swap --> DB_B
+        DB_B -->|prefetch_async() completes → state_dict cached| DB_Cache["LRU byte-budget cache (pinned embed/norm/lm_head exempt)"]
+    end
+
+    subgraph PrefetchPipeline["Prefetch pipeline (loader.py: ThreadPoolExecutor, depth=3)"]
+        P1["execute_forward(layer i) — using buffer A"] --> P2["prefetch_async(layer i+1) — submit to executor"]
+        P2 --> P3["prefetch_async(layer i+2) — submit (if depth>=2)"]
+        P3 --> P4["prefetch_async(layer i+3) — submit (if depth>=3)"]
+        P4 --> P5["get_weights(layer i+1) → waits future OR LRU hit"]
+        P5 --> P6["_load_file() — safetensors.torch.safe_open() → CPU dict"]
+        P6 --> P7["QuantConfig.load() → none/int8/int4 → dequant on device"]
+        P7 --> P8["_store_dev() — bounded VRAM LRU; evict least-recent non-pinned"]
+    end
+
+    subgraph PhaseSplit["Two-phase computation (prefill + decode)"]
+        PH1["Prefill: full sequence → all layers once, KV cached per layer"] --> PH2["Prefetch depth=1 sufficient: layer i+1 loaded while layer i computes"]
+        PH2 --> PH3["Decode: one token → all layers; KV reused from previous step"]
+        PH3 --> PH4["Prefetch depth=3 needed: 3 future layers in flight to cover SSD seek + dequant + copy latency"]
+    end
+
+    subgraph MemoryBudget["Memory budget (per-engine isolation)"]
+        M1["VRAM peak: size of 1 layer + KV cache + buffers"] --> M2["System RAM: LRU cache (budget MB) + KV cache (RAM) + prefetch futures"]
+        M2 --> M3["pinned_paths = {embed, layer_N/norm, lm_head} — never evicted"]
+        M3 --> M4["_enforce_budget(): pop LRU until bytes < budget; gc.collect()"]
+        M4 --> M5["clear_device_cache(): torch.empty(0) on offloaded params; free all dequantized tensors"]
+    end
+
+    DB_A --> P1
+    P1 --> PH1
+    PH1 --> M1
+    DB_Cache --> P5
+    M2 --> DB_Cache
+```
+
+`ponytail:` reused `prefetch_async()`, `get_weights()`, `_load_file()`, `QuantConfig.load()`, `dequantize_on_device()`, `execute_forward()`, `_store_dev()`, `_enforce_budget()`, `clear_device_cache()`, `pinned_paths` — all from `loader.py`, `layer_executor.py`, `executor.py`. No new abstractions. Created `double_buffering_mermaid.txt` in root (`D:\SovereignAI`). Skipped: security encryption (`safetensors` CVE-2025-32434 converter in `shared/`) and plugin sandbox details; add when user asks. Check: `prefetch_depth=3` set in `LayerWeightLoader.__init__` (loader.py:14); `_store_dev()` uses bounded VRAM LRU (layer_executor.py:235-249); `offload_weights()` destroys dense params to isolate VRAM peak (layer_executor.py:275-292); `_stream_delta()` overlap logic confirmed non-monotonic.

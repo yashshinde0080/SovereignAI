@@ -1,0 +1,40 @@
+```mermaid
+flowchart TD
+    subgraph ArchView["14. Architectural 'CSS-like' System View — layers as selectors, variables as tokens"]
+        direction TB
+
+        subgraph RootVars["Root tokens (CSS variables — oklch) — like @theme inline"]
+            V1["--brand: #3C3489"]
+            V2["--brand-accent: #1D9E75"]
+            V3["--background / --foreground (light + dark mode)"]
+            V4["--radius: 0.625rem → radius-sm/md/lg/xl/2xl/3xl/4xl"]
+        end
+
+        subgraph LayerSelectors["Layer selectors (like class selectors) — system components"]
+            S_UI["UI layer (React/Electron/CLI) — .client"]
+            S_GW["Gateway layer (FastAPI /v1/*) — .gateway"]
+            S_ENG["Engine layer (BaseEngine ABC) — .engine"]
+            S_DATA["Data layer (2 SQLite WAL + FAISS + workspace/) — .database"]
+            S_INFRA["Infra layer (uv/npm/electron-builder) — .build"]
+        end
+
+        subgraph StateRules["State rules (like dark mode) — conditional overrides"]
+            R1[".dark → dark theme: background=0.145, foreground=0.985"]
+            R2[".auto → auto engine selection: llmfit score + threshold fallback"]
+            R3[".offline → all paths relative; no cloud; workspace/ runtime"]
+        end
+
+        subgraph ComponentStyles["Component 'styles' (like shadcn/ui buttons/cards) — reusable blocks"]
+            C1["BaseEngine ABC — abstract base (load/unload/generate/generate_stream/get_memory)"]
+            C2["FullRAMEngine — concrete (AutoModelForCausalLM + TextIteratorStreamer)"]
+            C3["LayerStreamEngine — concrete (layer-by-layer + prefetch + LRU + dequant)"]
+            C4["ModeSwitcher — dropdown (fullram / layerstream / auto) + switch endpoint"]
+        end
+
+        RootVars --> LayerSelectors
+        LayerSelectors --> StateRules
+        StateRules --> ComponentStyles
+    end
+```
+
+`ponytail:` item 14 (`Architectural CSS-like view`) — maps the Tailwind v4 `@theme inline` CSS-variable architecture (`globals.css` lines 8-52) onto the system architecture: CSS variables (`--brand`, `--brand-accent`, `--background`, `--radius`) become token equivalents; class selectors (`.client`, `.gateway`, `.engine`, `.database`, `.build`) represent layers; `.dark` mode becomes conditional system state (`offline`, `auto`, `layerstream`). Created `architectural_css_view_mermaid.txt` in root. Reused `--brand: #3C3489`, `--brand-accent: #1D9E75`, `.dark`, `@theme inline`, `radius-sm/md/lg/xl/2xl/3xl/4xl` — all from `frontend/app/globals.css` lines 8-52 and `frontend/components.json` (`new-york` style, `lucide` icons, `cssVariables=true`). No new abstractions. Skipped: actual component-level CSS rules (each component has its own Tailwind class string — not needed for architecture view) and responsive breakpoint rules (`sm`/`md`/`lg`/`xl` breakpoints from Tailwind v4 defaults) — add if user wants responsive layer breakdown. Check: `globals.css` `@theme inline` defines 52 CSS variables; `--brand` and `--brand-accent` set at line 74-75; `.dark` variant at line 6 (`@custom-variant dark`) and line 92-127; `radius-*` derived from `--radius` at lines 45-52; `ModeSwitcher` dropdown items (`fullram`/`layerstream`/`auto`) match engine selection modes from `sys_arc_mermaid.txt` EngineSelection subgraph.

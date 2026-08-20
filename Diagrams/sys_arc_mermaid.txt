@@ -1,0 +1,108 @@
+```mermaid
+
+    subgraph UI["Client UIs — 3 paths"]
+        React["React Web (Next.js 16 / React 19 / RSC)"]
+        ElectronUI["Electron 28 (main.js / preload.js / tray)"]
+        CLI["Python CLI (typer / rich)"]
+    end
+
+    subgraph Gateway["FastAPI Gateway (backend/app/main.py)"]
+        Router["/v1/* router (8 subrouters)"]
+        Lifespan["lifespan() — init DB, vector, hw, model, settings, plugins"]
+        Auth["lan_auth_middleware — opt-in Bearer (secrets.compare_digest)"]
+        WS["/ws/metrics — 1s broadcast"]
+    end
+
+    subgraph EngineSelection["ModelManager + Engine Factory (core/)"]
+        MM["ModelManager.load_model()"]
+        EF["EngineFactory.create_engine()"]
+        TR["TaskResolver.resolve() — AutoConfig introspection"]
+        MemM["MemoryManager.suggest_mode() — llmfit score + thresholds"]
+    end
+
+    subgraph Engines["Engines (base ABC: load/unload/generate/generate_stream/get_memory)"]
+        FullRAM["FullRAMEngine (transformers.AutoModelForCausalLM)"]
+        LayerStream["LayerStreamEngine (raw PyTorch layer-by-layer)"]
+        GGUF["GGUF fallback — llama-cpp-python / ik-llama-cpp-python"]
+    end
+
+    subgraph LayerStreamInternal["LayerStream internals"]
+        Splitter["WeightSplitter — split .bin → .safetensors + quant_config.json"]
+        Loader["LayerWeightLoader — ThreadPoolExecutor(prefetch=3) + LRU byte-budget"]
+        Executor["LayerExecutor — prefill→decode, int8/int4 dequant, cached mask, RoPE"]
+        Sampler["Sampler — Top-K + Top-P + multinomial (non-destructive)"]
+        Cache["KVCache: StateCache (hybrid) / KVCacheManager + HFProxyCache (std)"]
+        Quant["Quant: none/int8/int4 — int4=uniform centroids (eval FAILS); turboquant=OFF"]
+    end
+
+    subgraph Backends["Backend services"]
+        DB["Database — 2 SQLite WAL (sovereign.db + sovereign_settings.db) — aiosqlite"]
+        SettingsSvc["SettingsService — per-section CRUD, bcrypt pw, system prompt"]
+        VectorStore["FAISS RAG — embedder / retriever / chunker"]
+        Plugins["Plugins — importlib dynamic, PluginSandbox (timeout-only, no FS isolation Win)"]
+        Security["Security — Fernet+PBKDF2HMAC encryption, ModelEncryption"]
+        HW["HardwareDetector — CPU/RAM/GPU/disk + llmfit"]
+    end
+
+    subgraph Workspace["Runtime workspace (all relative, USB-portable)"]
+        W1["workspace/models/ — GGUF, HF cache, installed/"]
+        W2["workspace/database/ — sovereign.db + sovereign_settings.db"]
+        W3["workspace/offload_cache/ — per-layer .safetensors chunks"]
+        W4["workspace/sessions/ — chat snapshots"]
+        W5["workspace/vectors/ + workspace/vector_index/ — FAISS index"]
+        W6["workspace/plugins/ — user Python scripts"]
+        W7["workspace/logs/ — server_cli.log"]
+    end
+
+    UI --> Router
+    Router --> Lifespan
+    Lifespan --> DB
+    Lifespan --> VectorStore
+    Lifespan --> HW
+    Lifespan --> MM
+    Auth --> Router
+
+    Router --> ChatEndpoint["/v1/chat/completions — system prompt + RAG + apply_chat_template + SSE stream (~96 chars/frame) + _split_think"]
+    ChatEndpoint --> MM
+    MM --> EF --> TR --> MemM --> FullRAM
+    MM --> EF --> TR --> MemM --> LayerStream
+
+    FullRAM --> EngineGenerate["engine.generate() / generate_stream()"]
+    LayerStream --> LayerStream --> Loader --> Executor --> Sampler --> EngineGenerate
+    LayerStream --> Splitter
+    LayerStream --> Cache
+    Loader --> Quant
+
+    Plugins --> PluginMgr["PluginManager (importlib)"]
+    SettingsSvc --> SettingsDB["SettingsDatabase"]
+    DB --> ModelRegistry["ModelRegistry"]
+
+    Workspace --> DB
+    Workspace --> W3 --> Loader
+    Workspace --> W5 --> VectorStore
+    Workspace --> W6 --> PluginMgr
+
+    subgraph ElectronBundle["Electron bundle (electron-builder)"]
+        EBundle["bundles ../backend + ../frontend/out as extraResources"]
+        EApp["app:// protocol → frontend/out"]
+    end
+
+    subgraph Landing["Landing page — separate Next.js 14 + React 18 + Tailwind v3"]
+        LandingNote["Independent package.json; NOT the main frontend"]
+    end
+
+    subgraph Packages["Package managers & tools"]
+        PBack["Backend: uv (canonical) / pip fallback — uv.lock"]
+        PFront["Frontend: npm — package-lock.json"]
+        PElec["Electron: npm — package-lock.json"]
+        PTest["pytest ≥8.0 (runtime dep) — asyncio_mode=auto; 1 marker: @slow; no conftest.py; fixtures inline"]
+    end
+
+    subgraph NotInRepo["Does NOT exist"]
+        Missing1["proxy.py — deleted; only __pycache__/proxy.cpython-314.pyc remains"]
+        Missing2["config/storage.toml — referenced but missing; falls back to Settings defaults"]
+        StaleDoc["Info_docs/tech-stack/Vite.md stale; root readme.md FS layout stale (models/ is workspace/models/)"]
+    end
+```
+
+Skipped: extra sub-diagrams (layer-level, security-level, plugin-level). Add when full component-level detail needed. `ponytail:` one diagram covers architecture; no separate docs needed until user asks.

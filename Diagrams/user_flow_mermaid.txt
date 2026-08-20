@@ -1,0 +1,15 @@
+```mermaid
+flowchart TD
+    subgraph UserFlow["10. User Flow — entry → chat → mode switch → output"]
+        direction TB
+        U1["User opens app (Electron / web / CLI: sovereign) — no login required (opt-in Bearer only when bind_localhost_only=false + api_token set)"] --> U2["Frontend loads: Zustand v5 store initializes (systemStatus, messages, settings)"]
+        U2 --> U3["User types message → React state updates; ModeSwitcher shows current mode (fullram / layerstream / auto)"]
+        U3 --> U4["POST /v1/chat/completions → ChatRequest (messages, system_prompt from SettingsService, RAG context from vector_store.build_context)"]
+        U4 --> U5["Response stream: SSE frames (~96 chars) → _split_think separates reasoning; content rendered token-by-token"]
+        U5 --> U6["User can switch mode via ModeSwitcher dropdown → POST /v1/chat/mode/switch?mode= → reloads engine"]
+        U6 --> U7["CLIs: chat (interactive REPL), run (one-shot generate), serve (start server), pull/import (models), benchmark, list, system"]
+        U7 --> U8["All paths relative; workspace/ created on first run; no absolute paths; USB-portable"]
+    end
+```
+
+`ponytail:` item 10 (`User Flow`) — minimal mapping of entry paths (Electron/web/CLI) through Zustand initialization, chat POST, SSE stream with `_split_think`, mode switch (`ModeSwitcher.tsx` lines 23-53), CLI commands (`cli/main.py`). Reused `Zustand`, `ModeSwitcher`, `systemStatus`, `stream_response`, `_split_think`, `sovereign`, `workspace/`, `bind_localhost_only`, `api_token` — all from code / AGENTS.md. Created `user_flow_mermaid.txt` in root (`D:\SovereignAI`). No new abstractions; pure flow trace. Skipped: plugin execution details (`PluginSandbox` timeout-only gap on Windows) and security encryption (`Fernet` + `PBKDF2HMAC` machine-key derivation) — covered by `sys_arc_mermaid.txt` security subgraph and `AGENTS.md`. Check: `ModeSwitcher` dropdown choices (`fullram`/`layerstream`/`auto`) verified at `frontend/components/chat/ModeSwitcher.tsx`:17-22; mode switch API endpoint `router.post("/mode/switch")` in `backend/app/api/chat.py`:389-404; CLI commands listed in `AGENTS.md` (`sovereign` console script via typer: `chat`, `run`, `serve`, `pull`, `import`, `benchmark`, `list`, `system`); `bind_localhost_only` and `api_token` auth conditions in `backend/app/security/middleware.py` (`lan_auth_middleware` opt-in Bearer via `secrets.compare_digest`).

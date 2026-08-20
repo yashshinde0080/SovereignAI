@@ -1,0 +1,34 @@
+```mermaid
+flowchart TD
+    subgraph SourceTree["Source tree (D:\SovereignAI) — all relative paths, USB-portable"]
+        S1["backend/ — Python 3.10+, uv (canonical) / pip fallback"] --> S2["frontend/ — Next.js 16 + React 19, static export (out/)"]
+        S2 --> S3["electron/ — Electron 28, bundles backend + frontend/out"]
+        S3 --> S4["landing_page/ — separate Next.js 14 + React 18 + Tailwind v3"]
+        S1 --> S5["workspace/ — runtime data root (models/, database/, offload_cache/, sessions/, vectors/, plugins/, logs/)"]
+    end
+
+    subgraph LaunchPaths["Launch paths — 4 entry points"]
+        LP1["launch.bat / launch.sh — hardcode --host 127.0.0.1 --port 8000 (bypass backend/main.py settings DB)"]
+        LP2["python main.py (from backend/) — reads sovereign_settings.db (security.api_port, bind_localhost_only)"]
+        LP3["npm start (electron/) — USE_DEV_SERVER=true → localhost:3000; else app:// protocol serving frontend/out"]
+        LP4["sovereign / sovereign.bat CLI — typer + rich — run/chat/serve/pull/import/benchmark/list/system"]
+    end
+
+    subgraph ElectronBundle["Electron build (electron-builder) — 3 targets"]
+        EB1["extraResources: ../backend → backend/ (filter excludes __pycache__)"] --> EB2["extraResources: ../frontend/out → frontend/"]
+        EB2 --> EB3["win: nsis (oneClick=false, allowChangeDir=true); mac: dmg; linux: AppImage + deb"]
+        EB3 --> EB4["appId: com.sovereignai.edge; output: dist/"]
+    end
+
+    subgraph DeployStructure["Deployment / runtime structure — no Docker, no compose"]
+        DS1["Installed app (Electron) = app binary + backend/ + frontend/ + workspace/ (user-writable runtime)"] --> DS2["USB deployment: clone repo → .venv install → run launch.sh / sovereign.bat → workspace/ created on first run"]
+        DS2 --> DS3["No absolute paths anywhere; HF_HOME forced to workspace/hf_cache"]
+        DS3 --> DS4["Two SQLite DBs (WAL, thread-local): sovereign.db (models/sessions/docs) + sovereign_settings.db (settings/agents/audit)"]
+    end
+
+    SourceTree --> LaunchPaths
+    LaunchPaths --> ElectronBundle
+    ElectronBundle --> DeployStructure
+```
+
+`ponytail:` reused `extraResources`, `appId`, `workspace/`, `sovereign_settings.db`, `HF_HOME`, `launch.bat`/`launch.sh` — all from AGENTS.md and source (`electron/package.json`, `launch.sh`, `backend/main.py`, `app/config.py`). Created `deployment_mermaid.txt` in root (`D:\SovereignAI`). Skipped: plugin sandbox isolation gaps (timeout-only, no FS isolation Win) and security encryption (`ModelEncryption`); add when user asks. No new abstractions; pure mapping of deployment structure. Check: `extraResources` confirmed `electron/package.json`:32-44; `appId` confirmed line 20; workspace paths confirmed AGENTS.md (runtime workspace relative); `HF_HOME` forced in `app/config.py`; `launch.sh` hardcodes `--host 127.0.0.1 --port 8000` (line 73) bypassing `get_server_config()`.

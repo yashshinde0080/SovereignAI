@@ -1022,7 +1022,7 @@ class USBBundleProvider(BaseProvider):
                                 "total_gb": usage.total / (1024**3),
                                 "free_gb": usage.free / (1024**3)
                             })
-                        except:
+                        except Exception:
                             pass
                 
                 bitmask >>= 1
@@ -1044,7 +1044,7 @@ class USBBundleProvider(BaseProvider):
                                             "total_gb": usage.total / (1024**3),
                                             "free_gb": usage.free / (1024**3)
                                         })
-                                    except:
+                                    except Exception:
                                         pass
         
         elif platform.system() == "Darwin":  # macOS
@@ -1060,7 +1060,7 @@ class USBBundleProvider(BaseProvider):
                                 "total_gb": usage.total / (1024**3),
                                 "free_gb": usage.free / (1024**3)
                             })
-                        except:
+                        except Exception:
                             pass
         
         return drives

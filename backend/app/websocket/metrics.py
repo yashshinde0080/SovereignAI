@@ -38,7 +38,7 @@ async def metrics_websocket(websocket: WebSocket):
                     disk_read = 0
                     disk_write = 0
                 prev_disk_io = disk_io
-            except:
+            except Exception:
                 disk_read = 0
                 disk_write = 0
             
@@ -55,7 +55,7 @@ async def metrics_websocket(websocket: WebSocket):
                     gpu_data = res.stdout.strip().split(",")
                     gpu_percent = float(gpu_data[0])
                     gpu_vram_used = round(float(gpu_data[1]) / 1024, 2)
-            except:
+            except Exception:
                 pass
 
             task_type = None
@@ -98,5 +98,5 @@ async def broadcast_metrics(metrics: dict):
     for client in clients.copy():
         try:
             await client.send_json(metrics)
-        except:
+        except Exception:
             clients.discard(client)

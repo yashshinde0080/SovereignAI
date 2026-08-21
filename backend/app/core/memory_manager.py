@@ -23,7 +23,7 @@ class MemoryManager:
         import torch
 
         # Try llmfit scoring when model metadata available
-        if model_metadata and model_metadata.get("name") or model_metadata.get("id"):
+        if model_metadata and (model_metadata.get("name") or model_metadata.get("id")):
             try:
                 from llmfit import score_model_fit
                 from llmfit.hardware import probe_hardware

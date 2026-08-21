@@ -109,7 +109,8 @@ class FullRAMEngine(BaseEngine):
                          self.tokenizer.pad_token = self.tokenizer.eos_token
                 except Exception as e:
                      logger.warning("Failed loading tokenizer from repo natively: %s", e)
-                     pass
+                     # Model loaded but tokenizer didn't — generate() will fail
+                     # with a clear error if the caller tries to use text input.
                      
             if input_modality in ["image", "multimodal"]:
                 try:
@@ -121,7 +122,7 @@ class FullRAMEngine(BaseEngine):
                         self.processor = AutoImageProcessor.from_pretrained(
                             self.model_path, trust_remote_code=settings.trust_remote_code
                         )
-                    except:
+                    except Exception:
                         raise RuntimeError(f"Missing required processor for vision task")
             
             if input_modality == "audio":
@@ -129,7 +130,7 @@ class FullRAMEngine(BaseEngine):
                     self.processor = AutoProcessor.from_pretrained(
                         self.model_path, trust_remote_code=settings.trust_remote_code
                     )
-                except:
+                except Exception:
                     raise RuntimeError("Missing processor for audio task")
                 
             self.loaded = True
@@ -462,8 +463,12 @@ class FullRAMEngine(BaseEngine):
 
     def get_memory_usage(self) -> Dict[str, Any]:
         process = psutil.Process()
-        return {
+        usage = {
             "ram_used_gb": process.memory_info().rss / (1024**3),
             "peak_ram_gb": process.memory_info().peak_wset / (1024**3) if hasattr(process.memory_info(), 'peak_wset') else 0,
             "kv_cache_mb": 0
         }
+        if torch.cuda.is_available():
+            usage["vram_used_mb"] = torch.cuda.memory_allocated() / (1024**2)
+            usage["vram_peak_mb"] = torch.cuda.max_memory_allocated() / (1024**2)
+        return usage

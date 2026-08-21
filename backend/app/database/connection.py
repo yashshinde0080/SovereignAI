@@ -25,6 +25,7 @@ class ConnectionPool:
         self.cache_size = cache_size
         self._local = threading.local()
         self._lock = threading.Lock()
+        self._all_conns = []  # track all created connections for close_all()
 
         # Ensure directory exists
         db_dir = os.path.dirname(db_path)
@@ -37,7 +38,9 @@ class ConnectionPool:
         Creates one if not exists for current thread.
         """
         if not hasattr(self._local, 'connection') or self._local.connection is None:
-            self._local.connection = self._create_connection()
+            conn = self._create_connection()
+            self._local.connection = conn
+            self._all_conns.append(conn)
         return self._local.connection
 
     def _create_connection(self) -> sqlite3.Connection:
@@ -100,8 +103,14 @@ class ConnectionPool:
             self._local.connection = None
 
     def close_all(self):
-        """Close connection for current thread."""
-        self.close()
+        """Close all tracked connections."""
+        for conn in self._all_conns:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        self._all_conns.clear()
+        self._local.connection = None
 
     def transaction(self):
         """Context manager for transactions."""

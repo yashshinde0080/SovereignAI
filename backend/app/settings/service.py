@@ -17,6 +17,7 @@ from .schemas import (
 class SettingsService:
     def __init__(self, db_path: Optional[str] = None):
         self.db = SettingsDatabase(db_path)
+        self._security_cache: Optional[dict] = None
 
     # ── Full Settings ──
 
@@ -27,6 +28,7 @@ class SettingsService:
         return all_settings
 
     def reset_all_settings(self) -> bool:
+        self._security_cache = None
         return self.db.reset_all()
 
     # ── General ──
@@ -65,18 +67,23 @@ class SettingsService:
     # ── Security ──
 
     def get_security(self) -> dict:
+        if self._security_cache is not None:
+            return self._security_cache
         data = self.db.get_section("security")
         if data is None:
-            return SecuritySettings().model_dump()
+            data = SecuritySettings().model_dump()
+        self._security_cache = data
         return data
 
     def update_security(self, settings: SecuritySettings) -> bool:
+        self._security_cache = None
         return self.db.update_section("security", settings.model_dump())
 
     def set_password(self, password: str) -> bool:
         security = self.get_security()
         security["require_password"] = True
         security["password_hash"] = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        self._security_cache = None
         return self.db.update_section("security", security)
 
     def verify_password(self, password: str) -> bool:

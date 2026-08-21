@@ -43,7 +43,7 @@ class HardwareDetector:
                 return subprocess.check_output(
                     ["sysctl", "-n", "machdep.cpu.brand_string"]
                 ).decode().strip()
-        except:
+        except Exception:
             pass
         return platform.processor() or "Unknown CPU"
     
@@ -54,9 +54,8 @@ class HardwareDetector:
                 with open("/proc/cpuinfo") as f:
                     return "avx2" in f.read().lower()
             elif platform.system() == "Windows":
-                # Would need more complex check
-                return True
-        except:
+                return False  # conservative: no easy check without cpuid
+        except Exception:
             pass
         return False
     
@@ -66,22 +65,20 @@ class HardwareDetector:
             if platform.system() == "Linux":
                 with open("/proc/cpuinfo") as f:
                     return "avx512" in f.read().lower()
-        except:
+        except Exception:
             pass
         return False
     
     def _get_gpu_name(self) -> Optional[str]:
         """Get GPU name"""
         try:
-            # Try NVIDIA
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-                capture_output=True,
-                text=True
+                capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0:
                 return result.stdout.strip()
-        except:
+        except Exception:
             pass
         return None
     
@@ -90,12 +87,11 @@ class HardwareDetector:
         try:
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-                capture_output=True,
-                text=True
+                capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0:
                 return round(float(result.stdout.strip()) / 1024, 2)
-        except:
+        except Exception:
             pass
         return None
     
@@ -103,15 +99,13 @@ class HardwareDetector:
         """Detect disk type (SSD/HDD)"""
         try:
             if platform.system() == "Linux":
-                # Check if root disk is SSD
                 result = subprocess.run(
                     ["cat", "/sys/block/sda/queue/rotational"],
-                    capture_output=True,
-                    text=True
+                    capture_output=True, text=True, timeout=5
                 )
                 if result.returncode == 0:
                     return "HDD" if result.stdout.strip() == "1" else "SSD"
-        except:
+        except Exception:
             pass
         return "Unknown"
     
@@ -133,5 +127,5 @@ class HardwareDetector:
                 
             speed = (10 / elapsed) if elapsed > 0 else 0
             return round(speed, 2)
-        except:
-            return 100.0  # Default
+        except Exception:
+            return 0.0

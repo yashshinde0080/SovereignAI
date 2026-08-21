@@ -58,12 +58,13 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Ensure directories exist
-settings.models_dir.mkdir(parents=True, exist_ok=True)
-settings.workspace_dir.mkdir(parents=True, exist_ok=True)
-settings.catalog_dir.mkdir(parents=True, exist_ok=True)
-settings.plugins_dir.mkdir(parents=True, exist_ok=True)
-settings.database_path.parent.mkdir(parents=True, exist_ok=True)
+# Ensure directories exist — best-effort; read-only USBs skip gracefully.
+for _d in (settings.models_dir, settings.workspace_dir, settings.catalog_dir,
+           settings.plugins_dir, settings.database_path.parent):
+    try:
+        _d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
 
 # Keep HuggingFace tokenizer/config/module caches on the pendrive (portable USB).
 # setdefault → an externally-set HF_HOME (e.g. launch script) wins.

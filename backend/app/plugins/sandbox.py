@@ -1,4 +1,12 @@
-"""Plugin Sandbox"""
+"""Plugin Sandbox
+
+NOTE: On Windows, ``resource`` module is unavailable — sandbox provides
+timeout-only isolation (30s). No filesystem, network, or memory limits
+are enforced. Plugins can read/write any file, make network calls, and
+consume unlimited memory. This is a known limitation; full isolation
+requires subprocess-based sandboxing (tracked in reviews/issues-21-8-2026.md
+ISSUE-24).
+"""
 import asyncio
 try:
     import resource
@@ -42,15 +50,14 @@ class PluginSandbox:
             raise TimeoutError(f"Plugin execution timed out after {self.max_time_seconds}s")
     
     def _set_limits(self):
-        """Set resource limits for plugin execution"""
+        """Set resource limits for plugin execution (Unix only)"""
         if resource is None:
-            return
+            return  # Windows: no resource limits available
         try:
-            # Memory limit
             soft, hard = resource.getrlimit(resource.RLIMIT_AS)
             resource.setrlimit(
                 resource.RLIMIT_AS,
                 (self.max_memory_mb * 1024 * 1024, hard)
             )
-        except:
-            pass  # May not work on all platforms
+        except Exception:
+            pass

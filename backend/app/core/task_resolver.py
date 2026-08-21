@@ -1,6 +1,7 @@
 """Task Resolver - Determines model task type dynamically"""
 from typing import Dict, Any, List
 from transformers import AutoConfig
+from app.config import settings
 
 class TaskResolver:
     """Resolves task capabilities from HuggingFace config"""
@@ -9,10 +10,10 @@ class TaskResolver:
     def resolve(model_path: str) -> Dict[str, Any]:
         """Inspect model config and determine task descriptors"""
         try:
-            config = AutoConfig.from_pretrained(model_path, trust_remote_code=True, local_files_only=True)
+            config = AutoConfig.from_pretrained(model_path, trust_remote_code=settings.trust_remote_code, local_files_only=True)
         except Exception:
             try:
-                config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+                config = AutoConfig.from_pretrained(model_path, trust_remote_code=settings.trust_remote_code)
             except Exception as e:
                 # Provide a safe default for raw GGUF / unconfigured models
                 return {

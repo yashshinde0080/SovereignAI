@@ -139,6 +139,7 @@ class LayerWeightLoader:
         self._lru.clear()
         self._cached_bytes = 0
         self._pinned_bytes = 0
+        self.executor.shutdown(wait=False)
         gc.collect()
 
 

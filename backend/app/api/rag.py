@@ -68,7 +68,7 @@ async def upload_document(
             "status": "success",
             "document_id": doc_id,
             "filename": file.filename,
-            "chunks": len(text) // 500  # Approximate
+            "chunks": len(vector_store.get_document_chunks(doc_id))
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

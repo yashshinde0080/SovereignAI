@@ -67,7 +67,7 @@ class Tokenizer:
                     try:
                         char_code = int(token.split("_")[1])
                         tokens.append(chr(char_code))
-                    except:
+                    except Exception:
                         tokens.append(token)
                 else:
                     tokens.append(" " + token)

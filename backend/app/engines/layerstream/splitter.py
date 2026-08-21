@@ -90,13 +90,33 @@ class WeightSplitter:
         Loads the full model into CPU RAM precisely once and saves the core components
         into separate safetensors files.
         """
+        import psutil
+        from app.config import settings
         print(f"Loading full model '{self.model_id}' to CPU for splitting...")
+
+        # Preflight: ensure enough RAM for model loading (2x model size as safety margin)
+        avail = psutil.virtual_memory().available
+        model_size = 0
+        try:
+            p = self.model_id
+            if os.path.isfile(p):
+                model_size = os.path.getsize(p)
+            elif os.path.isdir(p):
+                model_size = sum(f.stat().st_size for f in os.scandir(p) if f.is_file())
+        except Exception:
+            pass
+        if model_size and avail < model_size * 2:
+            raise RuntimeError(
+                f"Not enough RAM to split model (need ~{model_size * 2 / (1024**3):.1f} GB, "
+                f"have {avail / (1024**3):.1f} GB free). Use FullRAM mode instead."
+            )
+
         # Load full model to CPU
         kwargs = {
             "device_map": "cpu",
             "dtype": dtype,
             "low_cpu_mem_usage": True,
-            "trust_remote_code": True,
+            "trust_remote_code": settings.trust_remote_code,
             "ignore_mismatched_sizes": True
         }
 

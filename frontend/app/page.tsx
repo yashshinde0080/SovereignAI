@@ -19,21 +19,17 @@ export default function HomePage() {
 
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        const [statusRes, hwRes, recRes] = await Promise.all([
-          api.getSystemStatus(),
-          api.getHardware(),
-          api.getRecommendations()
-        ]);
-        
-        setSystemStatus(statusRes);
-        setHardware(hwRes);
-        setRecommendations(recRes.recommendations || []);
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-      } finally {
-        setLoading(false);
-      }
+      const results = await Promise.allSettled([
+        api.getSystemStatus(),
+        api.getHardware(),
+        api.getRecommendations()
+      ]);
+      
+      if (results[0].status === 'fulfilled') setSystemStatus(results[0].value);
+      if (results[1].status === 'fulfilled') setHardware(results[1].value);
+      if (results[2].status === 'fulfilled') setRecommendations(results[2].value.recommendations || []);
+      
+      setLoading(false);
     };
 
     fetchData();

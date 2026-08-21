@@ -441,4 +441,8 @@ Real bug fix in `backend/app/core/task_resolver.py` (+9/−3) — two misclassif
 ### Cross-branch / remote state
 - **Branch**: `master` (current); `main` last known at `f112e4a`. `master` is now **29 commits** ahead of `main` (per `git rev-list --count origin/main...master` = `10    19` against the last-fetched `origin/main`; today's 3 + the 08-16→08-19 divergence not yet merged). Pending `Merge branch 'master'` into `main` to re-sync the default branch — unchanged since 08-16.
 - **Remote verification blocked**: `git fetch origin` → `Could not resolve host: github.com` (offline); `git ls-remote origin` → no output (exit 1). GitHub MCP (`mcp__github_*`) → `Bad credentials`. `origin/master`/`origin/main` shown by `git branch -a` are stale pre-fetch refs, not today's remote truth. **No push or PR created.**
+- ## [2026-08-21] docs | MCP Git/GitHub/Obsidian log update
+- Updated Info_docs/log.md via git (commit 6eb326c), GitHub (origin https://github.com/yashshinde0080/SovereignAI.git — gh CLI not installed, auth unavailable; remote verified via git ls-remote), Obsidian (vault present, log file edited directly).
+- Tool verification: git log shows 6eb326c (21/8/2026), working tree clean, branch master, 3 recent commits ahead of origin/main (pending merge/push).
+- Note: GitHub push blocked (no gh binary, REST 404 unauth); commit exists locally only.
 - **Working tree**: clean before and after all three commits (`git status` empty; `origin/master` noted up-to-date, but that ref predates today's local commits).

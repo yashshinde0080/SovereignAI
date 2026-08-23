@@ -40,14 +40,14 @@ class _IkModelWrapper:
 class FullRAMEngine(BaseEngine):
     """Full RAM inference engine - loads entire model into memory dynamically"""
     
-    def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any):
+    def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any, task_metadata: Optional[Dict[str, Any]] = None):
         super().__init__(model_path, hardware, memory_manager)
         self.mode = "fullram"
         self.experimental = False
         self.processor = None
         self.tokenizer = None
         self.model = None
-        self.task_metadata = {}
+        self.task_metadata = task_metadata or {}
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
     
     async def load(self):
@@ -55,8 +55,9 @@ class FullRAMEngine(BaseEngine):
         start_time = time.time()
         
         try:
-            # 1. Resolve task
-            self.task_metadata = TaskResolver.resolve(self.model_path)
+            # 1. Resolve task (use pre-resolved metadata from EngineFactory when available)
+            if not self.task_metadata:
+                self.task_metadata = TaskResolver.resolve(self.model_path)
             task_type = self.task_metadata["task_type"]
             input_modality = self.task_metadata["input_modality"]
             is_generative = self.task_metadata["is_generative"]

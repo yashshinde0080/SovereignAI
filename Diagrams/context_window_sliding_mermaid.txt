@@ -1,0 +1,23 @@
+```mermaid
+flowchart TD
+    subgraph WindowOnly["8. Context Window (sliding core) — what stays, what goes, how KV follows"]
+        direction TB
+        W1["Input: messages[] + pinned system_prompt + RAG chunks (pre-injected)"] --> W2["Tokenize all → token sequence; measure length L"]
+        W2 --> W3["L > budget? (budget = max_context - reserve_for_new_tokens)"]
+        W3 -->|no| W4["Full sequence kept; append new token; KV grows linearly"]
+        W3 -->|yes| W5["Sliding trigger: prune oldest non-system-prompt turns"]
+
+        W5 --> W5a["Step 1: split sequence → [system_prompt_tokens] + [history_tokens] + [new_token]"]
+        W5a --> W5b["Step 2: drop oldest 50% of history_tokens (not system) — measured drop"]
+        W5b --> W5c["Step 3: rebuild sequence = pinned_system + retained_history + new_token"]
+        W5c --> W5d["Step 4: KV cache — drop entries matching dropped history token indices"]
+
+        W5d --> W6["FullRAM: drop in VRAM KV tensors (direct index clear)"]
+        W5d --> W7["LayerStream: drop in system-RAM StateCache / KVCacheManager; recycle slots"]
+        W6 --> W8["Rebuild attention mask: mask shape = (current_L, past_L_new) — shorter past"]
+        W7 --> W8
+        W8 --> W9["Continue decode with shorter context; system prompt intact; no OOM"]
+    end
+```
+
+`ponytail:` this is the window-only slice of item 6 (`context_sliding_mermaid.txt`) — narrower: only the sequence split / drop / KV recycle / mask rebuild steps. Reused `StateCache`, `KVCacheManager`, `system_prompt`, `attention_mask`, `past_length` — all named in `kv_cache.py` / `layer_executor.py` / `chat.py`. No new names added; no extra sub-diagrams. Skipped: RAG injection (independent), memory budget math (already in item 6), security/encryption, plugin isolation — add when requested. Check: sliding sequence split/rebuild matches `Info_docs/engines/KV Cache.md` line 25 (`pins system prompt, prunes oldest tokens, invalidates KV entries`); `layer_executor.py` `_create_attention_mask(shape, past_length)` rebuilds mask with new past length; `StatefulCache`/`KVCacheManager` recycle slots in `kv_cache.py`.

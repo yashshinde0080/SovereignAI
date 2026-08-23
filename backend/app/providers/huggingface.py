@@ -573,14 +573,13 @@ class HuggingFaceProvider(BaseProvider):
         api = HfApi(token=self.token)
         repo_info = await asyncio.to_thread(api.model_info, repo_id, files_metadata=True)
         
+        import fnmatch
         ignore_patterns = ["*.msgpack", "*.h5", "*.ot", "*.ckpt", ".git*"]
         total_bytes = 0
         for f in repo_info.siblings:
             if not f.size: continue
-            # Basic glob check for ignore patterns
             should_ignore = False
             for p in ignore_patterns:
-                import fnmatch
                 if fnmatch.fnmatch(f.rfilename, p):
                     should_ignore = True
                     break

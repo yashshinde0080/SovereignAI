@@ -51,6 +51,18 @@ class LayerExecutor:
         self.norm_path = os.path.join(weights_dir, "norm.safetensors")
         self.lm_head_path = os.path.join(weights_dir, "lm_head.safetensors")
 
+        # Snapshot of each component's true parameter shapes, taken from the
+        # meta model (init_empty_weights) before any offload runs. offload_weights
+        # replaces params with torch.empty(0), so on later passes param.shape is
+        # degenerate — dequantize_on_device needs the real shape as its reshape
+        # target (int4 restores padding/1-D vs 2-D from it).
+        self._param_shapes: Dict[int, Dict[str, tuple]] = {}
+        for comp in [components.get("embed"), components.get("norm"), components.get("lm_head")] + list(components.get("layers", [])):
+            if comp is not None:
+                shapes = {n: tuple(p.shape) for n, p in comp.named_parameters()}
+                shapes.update({n: tuple(b.shape) for n, b in comp.named_buffers()})
+                self._param_shapes[id(comp)] = shapes
+
         # Pinned = tiny, used every pass: never evicted from the loader cache.
         pinned = {self.embed_path, self.norm_path, self.lm_head_path}
         self.loader = LayerWeightLoader(
@@ -61,6 +73,24 @@ class LayerExecutor:
         )
         self._mask_cache = {}
         self.tracker = BenchmarkTracker()
+
+        # Device cache: dequantized (compute-dtype) tensors per component path,
+        # bounded LRU in VRAM. The CPU loader cache holds the small packed form;
+        # this holds the fp16 form the forward pass actually uses, so decode
+        # steps after the first pass skip the per-token re-dequantization that
+        # measured ~68% of decode wall time. Budget = half of free VRAM at init:
+        # small models cache fully, big models hold a recency window.
+        # ponytail: fixed 50%-of-free heuristic; add a settings knob if VRAM
+        # contention ever shows up.
+        self._dev_cache: Dict[str, Dict[str, torch.Tensor]] = {}
+        self._dev_sizes: Dict[str, int] = {}
+        self._dev_lru: Dict[str, float] = {}
+        self._dev_bytes = 0
+        if self.device.type == "cuda":
+            free_vram, _ = torch.cuda.mem_get_info()
+            self.dev_cache_budget = int(free_vram * 0.5)
+        else:
+            self.dev_cache_budget = 0
 
         # Detect hybrid/stateful models (e.g. Qwen3.5 with linear_attention + full_attention)
         # layer_types is passed from executor.py which checks both full config and text_config
@@ -132,42 +162,44 @@ class LayerExecutor:
         self._mask_cache[key] = mask
         return mask
 
-    def assign_weights(self, module: nn.Module, state_dict: dict):
-        """Ultra-fast weight assignment with vGPU/CUDA awareness.
+    def _device_tensors(self, module: nn.Module, state_dict: dict) -> Dict[str, torch.Tensor]:
+        """Dequantize/copy params to the compute device; returns {name: tensor}.
 
         Quantized weights (int8/int4, detected by a matching ``<name>.scale``
         entry) are dequantized on the compute device, so RAM/disk hold the
         small form and the device pays the conversion. fp16/fp32 pass through
         unchanged. non_blocking=True overlaps the copy with the next disk read.
         """
+        shapes = self._param_shapes.get(id(module), {})
+        tensors = {}
         for name, param in module.named_parameters():
-            if name in state_dict:
-                parts = name.split('.')
-                parent = module
-                for part in parts[:-1]:
-                    parent = getattr(parent, part)
-                attr = parts[-1]
-                scale = state_dict.get(f"{name}.scale")
-                if scale is not None:
-                    dev_tensor = dequantize_on_device(
-                        state_dict[name], scale, self.device, self.compute_dtype, tuple(param.shape))
-                else:
-                    # vGPU/CUDA optimization: overlap copy with next disk read
-                    dev_tensor = state_dict[name].to(self.device, dtype=self.compute_dtype, non_blocking=True)
-                parent._parameters[attr] = nn.Parameter(dev_tensor, requires_grad=False)
-                
+            if name not in state_dict:
+                continue
+            scale = state_dict.get(f"{name}.scale")
+            if scale is not None:
+                tensors[name] = dequantize_on_device(
+                    state_dict[name], scale, self.device, self.compute_dtype,
+                    shapes.get(name) or tuple(param.shape))
+            else:
+                tensors[name] = state_dict[name].to(self.device, dtype=self.compute_dtype, non_blocking=True)
+        return tensors
+
+    def _materialize_buffers(self, module: nn.Module, state_dict: dict):
+        """Assign buffers from state_dict, or materialize meta buffers (RoPE etc)."""
+        shapes = self._param_shapes.get(id(module), {})
         for name, buf in module.named_buffers():
             parts = name.split('.')
             parent = module
             for part in parts[:-1]:
                 parent = getattr(parent, part)
             attr = parts[-1]
-            
+
             if name in state_dict:
                 scale = state_dict.get(f"{name}.scale")
                 if scale is not None:
                     dev_tensor = dequantize_on_device(
-                        state_dict[name], scale, self.device, self.compute_dtype, tuple(buf.shape))
+                        state_dict[name], scale, self.device, self.compute_dtype,
+                        shapes.get(name) or tuple(buf.shape))
                 else:
                     dev_tensor = state_dict[name].to(self.device, non_blocking=True)
                 parent._buffers[attr] = dev_tensor
@@ -183,6 +215,62 @@ class LayerExecutor:
                         parent._buffers[attr] = torch.zeros_like(buf, device=self.device)
                     else:
                         parent._buffers[attr] = torch.zeros_like(buf, device=self.device, dtype=self.compute_dtype)
+
+    def _dev_tensors_for(self, path: str, module: nn.Module, state_dict: dict):
+        """Device tensors for ``path``: cache hit, or dequantize + store.
+
+        Returns (tensors, state_dict). On a hit the state_dict is skipped
+        entirely (buffers re-materialize from meta) so the per-token
+        re-dequantization hot path never touches the packed form.
+        """
+        hit = self._dev_cache.get(path)
+        if hit is not None:
+            self._dev_lru[path] = time.monotonic()
+            return hit, {}
+        tensors = self._device_tensors(module, state_dict)
+        if self.dev_cache_budget:
+            self._store_dev(path, tensors)
+        return tensors, state_dict
+
+    def _store_dev(self, path: str, tensors: Dict[str, torch.Tensor]):
+        """Store tensors in the bounded VRAM LRU, evicting least-recently-used."""
+        size = sum(t.numel() * t.element_size() for t in tensors.values())
+        if size > self.dev_cache_budget:
+            return  # single component bigger than the whole budget: don't cache
+        while self._dev_bytes + size > self.dev_cache_budget and self._dev_cache:
+            lru_path = min(self._dev_lru, key=lambda p: self._dev_lru.get(p, 0.0))
+            self._dev_bytes -= self._dev_sizes.pop(lru_path)
+            self._dev_cache.pop(lru_path, None)
+            self._dev_lru.pop(lru_path, None)
+        self._dev_cache[path] = tensors
+        self._dev_sizes[path] = size
+        self._dev_lru[path] = time.monotonic()
+        self._dev_bytes += size
+
+    def assign_weights(self, module: nn.Module, state_dict: dict, tensors: Optional[Dict[str, torch.Tensor]] = None):
+        """Ultra-fast weight assignment with vGPU/CUDA awareness.
+
+        ``tensors`` (pre-dequantized device tensors, e.g. from the device
+        cache) is used when provided; otherwise params are dequantized/copied
+        here. Buffers are always materialized from ``state_dict`` (or meta).
+        """
+        if tensors is None:
+            tensors = self._device_tensors(module, state_dict)
+        for name, dev_tensor in tensors.items():
+            parts = name.split('.')
+            parent = module
+            for part in parts[:-1]:
+                parent = getattr(parent, part)
+            attr = parts[-1]
+            parent._parameters[attr] = nn.Parameter(dev_tensor, requires_grad=False)
+        self._materialize_buffers(module, state_dict)
+
+    def clear_device_cache(self):
+        """Free all dequantized device tensors."""
+        self._dev_cache.clear()
+        self._dev_sizes.clear()
+        self._dev_lru.clear()
+        self._dev_bytes = 0
 
     def offload_weights(self, module: nn.Module):
         """Immediately destroys dense parameters to isolate VRAM peak values."""
@@ -218,11 +306,11 @@ class LayerExecutor:
             raise ValueError(f"Context length limits exceeded. Try generating fewer tokens.")
         
         t0 = time.perf_counter()
+        embed = self.components['embed']
         embed_dict = self.loader.get_weights(self.embed_path)
         self.tracker.record_layer_load(time.perf_counter() - t0)
-        
-        embed = self.components['embed']
-        self.assign_weights(embed, embed_dict)
+        embed_tensors, embed_dict = self._dev_tensors_for(self.embed_path, embed, embed_dict)
+        self.assign_weights(embed, embed_dict, tensors=embed_tensors)
         hidden_states = embed(input_ids)
         self.offload_weights(embed)
         
@@ -281,7 +369,8 @@ class LayerExecutor:
             
             layer_dict = self.loader.get_weights(self.layer_paths[i])
             self.tracker.record_layer_load(time.perf_counter() - t0)
-            self.assign_weights(layer, layer_dict)
+            tensors, layer_dict = self._dev_tensors_for(self.layer_paths[i], layer, layer_dict)
+            self.assign_weights(layer, layer_dict, tensors=tensors)
             
             # Dynamic introspective signature dispatching
             sig = inspect.signature(layer.forward)
@@ -328,7 +417,8 @@ class LayerExecutor:
             t0 = time.perf_counter()
             norm_dict = self.loader.get_weights(self.norm_path)
             self.tracker.record_layer_load(time.perf_counter() - t0)
-            self.assign_weights(norm, norm_dict)
+            norm_tensors, norm_dict = self._dev_tensors_for(self.norm_path, norm, norm_dict)
+            self.assign_weights(norm, norm_dict, tensors=norm_tensors)
             hidden_states = norm(hidden_states)
             self.offload_weights(norm)
             self.tracker.update_vram()
@@ -337,7 +427,8 @@ class LayerExecutor:
         t0 = time.perf_counter()
         lm_head_dict = self.loader.get_weights(self.lm_head_path)
         self.tracker.record_layer_load(time.perf_counter() - t0)
-        self.assign_weights(lm_head, lm_head_dict)
+        lm_tensors, lm_head_dict = self._dev_tensors_for(self.lm_head_path, lm_head, lm_head_dict)
+        self.assign_weights(lm_head, lm_head_dict, tensors=lm_tensors)
         
         last_hidden_state = hidden_states[:, -1:, :]
         logits = lm_head(last_hidden_state)

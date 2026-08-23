@@ -128,9 +128,11 @@ class PluginManager:
     
     async def unload_all(self):
         """Unload all plugins"""
+        import logging
+        _log = logging.getLogger(__name__)
         for plugin in self.plugins.values():
             try:
                 await plugin.cleanup()
-            except:
-                pass
+            except Exception as e:
+                _log.warning("Plugin %s cleanup failed: %s", plugin.id, e)
         self.plugins.clear()

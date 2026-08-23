@@ -1,0 +1,117 @@
+```mermaid
+classDiagram
+    class BaseEngine {
+        <<abstract>>
+        +str model_path
+        +Dict hardware
+        +Any memory_manager
+        +str mode
+        +bool loaded
+        +Dict stats
+        +__init__(model_path, hardware, memory_manager)
+        +load()* async
+        +unload()* async
+        +generate(input_data, **kwargs) Dict* async
+        +generate_stream(input_data, **kwargs) AsyncGenerator* async
+        +get_memory_usage() Dict*
+        +get_stats() Dict
+    }
+
+    class FullRAMEngine {
+        +str device
+        +AutoModelForCausalLM model
+        +AutoTokenizer tokenizer
+        +load() async
+        +unload() async
+        +generate(input_data, **kwargs) Dict async
+        +generate_stream(input_data, **kwargs) AsyncGenerator async
+        +get_memory_usage() Dict
+    }
+
+    class LayerStreamEngine {
+        +str weights_dir
+        +str device
+        +LayerWeightLoader loader
+        +LayerExecutor executor
+        +Sampler sampler
+        +KVCacheManager / StatefulCache cache
+        +load() async
+        +unload() async
+        +generate(input_data, **kwargs) Dict async
+        +generate_stream(input_data, **kwargs) AsyncGenerator async
+        +get_memory_usage() Dict
+    }
+
+    class LayerWeightLoader {
+        +str weights_dir
+        +int prefetch_depth
+        +float cache_budget_mb
+        +Set pinned_paths
+        +ThreadPoolExecutor executor
+        +Dict cpu_cache
+        +QuantConfig quant_config
+        +_load_file(path) Dict
+        +prefetch_async(path)
+        +get_weights(path) Dict
+        +clear_cache()
+        +get_cache_stats() Dict
+    }
+
+    class LayerExecutor {
+        +Dict components
+        +Any config
+        +str weights_dir
+        +str device
+        +torch.dtype compute_dtype
+        +Dict cpu_cache
+        +Dict _dev
+        +execute_forward(input_ids, mode) torch.Tensor
+        +assign_weights(module, state_dict)
+        +clear_device_cache()
+        +offload_weights(module)
+    }
+
+    class WeightSplitter {
+        +str source_path
+        +str target_dir
+        +split() void
+    }
+
+    class Sampler {
+        +float temperature
+        +int top_k
+        +float top_p
+        +sample(logits) List[int]
+    }
+
+    class QuantConfig {
+        +str quant_method
+        +Dict params
+        +load(path) QuantConfig
+    }
+
+    class MemoryManager {
+        +float max_usage_percent
+        +suggest_mode(model_size_bytes, metadata) str
+    }
+
+    class EngineFactory {
+        +Dict hardware
+        +MemoryManager memory_manager
+        +create_engine(model_path, mode, model_metadata) BaseEngine async
+    }
+
+    BaseEngine <-- FullRAMEngine
+    BaseEngine <-- LayerStreamEngine
+    LayerStreamEngine --> LayerWeightLoader : uses
+    LayerStreamEngine --> LayerExecutor : uses
+    LayerStreamEngine --> Sampler : uses
+    LayerStreamEngine --> WeightSplitter : uses (offline split)
+    LayerStreamEngine --> QuantConfig : reads
+    FullRAMEngine --> MemoryManager : consulted via factory
+    LayerStreamEngine --> MemoryManager : consulted via factory
+    EngineFactory --> MemoryManager : creates
+    EngineFactory --> BaseEngine : returns (via FullRAM / LayerStream)
+```
+
+`ponytail:` item 12 (`Backend Engine UML`) — class diagram covering `BaseEngine` (ABC, 5 abstract methods), `FullRAMEngine`, `LayerStreamEngine`, and their collaborators (`LayerWeightLoader`, `LayerExecutor`, `Sampler`, `WeightSplitter`, `QuantConfig`, `MemoryManager`, `EngineFactory`). Created `backend_engine_uml_mermaid.txt` in root. No new abstractions; pure UML mapping of existing classes from `backend/app/engines/`. Reused `BaseEngine`, `FullRAMEngine`, `LayerStreamEngine`, `LayerWeightLoader`, `LayerExecutor`, `Sampler`, `WeightSplitter`, `QuantConfig`, `MemoryManager`, `EngineFactory` — all existing class names. Skipped: plugin sandbox (`PluginInterface` ABC + `PluginSandbox` timeout-only) and security layer (`ModelEncryption`, `lan_auth_middleware`) — covered by previous items. Check: `BaseEngine` ABC has exactly 5 abstract methods (`load`, `unload`, `generate`, `generate_stream`, `get_memory_usage`) + concrete `get_stats()` — verified `base.py` lines 22-48; `FullRAMEngine` inherits and implements all 5 — `fullram/executor.py`; `LayerStreamEngine` inherits and implements all 5 — `layerstream/executor.py`; `EngineFactory.create_engine()` returns `BaseEngine` instance (`FullRAMEngine` or `LayerStreamEngine`) — `core/engine_factory.py` lines 96-110; `MemoryManager.suggest_mode()` uses `llmfit.score_model_fit()` or threshold fallback — `core/memory_manager.py` lines 17-63.

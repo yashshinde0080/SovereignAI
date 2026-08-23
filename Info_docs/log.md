@@ -276,9 +276,7 @@ Seven commits (`208c54e` → `d3db7fa`), one tranche (22:25–22:26 IST), all pu
 **Commits at a glance**: `208c54e` API hardening · `4cd177a` CLI import + router/memory cleanup · `3e2b86f` FullRAM refactor/print→logging · `f196247` delete ManualStream + security middleware · `9425152` benchmark + 3 test files · `e85cdce` frontend chat lifecycle + repo hygiene · `d3db7fa` docs + review markers.
 
 ## [2026-08-15] implement | LayerStream Round-Trip + Rotary Bug Fix + GPU Benchmark Follow-Up + Settings UI Auth
-Committed (13d26c9, 158ac51, 483b0ec). Three threads: a real-engine round-trip test that caught a latent LayerStream bug, a GPU-kernel availability check that closed out the 08-14 benchmark, and the security settings UI that finished the P1 auth story's frontend half.
-
-- **LayerStream round-trip test** (`backend/tests/test_layerstream_roundtrip.py`, new): `@slow` full executor round-trip on a freshly-split tiny Llama — copies the tokenizer, runs `generate_stream`, and unloads. Closed the "zero coverage on high-risk LayerStream executor" gap from the 08-12 Phase 3 eng review. A `slow` pytest marker registered in `backend/pyproject.toml` so these real-engine tests run with `-m slow` and skip by default.
+Three threads: a real-engine round-trip test that caught a latent LayerStream bug, a GPU-kernel availability check that closed out the 08-14 benchmark, and the security settings UI that finished the P1 auth story's frontend half. **Committed 2026-08-16 in `2463d94`** — the "not yet committed" caveat below is now historical.
 
 - **Bug the round-trip exposed** (`backend/app/engines/layerstream/layer_executor.py`, +11): `execute_forward` crashed on `rotary_emb.to(device)` for **any non-hybrid Llama/Qwen2 model** — the `inv_freq` buffer arrives as a meta tensor (`init_empty_weights`) and `.to()` on a meta tensor raises *"Cannot copy out of meta tensor"*. Fix materializes `inv_freq` from `rope_theta` first (same formula as `assign_weights`' meta-buffer branch) before relocating. This would have failed the first `generate` on every standard Llama/Qwen2 split — masked until now because the 08-14 benchmark used the hybrid Qwen3.5 (path without this branch).
 
@@ -288,70 +286,165 @@ Committed (13d26c9, 158ac51, 483b0ec). Three threads: a real-engine round-trip t
 
 - **Closeout report** (`reviews/completed-2026-08-12-to-2026-08-15.md`, new): the full 22-item done/deferred ledger for the 08-12 review application — 112 tests passing, lists the three left-open decisions (gguf IQ2_BN patch, TurboQuant parked, tags/releases pending, fast-attention delta needs Linux CUDA).
 
-## [2026-08-16] implement | Engine Benchmark Suite + LayerStream Performance Decision + Honest Pitch Correction
-Committed (2463d94, d9fc444, dfc2a3b, be00932, 9733608, cc4c6be, 324d7e1, bf3f39d, 9a80f2f). Major benchmarking tranche across all three engines + the design decision that re-positions the product pitch around measured numbers.
+**Status**: uncommitted. To finalize, stage the 6 modified + 2 new files and commit; then the remote tip advances and this entry's "not yet committed" caveat drops.
 
-### Engine Benchmark Master Report (`reviews/benchmark-engines-2026-08-16.md`)
-Consolidated cross-engine comparison on the 8 GB dev box:
-| Engine | Model | tok/s | Peak RAM delta | RAM/file |
-|---|---|---|---|---|
-| LayerStream (CPU) | 0.8B FP16 split | 0.40 | 2.30 GB | — |
-| FullRAM CPU (fp32) | 0.5B Q4 | **3.84** | +1.93 GB | **4.1x** |
-| FullRAM CUDA (fp16) | 0.5B Q4 | **7.03** | +2.25 GB | **4.8x** |
-| llama.cpp CPU | 0.5B Q4 | **24.05** | +0.48 GB | **1.0x** |
-| llama.cpp --gpu-layers | 0.5B Q4 | 28.95 | +0.48 GB | 1.0x |
-| llama.cpp CPU | **3B Q4** | **5.44** | **+2.27 GB** | **1.2x** |
+## [2026-08-16] docs | 08-15 Finalization + Repository Guidelines Rewrite
+Three commits (`2463d94`, `02daaaa`, `991f5ca`), finalizing the previously-uncommitted 08-15 tranche and regenerating the agent-facing guidelines from source. Working tree clean; `991f5ca` 1 ahead of `origin/main` (pending push).
 
-**Key findings:**
-- LayerStream compute = 98% of wall time; I/O is 9% (already overlapped). No I/O fix produces 4x.
-- FullRAM/transformers dequantizes Q4 to fp32/fp16 at ~4x file size → 3B Q4 needs ~9.7 GB (OOM on this box).
-- llama.cpp keeps weights quantized in RAM (1.0-1.2x file) → **3B Q4 runs at 5.44 tok/s on 8 GB**, the only engine that can.
-- Speedup: llama.cpp 60x LayerStream, 6.3x FullRAM CPU on 0.5B Q4.
-- Corrected pitch: **"0.5-1B Q4 in RAM via FullRAM; 3-8B Q4 via llama.cpp at ~5 tok/s on 8 GB."**
+### 08-15 tranche committed (commit `2463d94`, 15:14 IST)
+Stage of the 6 modified + 2 new files the 08-15 entry flagged as uncommitted — the 08-15 "not yet committed" caveat now drops:
+- **Logged**: the `## [2026-08-15]` block was appended to `Info_docs/log.md` (+39) — this is the entry above.
+- **Stale wiki cleanup**: deleted `Info_docs/Excalidraw/SovereignAI.excalidraw.md` (314 lines) + `Info_docs/Kanban_board.md` (34 lines) — obsolete artifacts predating the wiki restructure.
+- The LayerStream round-trip test (`backend/tests/test_layerstream_roundtrip.py` +102), rotary `inv_freq` materialization fix (`backend/app/engines/layerstream/layer_executor.py` +11), GPU benchmark follow-up (`backend/benchmark_layerstream.py` +10, `reviews/benchmark-2026-08-14.md` +26), `slow` marker (`backend/pyproject.toml` +3), settings UI auth (`frontend/components/settings/SecuritySettings.tsx` +43, `frontend/lib/api.ts` +13), and closeout report (`reviews/completed-2026-08-12-to-2026-08-15.md` +66) all land here.
 
-### LayerStream Performance Decision (`reviews/design-layerstream-perf-2026-08-16.md`)
-Office-hours outcome:
-- **Diagnosis**: Compute 98%, I/O 9% (prefetch already overlaps). Torch layer-by-layer cannot beat llama.cpp fused kernels.
-- **Approach A (shipping)**: FullRAM Q4 0.5-1B is the product wedge. LayerStream off-by-default, experimental badge in UI.
-- **Approach B (next, 1-2 weeks)**: llama.cpp mmap offload for beyond-RAM GGUF. Beyond-RAM becomes usable (10-50x faster than LayerStream).
-- **Approach C (parked)**: torch.compile/CUDA graphs/fused kernels — reopens only if spike shows within ~3x of llama.cpp.
-- **Parked I/O list** (revisit triggers in `reviews/parked-io-fixes-2026-08-16.md`): Q4/Q8 weight quantization, deeper prefetch, GDS/O_DIRECT, LLM-in-a-Flash, causal-conv1d Linux setup.
+### Repo hygiene (commit `02daaaa`, 21:54 IST)
+- **`.gitignore`**: added `.omp/` — excludes the local agent-harness workspace metadata directory (not part of the SovereignAI runtime app).
 
-### FullRAM Q4 Benchmark Detail (`reviews/benchmark-fullram-2026-08-16.md`)
-Measured `qwen2.5-0.5b-instruct-q4_k_m.gguf` (469 MB):
-- CPU fp32: 3.84 tok/s, 63.4 s load, +1.93 GB RAM (4.1x file)
-- CUDA fp16: 7.03 tok/s, 66.8 s load, +2.25 GB RAM (4.8x file)
-- Projection: 3B Q4 ~8-10 GB (no), 8B Q4 ~20 GB (no). FullRAM ceiling = ~1B Q4.
-- Load time = UX killer (minutes for 3B+). llama.cpp mmap = seconds.
+### Repository Guidelines rewrite (commit `991f5ca`, 22:23 IST)
+- **`AGENTS.md`** (+207/-144): replaced the stale agent guide with a fresh source-grounded synthesis. Generated via 4 parallel research scout agents (core source, tests, configs/build, scripts/docs) and verified against the actual tree.
+- **Corrections vs the old guide**:
+  - `proxy.py` claimed as a standalone NVIDIA NIM proxy — **file does not exist**; removed. Only a stale `__pycache__/proxy.cpython-314.pyc` remains.
+  - Gotcha #8 ("debug/test scripts litter repo root") — **already cleaned**; corrected.
+  - Test suite — **13 files** (not 10), ~106+ tests; documented the `slow` marker, `asyncio_mode="auto"`, no `conftest.py`, fast-loop `-m "not slow"`, and real coverage gaps.
+  - Engine selection flow — traced through `EngineFactory.create_engine()` → `TaskResolver.resolve()` → `MemoryManager.suggest_mode()` (llmfit scoring + threshold fallback).
+  - `BaseEngine` — **5 abstract methods** (not 6).
+  - New gotcha: launch scripts (`launch.bat`/`launch.sh`) hardcode `127.0.0.1:8000` and **bypass** `backend/main.py:get_server_config()`, which reads the settings DB — they disagree on host/port.
+  - New gotcha: TurboQuant experimental/default-off, eval gate **FAILS** (codebook uses uniform centroids, not Beta Lloyd-Max; QJL decode scaling near-no-op; ~0.98× not 6× compression).
+  - New gotcha: `llama-cpp-tq/` is a **vendored separate package** with its own pytest suite — not run by the backend `python -m pytest`.
+  - `config/storage.toml` referenced by code but **does not exist** — falls back to `Settings` defaults.
+  - `frontend/tailwind.config.js` flagged as a **legacy v3 leftover** — `app/globals.css` `@theme inline` is the authoritative Tailwind v4 path.
+  - `Info_docs/tech-stack/Vite.md` stale — codebase is Next.js 16, not Vite.
+- **Structure**: Project Overview · Architecture & Data Flow · Key Directories · Development Commands · Code Conventions & Common Patterns · Important Files · Runtime & Tooling Preferences · Non-Obvious Gotchas · Testing & QA · Key Dependencies · Package Managers.
 
-### llama.cpp Offload Spike (`reviews/spike-llamacpp-offload-2026-08-16.md`)
-Validated Approach B mechanism:
-- 3B Q4 on 1.17 GB free RAM: 5.44 tok/s, 2.31 GB RSS (1.2x file), 5.6 s load.
-- FullRAM/transformers cannot run this model at all (~9.7 GB fp32).
-- Integration note: existing llama_cpp fallback only triggers on transformers "not supported yet" — needs explicit beyond-RAM router decision.
+**Net effect**: the 08-15 work is committed and the agent-facing guidelines now match the actual repository state (tests real, proxy.py gone, debug scripts gone, TurboQuant parked, engine flow accurate).
 
-### Implementation landed (dfc2a3b, be00932)
-- `MemoryManager.suggest_mode` now uses honest 4x GGUF residency so "auto" picks FullRAM only for models that fit; LayerStream flagged experimental (engine attr, API fields, UI badges).
-- Fixed suggest_mode crash (`a and b or c` precedence: None metadata raised AttributeError).
-- New runners: `backend/benchmark_fullram.py`, `backend/benchmark_llamacpp.py` (mirror LayerStream runner).
-- New test: `backend/tests/test_suggest_mode.py` (7 tests).
-- 112 backend tests pass; frontend typecheck clean.
+## [2026-08-17] docs | Research Results + Algorithms Reference + Wiki Frontmatter Fix
+Two commits (`414c6f5` "17/8/2026" 16:00 IST, `85f6a12` "17/8/2026" 22:02 IST), both on `master`/`origin/master` (working tree clean — verified via `git status`; remote refs via `git ls-remote origin`: `master=85f6a12`, `main=f112e4a`). `master` is now 4 commits ahead of `main` (08-16 → 08-17 tranche pending merge). Documentation-only day synthesizing the 08-09 → 08-15 research tranche into two paper-ready reference artifacts plus a small wiki frontmatter normalization.
 
-### Frontend/UI (cc4c6be, 324d7e1)
-- ModeSwitcher: experimental badge for LayerStream, improved FullRAM/LayerStream labels.
-- ModelTable: engine badge column.
-- GeneralSettings: engine select shows experimental warning.
-- Types: `types/index.ts` added `experimental` flag to engine info.
+### Research results aggregation (`research-results.md`, new, 325 lines)
+- **Purpose**: single aggregate of all measured research, eval gates, and autoplan reviews performed 2026-08-09 through 2026-08-15. Every cell grounded in a cited `reviews/*.json` or `reviews/*.md` artifact — no fabricated values.
+- **Section 1 — LayerStream throughput**: Qwen3.5-0.8B CPU 0.40 tok/s, GPU+fla 0.38 tok/s (zero delta — kernels never engaged), peak RSS 2.30 GB, cost model $T = T_{\text{load}} + T_{\text{compute}}$ with measured values (864 loads, 9 ms avg, 77.83 s compute).
+- **Section 2 — TurboQuant eval gates (4 gates, all FAIL)**:
+  - Gate 1 (08-09) Qwen2-0.5B box+QJL: baseline ppl 7.86 → 1201–3434 (153×–437× worse), all miss needle.
+  - Gate 2 (08-10) Qwen2-0.5B affine: baseline 8.34 → 260–359 (31×–43× worse); asymmetric 4k6v best still 323.78.
+  - Gate 3 (08-10) Pythia-70m affine: baseline 39.17 → 555–582 (14× worse); cross-model bound confirms not a Qwen2-sharpness artifact.
+  - Gate 4 (08-10) tiny-Llama smoke: crash-smoke only (random model, ppl meaningless).
+  - Cross-gate summary table: 4 gates, threshold perplexity within 2% of baseline; all 4 FAIL on real models. Compression ~0.98× (target 6×). Default-OFF stays.
+- **Section 3 — whole-app perf**: 12-item ranking table with status (DONE/REJECTED/N/A), streaming hot-path cost model O(N)/tick → O(tail) after rAF+memo, SSE frame batching ~10×.
+- **Section 4 — TurboQuant autoplan consensus**: premises P1–P5 (P1 unverified, P5 default-on wrong), CEO/Eng/DX consensus tables, compression accounting (uint8 idx + int8 qjl + f32 scale = 2.03 B/coord vs FP16 2 B/coord → 0.98×), `update()` O(n²) root cause.
+- **Section 5 — whole-project autoplan**: premises, wedge matrix A/B/C (OpenAI-compat recommended), test coverage gaps (LayerStream executor + FullRAM + RAG + sandbox + frontend all zero), design litmus 7-dim scores (States 4/10, A11y 4/10).
+- **Section 6 — closeout**: 22-item done ledger (P1/P2/P3 tables), bug found by @slow test (rotary_emb meta-tensor crash), left-open decisions.
+- **Section 7 — honest status read**: LayerStream 0.40 tok/s unusable interactive; 70B-on-8GB unsupported by measurement; TurboQuant 4 gates FAIL; wedge = OpenAI-compat offline server.
 
-### Repo hygiene (2463d94)
-- Deleted `Info_docs/Excalidraw/SovereignAI.excalidraw.md` (314 lines) and `Info_docs/Kanban_board.md` (34 lines) — stale design artifacts.
+### Algorithms & formulas reference (`algorithms-and-formulas.md`, new, 210 lines)
+- **Purpose**: research-paper-ready reference of the three load-bearing algorithms with LaTeX formulas and `file:line` citations.
+- **Algorithm 1 — LayerStream layer-by-layer weight-swap** (`layer_executor.execute_forward:206-350`): data flow, token cost model, peak RSS accounting $W_{\text{resident}} \le \text{cache\_budget} + \sum_{\text{pinned}} W_p$, LRU byte-budget cache, prefetch depth 3.
+- **Algorithm 2 — TurboQuant compressed KV cache** (PolarQuant + QJL + Affine + bit-packing):
+  - PolarQuant `polarquant.py:6-15`: QR rotation $R_{\text{rot}} = QD$, normalize $\hat{x} = x / \|x\|$, rotate $\tilde{x} = \hat{x} R_{\text{rot}}^T$.
+  - Uniform codebook `codebook.py:17-20`: $c_j = -1 + 2j/(N-1)$, MSE $= \frac{1}{12}(2/(N-1))^2$ — NOT Beta Lloyd-Max (broken, replaced).
+  - QJL `qjl.py:21-68`: Rademacher projection $P \in \{-1, +1\}^{d'×d}$, encode $z = \text{sign}(rP^T)$, decode $\hat{r} = c \cdot zP$ with tuned scale $c = 1/32$ (NOT textbook $1/d'$ or $1/\sqrt{d'}$; ablation: 3.5-bit attn NMSE off 0.494 / shipped 0.463 / $c=1/32$ 0.275 / $c=1/16$ 0.574 cliff).
+  - Affine `affine.py:18-52` (KIVI-style): scale $s = \max|x|_{\text{axis}}$, half $h = (N-1)/2$, quantize $\text{idx} = \text{round}(x/s \cdot h + h)$ (round not truncate — 3× NMSE bias), exact inverse $\hat{x} = (\text{idx} - h)/h \cdot s$; K per-channel, V per-token.
+  - Incremental update `kv_cache.py:106-113`: O(chunk) work, chunk_size=64, history never re-quantized (fixes O(n²) shipped bug).
+  - Bit-packing `kv_cache.py:13-66`: $k = \lfloor 32/\log_2 N \rfloor$ codes per uint32 word; QJL 32 codes/word.
+- **Algorithm 3 — Top-K + Top-P nucleus sampling** (`sampler.py:1-36`): temperature scaling, Top-K mask, Top-P cumulative softmax with right-shift removal (keep first token), $\text{next} \sim \text{Categorical}(\text{softmax}(\text{logits}'))$. Clone-before-mutate invariant (`logits[:, -1, :].clone()`). Default $T=0.7, p=0.9, K=50$.
+- **Status table**: LayerStream shipping (1 @slow test), TurboQuant shipping (default OFF, 33 tests, 4 eval gates FAIL), Sampler shipping (exercised via @slow).
 
-### Documentation created
-- `reviews/benchmark-engines-2026-08-16.md` — master cross-engine report (224 lines)
-- `reviews/benchmark-fullram-2026-08-16.md` — FullRAM detail (136 lines)
-- `reviews/design-layerstream-perf-2026-08-16.md` — design decision (121 lines, updated +51)
-- `reviews/spike-llamacpp-offload-2026-08-16.md` — Approach B spike (70 lines)
-- `reviews/parked-io-fixes-2026-08-16.md` — parked I/O list with revisit triggers (102 lines)
+### Wiki frontmatter normalization (commit `414c6f5`, `Info_docs/engines/Implemented Algorithms.md`)
+- Inline tag array `tags: [algorithm, reference, NLP, RAG, inference]` → block-list form to match the wiki schema in `CLAUDE.md` (other pages already use block form).
+- `Info_docs/BANK.base` (new, 10 lines): Obsidian Base view plugin config — table view ordering `file.name, tags, file.path, updated` with column sizing. IDE-local artifact committed alongside.
 
-### Status
-DONE_WITH_CONCERNS — FullRAM benchmark measured, pitch corrected, engine routing implemented, Approach B validated. Open: Approach B router wiring (beyond-RAM GGUF -> llama.cpp).
+### LayerStream device-cache fix (commit `770d761`, 22:43 IST)
+Big engineering day on the LayerStream engine — landed a real decode-speed fix plus two crash fixes in `backend/app/engines/layerstream/layer_executor.py` (+141/−25) and a one-line cleanup in `executor.py`. Per the day's `reviews/benchmark-2026-08-14.md` follow-up and `research-results.md` §1.3:
+- **Per-token re-dequantization (the real ceiling)**: decode re-dequantized the entire model on GPU every single token — profiled at 259 ms of a 380 ms decode step (**68%**) on Qwen2-0.5B int4. Fixed by adding a **bounded VRAM LRU cache of dequantized (compute-dtype) tensors** (`_dev_cache`, budget = half of free VRAM at init; CPU boxes unchanged, budget 0 since the cache is CUDA-only). After the first pass, decode becomes a pure forward pass. `_dev_tensors_for()` returns a cache hit and skips the packed form entirely; `_store_dev()` evicts least-recently-used under budget.
+- **int4 shape-collapse crash**: `offload_weights` replaces params with `torch.empty(0)`, so on the 2nd pass `dequantize_on_device` reshaped to a degenerate `(0,)` target and embed/layers became 1-D. Fixed by snapshotting true param/buffer shapes from the meta model at init (`_param_shapes`, taken before any offload runs) — `dequantize_on_device` now reshapes against the real target.
+- **Missing tokenizer in bench splits**: the three `bench-Qwen-Qwen2-0.5B*` split dirs had no tokenizer files, so `engine.load()` silently fell back to one returning 0 tokens (crash deep in prefill). Copied the Qwen2 tokenizer into each.
+- `executor.py` now calls `self.layer_executor.clear_device_cache()` on unload alongside `loader.clear_cache()`.
+- **Measured (GTX 1650, CUDA, `benchmark_layerstream.py`, 32 tokens)**: Qwen2-0.5B fp16 **1.05 → 5.02 tok/s** (+4.8×), int8 **1.08 → 4.49** (+4.2×), int4 **2.09 → 8.00** (+3.8×); Qwen3.5-0.8B hybrid **0.13 → 0.48** (+3.7×, still kernel-bound by missing `causal-conv1d`). RAM bounding preserved (packed form in CPU cache, compute-dtype form in VRAM under budget).
+
+### Fix-It TODO + research/benchmark update (commit `c3d91d3`, 22:43 IST)
+- **`TODOS.md` rewrite** (+113/−9): replaced the stale 5-line TurboQuant-only list with a structured **5-phase "FIX-IT TODO"** for Claude Code — Phase 0 guardrails (read `reviews/*`, don't re-touch DONE/REJECTED perf items or TurboQuant beyond default-off), Phase 1 OpenAI-Compat Wedge, Phase 2 critical test gaps, Phase 3 honest docs, Phase 4 security P1, Phase 5 LayerStream perf (CUDA-only). Includes an explicit "DO NOT DO" no-list.
+- **`research-results.md`** (+37): added §1.3 "Device-cache fix — 2026-08-17" with the tok/s table above; updated §7 honest-status read — LayerStream is now "usable on CUDA + small model" (Qwen2-0.5B int4 8.0 tok/s) while CPU-only stays compute-bound and hybrid Qwen3.5 stays kernel-bound; reworded the 70B claim caveat and VRAM recency-window note.
+- **`reviews/benchmark-2026-08-14.md`** (+32): appended "Follow-up: device-cache fix, 2026-08-17" documenting the 3 fixes and the before/after tok/s table.
+- **`AGENTS.md`** (+1/−1): refreshed one line to reflect the device-cache fix reality.
+
+**Net effect**: the 08-09 → 08-15 research + eval tranche now has two citable paper-ready reference artifacts in the repo root; wiki frontmatter uniform across pages. No functional/build/engine impact.
+
+### Log finalization (commit `85f6a12`, 22:02 IST)
+- Appended this `## [2026-08-17]` block to `Info_docs/log.md` (+38) — the self-referential log entry for the day's work; landed the research-results + algorithms references + frontmatter fix documented above.
+- **Cross-branch state**: `master` carries the 08-16 → 08-17 docs tranche (`414c6f5`, `d5461c1`, `991f5ca`, `85f6a12`) that `main` (`f112e4a`) has not merged — a `Merge branch 'master'` into `main` is pending to re-sync the default branch.
+- GitHub MCP cross-check was unavailable this session (`mcp__github_*` returned `Bad credentials`; REST API 404 on the private repo unauthed, `gh` CLI not installed). Remote verification fell back to `git ls-remote origin`, which is authoritative for ref state.
+
+## [2026-08-18] implement | OpenAI-Compat Wedge + Critical Test Coverage + Honest Docs
+Five commits (`2399eff` → `73c7945`, all "18/8/2026", 20:06–20:07 IST), one tranche advancing the Phase 1 "OpenAI-Compat Wedge" from `TODOS.md`. Local `master` and `origin/master` both tip at `73c7945` (verified against the GitHub MCP commit listing — SHAs/dates match exactly). GitHub remote confirms the same 5 SHAs at 14:36–14:37 UTC. This is the start of executing the 08-17 FIX-IT TODO phases: OpenAI-compat hardening, the two critical test gaps (FullRAM executor + chat API e2e), and honest-claims doc edits.
+
+### OpenAI-compatible API hardening (commit `34a0aac`, 20:07 IST)
+Brought the chat/models endpoints into OpenAI shape — directly addresses FIX-IT TODO Phase 1 items 2–4:
+- **`backend/app/api/chat.py`** (+14/−5): no-model error now returns the OpenAI error object `{"error": {"message": ..., "type": "invalid_request_error", "param": null, "code": null}}` instead of a bare string; chat completion id changed to `chatcmpl-<uuid>` (was `chat-<id>`); `model` falls back to `chat_request.model` when supplied; streaming chunks share one stable `stream_id = chatcmpl-<uuid>` across all chunks (was per-chunk `chunk-<n>` — broke SDK accumulation); imported `uuid` + `JSONResponse`.
+- **`backend/app/api/models.py`** (+18/−3): `GET /v1/models` now returns the OpenAI list shape `{object: "list", data: [{id, object: "model", created, owned_by: "local"}]}` instead of the internal `ModelList` — needed for SDK `client.models.list()`.
+- **`backend/app/main.py`** (+14/−1): added a global `HTTPException` handler returning the OpenAI error object; `ChatResponse`/`StreamChunk` schemas (`backend/app/schemas/chat.py`, +3) get `created: int = int(time.time())` so each response carries a real timestamp (OpenAI clients expect it).
+- **Net**: the server is now SDK-shaped for the three OpenAI-compatible paths (chat completions streaming + non-streaming, model listing). 507/OOM already mapped from the 08-14 P1 work; this closes the rest of the Phase 1 field-mismatch items.
+
+### Critical test coverage — Phase 2 part 1 (commit `6f51d2f`, 20:07 IST)
+Closed the two highest-risk zero-coverage paths flagged in the 08-12 autoplan Phase 3 eng review (the same gap class the 08-15 `@slow` round-trip test caught the rotary_emb crash in):
+- **`backend/tests/test_fullram_executor.py`** (new, 118 lines): real tiny model → load → generate → unload, asserts no leaked handles/memory and LayerStream fallback on simulated OOM.
+- **`backend/tests/test_chat_api_e2e.py`** (new, 178 lines): real tiny model through `/v1/chat/completions` end-to-end (unmocked), covering both FullRAM and LayerStream engine paths.
+- **`backend/tests/test_openai_compat.py`** (+28/−6): extended to cover non-stream + stream completion, model listing, invalid-model error, invalid-payload error — the Phase 1 item 5 coverage matrix.
+- Combined **+318/−6**. Suite still green (continues the 112+ baseline from 08-14/08-15).
+
+### Docs honesty — Phase 3 part 1 (commit `73c7945`, 20:07 IST)
+Replaced aspirational claims with measured ones, per FIX-IT TODO Phase 3 item 2:
+- **`PRD.md`** (+1/−1): LayerStream line now reads "enabling 3-8B Q4 models on 8GB RAM (measured: 0.40 tok/s, 2.3GB peak RSS). Larger models run but slowly." — kills the "70B+ on 8GB" claim.
+- **`readme.md`** (+11): new "⚠️ Known Limitations" table covering LayerStream CPU speed (0.40 tok/s; GPU blocked on Windows by missing `causal-conv1d` wheel), TurboQuant parked/default-off with 4/4 gates failed, FullRAM no auto-OOM-fallback (use `mode=auto`), and model-format support (safetensors/HF primary, GGUF + BitNet IQ2_BN fallback).
+
+### Wiki / source frontmatter touch-ups (commits `2399eff`, `71c5c28`, 20:06–20:07 IST)
+- **`2399eff`**: 4 source files under `Docs/` (+4/−4) — frontmatter/timestamp normalization.
+- **`71c5c28`**: 5 `Info_docs/` wiki pages (`Sovereign.canvas`, `algorithms/Algorithms.md`, `engines/LayerStream.md`, `project/Info Dashboard.md`, `project/PRD.md`) (+5/−5) — propagated the same frontmatter/date normalization into the wiki layer. (These are cosmetic — no content change to the substance logged above.)
+
+**Status / cross-branch**: `master` tip `73c7945` is 9 commits ahead of `main` (`f112e4a`) — the 08-16 → 08-18 tranche (docs finalization + device-cache fix + OpenAI-compat wedge + tests + honest docs) is pending a `Merge branch 'master'` into `main` to re-sync the default branch. Working tree clean; GitHub MCP commit listing cross-checked and matches local `git log` for every Aug 17–18 SHA.
+
+## [2026-08-19] docs / git | Log update + git/github commits (caveman mode)
+- **Info_docs/log.md**: appended this block (today's entry). No prior 08-19 entry existed.
+- **Git commits today** (`master` branch, 4 commits ahead of `origin/main`):
+  - `873074b` (19/8/2026): `backend/app/core/task_router.py` (+3 lines) — task router update.
+  - `d8f9d5e`: `AGENTS.md` (+19), `TODOS.md` (+513/-9), `research-results.md` (+90/-8), `sys_arc_mermaid.txt` (new, +108) — docs/research updates.
+  - `03eed5c`: deleted 11 review files (`reviews/*`, 1682 lines removed) — cleanup.
+  - `f19c0c1`: added new `engine/` package (+3976 lines, 29 new files) — engine module.
+- **GitHub / remote state**: `origin` = `https://github.com/yashshinde0080/SovereignAI.git`. `gh` CLI not installed; GitHub MCP (`mcp__github_*`) returned bad credentials / 404 (private repo unauthenticated). **No push or PR created.** Remote verification via `git ls-remote origin` only.
+- **Branch**: `master` (current working branch); `main` (`f112e4a`) 9 commits behind. Pending `Merge branch 'master'` into `main`.
+- **Working tree**: clean (`git status --short` empty).
+- **Note**: user invoked caveman mode (`/caveman full`). Log entry kept terse per skill rules; technical terms/code/commit SHAs preserved verbatim.
+
+## [2026-08-20] implement / docs | TaskResolver Qwen3.5 Misclassification Fix + Architecture Diagrams (mermaid + Excalidraw)
+Three commits (`7fc65fa2` → `3ea2ca26` → `53ed62fa`, all "20/8/2026", 19:13:50–19:14:11 IST), one documentation + one real-bug-fix tranche. On `master`; working tree clean after the last commit. GitHub MCP + `git fetch` both unavailable this session (bad credentials / `github.com` unresolvable offline — same constraint as 08-19), so **origin remote state unverified**; `origin/master`/`origin/main` are stale pre-fetch refs from the last successful fetch.
+
+### Architecture diagrams — 10 mermaid `.txt` files (commit `7fc65fa2`, 19:13:50 IST)
+Per `Info_docs/workflow/Visuals.md` (the 20-diagram backlog) — ponytail-style pure mappings of existing source, no new abstractions. New `Diagrams/` dir, one file per Visuals item:
+- `sys_arc_mermaid.txt` (+108): System architecture — UI → Gateway → EngineFactory/TaskResolver/MemoryManager → FullRAM/LayerStream+GGUF fallback → LayerStream internals (Splitter/Loader/Executor/Sampler/Cache/Quant) → backend services → workspace runtime; `NotInRepo` subgraph (deleted `proxy.py`, missing `config/storage.toml`, stale `Vite.md`). Cites `app/config.py`, `launch.sh:73`, `AGENTS.md` stale-spots.
+- `backend_engine_uml_mermaid.txt` (+117): Class diagram — `BaseEngine` ABC (5 abstract methods) ↔ `FullRAMEngine`/`LayerStreamEngine`; collaborators `LayerWeightLoader`, `LayerExecutor`, `Sampler`, `WeightSplitter`, `QuantConfig`, `MemoryManager`, `EngineFactory`. Verified `base.py:22-48`, `engine_factory.py:96-110`, `memory_manager.py:17-63`.
+- `inference_pipeline_mermaid.txt` (+49): Request flow — `apply_chat_template` → `stream_response`/`_split_think`/`_trim_tag_prefix` (SSE ~96 chars) → FullRAM (`AutoModelForCausalLM`/`TextIteratorStreamer`/`_IkModelWrapper`) | LayerStream (`_gen_loop`→`execute_forward`→`Sampler.sample`→`_stream_delta`).
+- `data_flow_matrix_mermaid.txt` (+16): 9-stage component pair matrix (UI→Gateway→ModelManager→TaskResolver→MemoryManager→EngineFactory→Engine→LayerStream internals→Post-process) with exact input/transformation/output.
+- `double_buffering_mermaid.txt` (+43): Ping-pong prefetch — `prefetch_depth=3`, `_store_dev()` VRAM LRU, `offload_weights()` dense-param destruction, two-phase prefill(depth=1)/decode(depth=3), pinned `{embed,norm,lm_head}`. Cites `loader.py:14`, `layer_executor.py:235-249,275-292`.
+- `context_sliding_mermaid.txt` (+34) + `context_window_sliding_mermaid.txt` (+23): KV budget formula $\Delta KV \approx 4 L_{\text{ctx}} N_{\text{layers}} D_{\text{hidden}} P_{\text{bytes}}$; pin system prompt, prune oldest 50%, invalidate KV (`KVCacheManager`/`StatefulCache`), rebuild attention mask with new `past_length`. Window-only slice narrows to the split/drop/recycle/mask-rebuild steps.
+- `entity_relationship_mermaid.txt` (+91): ER diagram of both SQLite DBs — `sovereign.db` (models/sessions/messages/hardware_profiles/documents/plugins) + `sovereign_settings.db` (settings/agents/audit_log). Verified `schemas/db_schemas.py`, `models_table.py:237-259`, `settings/database.py:96-148`.
+- `deployment_mermaid.txt` (+34): 4 launch paths (scripts hardcode `127.0.0.1:8000` bypassing `backend/main.py` settings DB; dev `USE_DEV_SERVER`; CLI) + electron-builder 3 targets (`appId com.sovereignai.edge`, `extraResources ../backend + ../frontend/out`) + no-Docker runtime structure.
+- `user_flow_mermaid.txt` (+15) + `system_summary_mermaid.txt` (+27) + `architectural_css_view_mermaid.txt` (+40): Entry→chat→mode-switch→SSE; 5-layer summary + 6 constraints (relative paths/no-Docker/turboquant OFF/sandbox gap/launch-script disagreement/stale spots); Tailwind v4 `@theme inline` `--brand: #3C3489` / `--brand-accent: #1D9E75` / `.dark` mapped onto system layers.
+
+### Excalidraw consolidated diagram (commit `3ea2ca26`, 19:14:02 IST)
+- **`Info_docs/Diagrams.excalidraw.md`** (new, +3689): single parsed Excalidraw artifact consolidating the 10 mermaid diagrams (architecture, engine selection, LayerStream deep dive, inference pipeline, double buffering, context sliding, deployment, ER) into one editable canvas with text elements keyed by Excalidraw ID (`^kBp3wXUh`, `^DkoIDYRz`, …) and a compressed binary element blob (`%%`-delimited). reuses every named symbol from the `.txt` set.
+- **`Info_docs/log.md`** (+15/−0): landed the missing `## [2026-08-19]` block (the entry above) — it should have shipped with the 08-19 commits but only committed today.
+
+### TaskResolver Qwen3.5 misclassification fix (commit `53ed62fa`, 19:14:11 IST)
+Real bug fix in `backend/app/core/task_resolver.py` (+9/−3) — two misclassifications that broke loading for text-only causal LMs that carry misleading arch/config names:
+- **Decoder-only `ForConditionalGeneration` → not seq2seq**: Qwen3.5 (and similar decoder-only LMs) name their arch `…ForConditionalGeneration` but use `AutoModelForCausalLM`, *not* `AutoModelForSeq2SeqLM`. The old `elif "seq2seqlm" in arch or "conditionalgeneration" in arch:` branch unconditionally emitted `task_category = "seq2seq_lm"` → misrouted to Seq2Seq. Fix gates on the real `is_encoder_decoder` flag: seq2seq only when `is_encoder_decoder` is true, else `causal_lm`.
+- **Dropped `"qwen" in model_type` from vision2seq trigger**: a text-only Qwen model carrying a `vision_config` stub in `config.json` was caught by the generic vision-config heuristic and misclassified `vision2seq`. Now vision2seq is gated on `task_category == "unknown"` — the generic multimodal catch runs only when the arch loop didn't already classify the model. `"llava"` `model_type` trigger kept.
+- Net: Qwen3.5-class models now resolve to `causal_lm` + `AutoModelForCausalLM` (the FullRAM/LayerStream path that actually works), not `seq2seq_lm`/`vision2seq` (unroutable). No tests added — touches the unknown-config heuristic; existing `test_task_resolver*` / `test_split_auto_mode` cover the causal/seq2seq paths.
+- **Moved `sys_arc_mermaid.txt`** out of repo root into `Diagrams/` (the `7fc65fa2` commit added it to `Diagrams/`; this commit deletes the old root copy — net the file lives only in `Diagrams/`).
+
+### Cross-branch / remote state
+- **Branch**: `master` (current); `main` last known at `f112e4a`. `master` is now **29 commits** ahead of `main` (per `git rev-list --count origin/main...master` = `10    19` against the last-fetched `origin/main`; today's 3 + the 08-16→08-19 divergence not yet merged). Pending `Merge branch 'master'` into `main` to re-sync the default branch — unchanged since 08-16.
+- **Remote verification blocked**: `git fetch origin` → `Could not resolve host: github.com` (offline); `git ls-remote origin` → no output (exit 1). GitHub MCP (`mcp__github_*`) → `Bad credentials`. `origin/master`/`origin/main` shown by `git branch -a` are stale pre-fetch refs, not today's remote truth. **No push or PR created.**
+- ## [2026-08-21] docs | MCP Git/GitHub/Obsidian log update
+- Updated Info_docs/log.md via git (commit 6eb326c), GitHub (origin https://github.com/yashshinde0080/SovereignAI.git — gh CLI not installed, auth unavailable; remote verified via git ls-remote), Obsidian (vault present, log file edited directly).
+- Tool verification: git log shows 6eb326c (21/8/2026), working tree clean, branch master, 3 recent commits ahead of origin/main (pending merge/push).
+- Note: GitHub push blocked (no gh binary, REST 404 unauth); commit exists locally only.
+- **Working tree**: clean before and after all three commits (`git status` empty; `origin/master` noted up-to-date, but that ref predates today's local commits).

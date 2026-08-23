@@ -124,7 +124,7 @@ class LayerStreamEngine(BaseEngine):
 
         try:
             tok_kwargs = {
-                "trust_remote_code": True,
+                "trust_remote_code": settings.trust_remote_code,
                 "local_files_only": True
             }
             # Try loading from weights_dir first (preferred for split models)
@@ -149,7 +149,7 @@ class LayerStreamEngine(BaseEngine):
         if not self.tokenizer.pad_token:
             self.tokenizer.pad_token = self.tokenizer.eos_token
             
-        self.config = AutoConfig.from_pretrained(self.weights_dir, trust_remote_code=True)
+        self.config = AutoConfig.from_pretrained(self.weights_dir, trust_remote_code=settings.trust_remote_code)
         # Force eager attention to simplify manual layer execution in modern transformers
         self.config._attn_implementation = "eager"
         
@@ -164,21 +164,20 @@ class LayerStreamEngine(BaseEngine):
             # Try AutoModelForCausalLM first (standard text models)
             # Fall back to AutoModel for multimodal/non-standard architectures
             try:
-                self.model = AutoModelForCausalLM.from_config(self.config, trust_remote_code=True)
+                self.model = AutoModelForCausalLM.from_config(self.config, trust_remote_code=settings.trust_remote_code)
             except Exception:
                 from transformers import AutoModel
-                self.model = AutoModel.from_config(self.config, trust_remote_code=True)
+                self.model = AutoModel.from_config(self.config, trust_remote_code=settings.trust_remote_code)
             
         self.components = ModelIntrospector.detect_model_components(self.model)
 
         # Determine TurboQuant config: explicit arg > settings > disabled
         tq_config = self.turboquant_config
-        from app.config import settings as sov_settings
         if tq_config is None:
-            if sov_settings.turboquant_enabled:
+            if settings.turboquant_enabled:
                 tq_config = {
-                    "bits_per_coord": sov_settings.turboquant_bits,
-                    "enable_qjl": sov_settings.turboquant_qjl_enabled,
+                    "bits_per_coord": settings.turboquant_bits,
+                    "enable_qjl": settings.turboquant_qjl_enabled,
                 }
 
         # Detect hybrid architecture (e.g. Qwen3.5 linear_attention + full_attention)
@@ -187,8 +186,8 @@ class LayerStreamEngine(BaseEngine):
         if layer_types is None:
             layer_types = getattr(self.ls_config, 'layer_types', None)
 
-        prefetch_depth = getattr(sov_settings, "layerstream_prefetch_depth", 3)
-        cache_budget_mb = getattr(sov_settings, "layerstream_cache_budget_mb", None)
+        prefetch_depth = getattr(settings, "layerstream_prefetch_depth", 3)
+        cache_budget_mb = getattr(settings, "layerstream_cache_budget_mb", None)
         if cache_budget_mb is None:
             cache_budget_mb = _default_cache_budget_mb(self.weights_dir)
 
@@ -215,6 +214,7 @@ class LayerStreamEngine(BaseEngine):
             self.tokenizer = None
         if self.layer_executor:
             self.layer_executor.loader.clear_cache()
+            self.layer_executor.clear_device_cache()
             if self.layer_executor._is_hybrid:
                 self.layer_executor.cache.clear()
             else:
@@ -264,7 +264,9 @@ class LayerStreamEngine(BaseEngine):
             
         inputs = tokenizer(prompt, return_tensors="pt")
         input_ids = inputs["input_ids"].to(self.device)
-        prompt_tokens = input_ids.shape[1]
+        # Note: generated_tokens starts empty — prompt tokens are NOT included.
+        # Unlike FullRAMEngine (which uses model.generate() and must strip the
+        # prompt), LayerStream builds the output token-by-token from scratch.
         generated_tokens = []
         
         def _gen_loop():

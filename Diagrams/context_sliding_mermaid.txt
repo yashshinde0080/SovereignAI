@@ -1,0 +1,34 @@
+```mermaid
+flowchart TD
+    subgraph ContextWindow["Context Window Sliding — keep conversation within memory budget"]
+        CW1["System prompt pinned (anchor) — never pruned"] --> CW2["History turns: oldest 50% pruned when token budget exceeded"]
+        CW2 --> CW3["KV cache entries for pruned tokens invalidated (recycled)"]
+        CW3 --> CW4["Sliding window: retain recent N tokens + pinned system prompt"]
+    end
+
+    subgraph MemoryBudget["Memory budget — linear with context length"]
+        MB1["ΔKV ≈ 4 × L_ctx × N_layers × D_hidden × Precision_Bytes"] --> MB2["7B model: 32 layers, 4096 hidden, FP16 → ~2GB at 2048 tokens"]
+        MB2 --> MB3["FullRAM: KV in VRAM; LayerStream: KV in system RAM"]
+        MB3 --> MB4["Context sliding prevents unbounded growth → OOM protection"]
+    end
+
+    subgraph SlidingLogic["Sliding logic (per-request, in stream loop)"]
+        SL1["token_count > budget?"] -->|no| SL2["Continue decode; append token to KV cache"]
+        SL1 -->|yes| SL3["Identify oldest turn after pinned system prompt"]
+        SL3 --> SL4["Drop oldest tokens from input_ids"]
+        SL4 --> SL5["Clear corresponding KV entries (KVCacheManager / StatefulCache)"]
+        SL5 --> SL6["Rebuild attention mask with new past_length"]
+        SL6 --> SL7["Continue with shorter context; system prompt preserved"]
+    end
+
+    subgraph RAGOverlap["RAG overlap (independent of sliding) — top_k=5 chunks"]
+        R1["vector_store.build_context(query_text, max_tokens) — FAISS cosine"] --> R2["Chunks injected before apply_chat_template()"]
+        R2 --> R3["Sliding operates on messages[] + RAG context together; budget = total tokens"]
+    end
+
+    ContextWindow --> MemoryBudget
+    MemoryBudget --> SlidingLogic
+    SlidingLogic --> RAGOverlap
+```
+
+`ponytail:` reused `KVCacheManager`, `StatefulCache`, `FAISS`, `build_context()`, `apply_chat_template()`, `system_prompt` — all from `sys_arc_mermaid.txt` and source (`kv_cache.py`, `vectorstore/manager.py`, `api/chat.py`). Created `context_sliding_mermaid.txt` in root (`D:\SovereignAI`). No new abstractions; pure mapping of `Context Sliding` described in AGENTS.md (`Info_docs/engines/KV Cache.md`: pins system prompt, prunes oldest, recycles KV slots; `Info_docs/workflow/Visuals.md`: oldest 50% pruned). Skipped: plugin sandbox isolation details and security encryption (`ModelEncryption`); add when user asks. Check: KV memory formula verified against `KV Cache.md` (line 16-21); `StatefulCache` (hybrid) and `KVCacheManager` (standard) named in `kv_cache.py`; `build_context()` uses `max_tokens` budget in `vectorstore/manager.py`.

@@ -5,8 +5,9 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from enum import IntEnum
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -80,16 +81,12 @@ async def lifespan(app: FastAPI):
 
     # Initialize database
     from app.database.manager import DatabaseManager
-    from pathlib import Path
-    config_path = str(Path(__file__).parent / "config" / "storage.toml")
-    app.state.db = DatabaseManager(config_path=config_path)
+    app.state.db = DatabaseManager()
     app.state.db.initialize()
 
     # Initialize vector store
     from app.vectorstore.manager import VectorStoreManager
-    from pathlib import Path
-    config_path = str(Path(__file__).parent / "config" / "storage.toml")
-    app.state.vector_store = VectorStoreManager(config_path=config_path)
+    app.state.vector_store = VectorStoreManager()
     app.state.vector_store.initialize()
 
     # Detect hardware (llmfit-powered, falls back to legacy)
@@ -130,6 +127,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down...")
     if app.state.active_engine:
         await app.state.active_engine.unload()
+    if hasattr(app.state, 'model_manager') and hasattr(app.state.model_manager, 'provider'):
+        await app.state.model_manager.provider.cleanup()
     if hasattr(app.state, 'db'):
         app.state.db.shutdown()
     if hasattr(app.state, 'vector_store'):
@@ -142,6 +141,17 @@ app = FastAPI(
     description="Portable Offline AI Compute Platform",
     lifespan=lifespan
 )
+
+# OpenAI-compatible error shape: {"error": {"message": ..., "type": ..., "param": ..., "code": ...}}
+@app.exception_handler(HTTPException)
+async def _openai_error_handler(request: Request, exc: HTTPException):
+    detail = exc.detail
+    if isinstance(detail, dict) and "error" in detail:
+        return JSONResponse(status_code=exc.status_code, content=detail)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": {"message": str(detail), "type": "invalid_request_error", "param": None, "code": None}}
+    )
 
 # Rate limiter setup
 app.state.limiter = limiter

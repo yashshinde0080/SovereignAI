@@ -93,6 +93,33 @@ class ModelRegistry:
                 metadata.get("created_at", datetime.now().isoformat())
             ))
             await db.commit()
+
+    async def bulk_upsert(self, models: List[Dict[str, Any]]):
+        """Insert or replace multiple models in a single transaction."""
+        if not models:
+            return
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.executemany("""
+                INSERT OR REPLACE INTO models
+                (id, name, family, parameters, quant, size_gb, path, checksum, downloaded, modes_supported, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                (
+                    m["id"],
+                    m["name"],
+                    m.get("family"),
+                    m.get("parameters"),
+                    m.get("quant"),
+                    m.get("size_gb"),
+                    m.get("path"),
+                    m.get("checksum"),
+                    1 if m.get("downloaded", True) else 0,
+                    ",".join(m.get("modes_supported", [])),
+                    m.get("created_at", datetime.now().isoformat())
+                )
+                for m in models
+            ])
+            await db.commit()
     
     async def get_model(self, model_id: str) -> Optional[Dict[str, Any]]:
         """Get model by ID"""

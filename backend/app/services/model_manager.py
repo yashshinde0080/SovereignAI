@@ -102,7 +102,11 @@ class ModelManager:
         folders = [d for d in installed_dir.iterdir() if d.is_dir()]
         gguf_files = list(installed_dir.glob("*.gguf")) + list(installed_dir.glob("*.gguf.enc"))
         
-        installed_ids = []
+        # Collect all discovered metadata, then batch-upsert once.
+        # This replaces N individual add_model() calls (each opening its own
+        # DB connection + commit) with a single transaction.
+        discovered: List[Dict[str, Any]] = []
+        installed_ids: List[str] = []
         
         # Scan folders
         for model_dir in folders:
@@ -130,8 +134,7 @@ class ModelManager:
             
             if metadata:
                 logger.info("SCAN: Found model %s at %s", metadata['id'], metadata['path'])
-                # Always register/update to sync DB with disk
-                await self.registry.add_model(metadata)
+                discovered.append(metadata)
                 installed_ids.append(metadata["id"])
 
         # Scan standalone GGUF files
@@ -150,7 +153,7 @@ class ModelManager:
                 "created_at": datetime.now().isoformat()
             }
             logger.info("SCAN: Found GGUF model %s at %s", model_id, gguf_path)
-            await self.registry.add_model(metadata)
+            discovered.append(metadata)
             installed_ids.append(model_id)
         
         # ALSO SCAN OFFLOAD CACHE
@@ -188,16 +191,22 @@ class ModelManager:
                             }
                         
                         logger.info("SCAN: Found split model %s at %s", model_id, metadata['path'])
-                        await self.registry.add_model(metadata)
+                        discovered.append(metadata)
                         installed_ids.append(model_id)
 
+        # Single batch upsert — one DB connection, one commit
+        if discovered:
+            await self.registry.bulk_upsert(discovered)
+
         # Cleanup registry: remove models that no longer exist on disk
+        installed_set = set(installed_ids)
         db_models = await self.registry.list_models()
-        for db_m in db_models:
-             if db_m["id"] not in installed_ids:
-                 # Check if path still exists
-                 if not Path(db_m["path"]).exists():
-                     await self.registry.delete_model(db_m["id"])
+        stale_ids = [
+            db_m["id"] for db_m in db_models
+            if db_m["id"] not in installed_set and not Path(db_m["path"]).exists()
+        ]
+        for stale_id in stale_ids:
+            await self.registry.delete_model(stale_id)
 
     async def _discover_model(self, model_dir: Path) -> Optional[Dict[str, Any]]:
         """Try to discover model information from a directory"""
@@ -218,8 +227,18 @@ class ModelManager:
             except Exception:
                 pass
             
-            # Calculate size
-            size_bytes = sum(f.stat().st_size for f in model_dir.rglob("*") if f.is_file())
+            # Calculate size with os.scandir (faster than rglob for deep trees)
+            size_bytes = 0
+            try:
+                for entry in os.scandir(model_dir):
+                    if entry.is_file(follow_symlinks=False):
+                        size_bytes += entry.stat().st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        for sub in os.scandir(entry):
+                            if sub.is_file(follow_symlinks=False):
+                                size_bytes += sub.stat().st_size
+            except OSError:
+                pass
             
             return {
                 "id": model_id,
@@ -257,23 +276,35 @@ class ModelManager:
         """Unified load logic with hardware check"""
         from app.core.engine_factory import EngineFactory
 
-        # Wait for background scan to finish so the registry is complete.
-        scan_task = getattr(self, "_scan_task", None)
-        if scan_task and not scan_task.done():
-            logger.info("LOAD: Waiting for model scan to complete...")
-            await scan_task
-
         logger.info("LOAD: Request for model %s (mode=%s)", model_id, mode)
-        model = await self.get_model(model_id)
-        
+
+        # Try to find the model from the existing registry FIRST.
+        # Only await the background scan if the model isn't known yet.
+        all_models = await self.list_models()
+        models_by_id = {m["id"]: m for m in all_models}
+        model = models_by_id.get(model_id)
+
         if not model:
             # Fuzzy match: some callers pass display names or dash-replaced ids
-            all_models = await self.list_models()
             model = _fuzzy_match_model(all_models, model_id)
             if model:
                 logger.info("LOAD: Fuzzy matched %s to %s", model_id, model['id'])
                 model_id = model["id"]
-                    
+
+        if not model:
+            # Model not in registry yet — wait for scan to finish
+            scan_task = getattr(self, "_scan_task", None)
+            if scan_task and not scan_task.done():
+                logger.info("LOAD: Model not in registry, waiting for scan...")
+                await scan_task
+                all_models = await self.list_models()
+                models_by_id = {m["id"]: m for m in all_models}
+                model = models_by_id.get(model_id)
+                if not model:
+                    model = _fuzzy_match_model(all_models, model_id)
+                    if model:
+                        model_id = model["id"]
+
         if not model:
             logger.warning("LOAD: Model %s not found in registry", model_id)
             raise ValueError(f"Model {model_id} not found in registry")
@@ -282,9 +313,9 @@ class ModelManager:
             raise RuntimeError("ModelManager not linked to FastAPI application state")
         
         async with self._load_lock:
-            return await self._load_model_locked(model_id, mode, model)
+            return await self._load_model_locked(model_id, mode, model, all_models)
 
-    async def _load_model_locked(self, model_id: str, mode: str, model: Dict[str, Any]) -> Dict[str, Any]:
+    async def _load_model_locked(self, model_id: str, mode: str, model: Dict[str, Any], all_models: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Body of load_model, run under the concurrent-load lock."""
         from app.core.engine_factory import EngineFactory
 
@@ -305,8 +336,8 @@ class ModelManager:
         if mode == "fullram" and model["id"].startswith("split:"):
             target_base = model["id"].replace("split:", "")
 
-            # Reuse fuzzy matching logic to find the base model
-            all_models = await self.list_models()
+            # Reuse fuzzy matching logic to find the base model — uses all_models
+            # passed from load_model() instead of querying the registry again.
             clean_target = target_base.replace("/", "-").replace(":", "-").lower()
 
             base_model = None
@@ -348,6 +379,8 @@ class ModelManager:
 
         # Initialize engine (pass metadata for llmfit scoring). EngineFactory
         # only creates; the caller owns load() so error mapping stays here.
+        # Pass model_metadata so EngineFactory uses size_gb from registry instead
+        # of recalculating via rglob, and so TaskResolver only runs once.
         factory = EngineFactory(self.app.state.hardware_profile)
         engine = await factory.create_engine(
             model_path=model_path,

@@ -13,6 +13,7 @@ def get_server_config():
     port = 8000
     
     if os.path.exists(db_path):
+        conn = None
         try:
             conn = sqlite3.connect(db_path)
             conn.row_factory = sqlite3.Row
@@ -25,9 +26,11 @@ def get_server_config():
                     host = "127.0.0.1"
                 else:
                     host = "0.0.0.0"
-            conn.close()
         except Exception as e:
             print(f"Warning: Could not read settings DB for server config: {e}")
+        finally:
+            if conn:
+                conn.close()
             
     return host, port
 

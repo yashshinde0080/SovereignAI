@@ -1,0 +1,49 @@
+```mermaid
+flowchart TD
+    subgraph ClientInput["Client input → /v1/chat/completions or /execute"]
+        I1["Request: messages[] + system_prompt (SettingsService) + RAG context (FAISS top_k=5)"] --> I2["apply_chat_template() — inject <think> toggle if enable_thinking"]
+    end
+
+    subgraph GatewayPipeline["FastAPI Gateway pipeline (app/main.py → api/chat.py)"]
+        G1["lifespan() init: DB, vector_store, hw_profile, model_manager, settings, plugins"] --> G2["chat_completions(request) — validate ChatRequest"]
+        G2 --> G3["stream_response() async generator OR engine.generate() non-streaming"]
+        G3 --> G4["_split_think() — separate reasoning (<think>...</think>) from content"]
+        G4 --> G5["_trim_tag_prefix() — drop partial tags at frame boundary"]
+        G5 --> G6["SSE batching (~96 chars/frame) → yield 'data: {...}\n\n'"]
+    end
+
+    subgraph EnginePipeline["Engine pipeline — 2 branches"]
+        direction TB
+        E1["BaseEngine ABC: load() / unload() / generate() / generate_stream() / get_memory_usage()"] --> E2
+        E1 --> E3
+
+        subgraph FullRAMBranch["FullRAM (fullram/executor.py) — entire model in RAM/VRAM"]
+            E2["load(): AutoModelForCausalLM.from_pretrained() → CUDA / CPU"] --> E2a["GGUF fallback: gguf_file= kwarg → llama-cpp-python / ik-llama-cpp-python"]
+            E2a --> E2b["generate(): model.generate(input_ids) → dict"]
+            E2b --> E2c["generate_stream(): TextIteratorStreamer (thread) → AsyncGenerator"]
+            E2c --> E2d["_IkModelWrapper: thin wrapper for ik_llama.cpp (pop 'stream', max_tokens=512)"]
+        end
+
+        subgraph LayerStreamBranch["LayerStream (layerstream/executor.py) — layer-by-layer, memory-bounded"]
+            E3["load(): WeightSplitter.load() + LayerWeightLoader init"] --> E3a["_gen_loop(): prefill → decode loop"]
+            E3a --> E3b["execute_forward(mode='prefill'|'decode') → logits"]
+            E3b --> E3c["Sampler.sample(logits) → token_ids"]
+            E3c --> E3d["_stream_delta(tokenizer, all_tokens, emitted, window=8) → new_suffix"]
+            E3d --> E3e["generate_stream(): yield per-token dict → stream_response()"]
+            E3e --> E3f["generate(): aggregate stream → single dict response"]
+        end
+    end
+
+    subgraph PostProcess["Post-processing + response"]
+        P1["_split_think(content) → (content_text, reasoning_text)"] --> P2["reasoning emitted as separate stream field (optional)"]
+        P2 --> P3["content emitted as 'choices[].message.content'"]
+        P3 --> P4["finish_reason: 'stop' / 'length' / 'content_filter'"]
+    end
+
+    ClientInput --> GatewayPipeline
+    GatewayPipeline --> EnginePipeline
+    FullRAMBranch --> PostProcess
+    LayerStreamBranch --> PostProcess
+```
+
+`ponytail:` reused existing names (`BaseEngine`, `FullRAMEngine`, `LayerStreamEngine`, `stream_response`, `_split_think`, `_trim_tag_prefix`, `_stream_delta`, `WeightSplitter`, `Sampler`, `TextIteratorStreamer`, `_IkModelWrapper`) — all from `sys_arc_mermaid.txt` and source (`chat.py`, `executor.py`, `layer_executor.py`, `loader.py`). Created `inference_pipeline_mermaid.txt` in root (`D:\SovereignAI`). Skipped: security encryption (`ModelEncryption` / Fernet) and plugin execution paths — add when user asks. No new abstractions; design is pure mapping of the existing inference flow from client request through SSE stream. Check: `_stream_delta` overlap scan confirmed non-monotonic `endswith` behavior (line 62-68), `_split_think` separates `<think>` from content (line 332-367).

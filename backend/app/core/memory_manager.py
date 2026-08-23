@@ -22,10 +22,7 @@ class MemoryManager:
         """
         import torch
 
-        # Try llmfit scoring when model metadata available. The parens matter:
-        # ``a and b or c`` parses as ``(a and b) or c``, so a None metadata
-        # would evaluate ``model_metadata.get("id")`` and crash outside the
-        # try/except below.
+        # Try llmfit scoring when model metadata available
         if model_metadata and (model_metadata.get("name") or model_metadata.get("id")):
             try:
                 from llmfit import score_model_fit

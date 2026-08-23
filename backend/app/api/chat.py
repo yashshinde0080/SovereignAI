@@ -3,9 +3,10 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     if not app.state.active_engine:
         raise HTTPException(
             status_code=400,
-            detail="No model loaded. Use /v1/models/load first."
+            detail={"error": {"message": "No model loaded. Use /v1/models/load first.", "type": "invalid_request_error", "param": None, "code": None}}
         )
     
     # Build prompt from messages using tokenizer's template if possible
@@ -153,8 +154,8 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
         message["reasoning"] = reasoning
     
     return ChatResponse(
-        id=f"chat-{id(response)}",
-        model=app.state.active_model,
+        id=f"chatcmpl-{uuid.uuid4().hex[:24]}",
+        model=chat_request.model or app.state.active_model,
         choices=[{
             "index": 0,
             "message": message,
@@ -210,6 +211,9 @@ async def stream_response(
     rsent = 0  # chars of stripped reasoning already emitted
     chunk_no = 0
 
+    # Stable stream id — one per request, all chunks share it
+    stream_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+
     def _emit(content: str, reasoning: str = "", finish_reason: str = None) -> str:
         nonlocal chunk_no
         chunk_no += 1
@@ -217,7 +221,7 @@ async def stream_response(
         if reasoning and reasoning.strip():
             delta["reasoning"] = reasoning
         data = StreamChunk(
-            id=f"chunk-{chunk_no}",
+            id=stream_id,
             choices=[{"index": 0, "delta": delta, "finish_reason": finish_reason}]
         )
         return f"data: {json.dumps(data.model_dump())}\n\n"
@@ -241,51 +245,59 @@ async def stream_response(
         pending_chars = 0
         return frame
 
-    async for chunk in engine.generate_stream(
-        input_data=prompt,
-        max_tokens=request.max_tokens,
-        temperature=request.temperature,
-        top_p=request.top_p
-    ):
-        # Stop generating when the client goes away: an abandoned stream would
-        # otherwise run to completion on a slow local engine, stealing RAM/CPU.
-        # The engine's generator is closed by GC on return.
-        if http_request is not None and await http_request.is_disconnected():
-            return
-        token = chunk.get("token", "")
-        finish = chunk.get("finish_reason")
-        if not token and finish is None:
-            continue
-        full_text += token
+    try:
+        async for chunk in engine.generate_stream(
+            input_data=prompt,
+            max_tokens=request.max_tokens,
+            temperature=request.temperature,
+            top_p=request.top_p
+        ):
+            # Stop generating when the client goes away: an abandoned stream would
+            # otherwise run to completion on a slow local engine, stealing RAM/CPU.
+            # The engine's generator is closed by GC on return.
+            if http_request is not None and await http_request.is_disconnected():
+                return
+            token = chunk.get("token", "")
+            finish = chunk.get("finish_reason")
+            if not token and finish is None:
+                continue
+            full_text += token
 
-        content, reasoning = _split_think(full_text)
-        # Hold back trailing partial tags (e.g. "<thi", "</thi") so neither
-        # stream leaks a half-emitted tag or overshoots its offset
-        content = _trim_tag_prefix(content)
-        reasoning = _trim_tag_prefix(reasoning or "")
-        c_out = r_out = ""
-        if len(content) > sent:
-            c_out = content[sent:]
-            sent = len(content)
-        if len(reasoning) > rsent:
-            r_out = reasoning[rsent:]
-            rsent = len(reasoning)
-        if c_out or r_out:
-            pending_c.append(c_out)
-            pending_r.append(r_out)
-            pending_chars += len(c_out) + len(r_out)
-            if pending_chars >= BATCH_CHARS:
+            content, reasoning = _split_think(full_text)
+            # Hold back trailing partial tags (e.g. "<thi", "</thi") so neither
+            # stream leaks a half-emitted tag or overshoots its offset
+            content = _trim_tag_prefix(content)
+            reasoning = _trim_tag_prefix(reasoning or "")
+            c_out = r_out = ""
+            if len(content) > sent:
+                c_out = content[sent:]
+                sent = len(content)
+            if len(reasoning) > rsent:
+                r_out = reasoning[rsent:]
+                rsent = len(reasoning)
+            if c_out or r_out:
+                pending_c.append(c_out)
+                pending_r.append(r_out)
+                pending_chars += len(c_out) + len(r_out)
+                if pending_chars >= BATCH_CHARS:
+                    frame = _take_pending()
+                    if frame:
+                        yield frame
+
+            if finish is not None:
                 frame = _take_pending()
                 if frame:
                     yield frame
-
-        if finish is not None:
-            frame = _take_pending()
-            if frame:
-                yield frame
-            yield _emit("", "", finish)
-            sent, rsent = 0, 0
-            full_text = ""
+                yield _emit("", "", finish)
+                sent, rsent = 0, 0
+                full_text = ""
+    except Exception as e:
+        logger.error("Stream generation failed: %s", e)
+        # Flush any partial content before sending the error
+        frame = _take_pending()
+        if frame:
+            yield frame
+        yield _emit("", "", "error")
 
     # Flush any remaining batched deltas before the metadata/DONE trailers.
     frame = _take_pending()

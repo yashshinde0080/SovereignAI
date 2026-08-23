@@ -21,6 +21,9 @@ class TaskRouter:
         # Generative — the only tasks executed end-to-end today
         "causal_lm": AutoModelForCausalLM,
         "seq2seq_lm": AutoModelForSeq2SeqLM,
+        # Vision-language models (LLaVA, Qwen-VL, etc.) load via AutoModelForCausalLM
+        # for text inference; FullRAMEngine handles processor/vision loading separately.
+        "vision2seq": AutoModelForCausalLM,
     }
 
     @classmethod

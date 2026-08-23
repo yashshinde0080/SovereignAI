@@ -88,8 +88,11 @@ class ModelManager:
         if n:
             logger.info("Custom model catalog: %s models loaded from %s", n, settings.catalog_dir)
 
-        # Scan for models
-        await self.scan_installed()
+        # Scan for models in background so the server starts immediately.
+        # load_model() awaits _scan_task before loading, so startup model
+        # still loads correctly after the scan finishes.
+        self._scan_task: Optional[asyncio.Task] = None
+        self._scan_task = asyncio.ensure_future(self.scan_installed())
     
     async def scan_installed(self):
         """Scan models directory for installed models and sync with registry"""
@@ -253,7 +256,13 @@ class ModelManager:
     async def load_model(self, model_id: str, mode: str = "auto") -> Dict[str, Any]:
         """Unified load logic with hardware check"""
         from app.core.engine_factory import EngineFactory
-        
+
+        # Wait for background scan to finish so the registry is complete.
+        scan_task = getattr(self, "_scan_task", None)
+        if scan_task and not scan_task.done():
+            logger.info("LOAD: Waiting for model scan to complete...")
+            await scan_task
+
         logger.info("LOAD: Request for model %s (mode=%s)", model_id, mode)
         model = await self.get_model(model_id)
         
@@ -278,9 +287,12 @@ class ModelManager:
     async def _load_model_locked(self, model_id: str, mode: str, model: Dict[str, Any]) -> Dict[str, Any]:
         """Body of load_model, run under the concurrent-load lock."""
         from app.core.engine_factory import EngineFactory
-        # Unload current if any
-        await self.unload_model()
-        
+
+        # Save previous engine so we can restore it if the new load fails.
+        prev_engine = self.app.state.active_engine
+        prev_model = self.app.state.active_model
+        prev_mode = self.app.state.active_mode
+
         # Split models are stored in offload_cache as per-layer safetensors and
         # only support the LayerStream engine. auto must never hand them to
         # fullram (which would look for a consolidated model.safetensors that
@@ -292,22 +304,22 @@ class ModelManager:
         model_path = model["path"]
         if mode == "fullram" and model["id"].startswith("split:"):
             target_base = model["id"].replace("split:", "")
-            
+
             # Reuse fuzzy matching logic to find the base model
             all_models = await self.list_models()
             clean_target = target_base.replace("/", "-").replace(":", "-").lower()
-            
+
             base_model = None
             for m in all_models:
                 # Don't match against other split models
                 if m["id"].startswith("split:"):
                     continue
-                    
+
                 clean_m = m["id"].replace("/", "-").replace(":", "-").lower()
                 if clean_m == clean_target:
                     base_model = m
                     break
-            
+
             if base_model:
                 logger.info("LOAD: Switching to base model %s path for fullram mode", base_model['id'])
                 model_path = base_model["path"]
@@ -346,13 +358,24 @@ class ModelManager:
             await engine.load()
         except Exception:
             await engine.unload()
+            # Restore the previous engine so the user doesn't lose their model.
+            self.app.state.active_engine = prev_engine
+            self.app.state.active_model = prev_model
+            self.app.state.active_mode = prev_mode
             raise
-        
+
+        # New engine loaded — unload the old one.
+        if prev_engine is not None:
+            try:
+                await prev_engine.unload()
+            except Exception:
+                logger.warning("Failed to unload previous engine during model switch")
+
         # Update app state
         self.app.state.active_engine = engine
         self.app.state.active_model = model_id
         self.app.state.active_mode = engine.mode
-        
+
         return {
             "status": "loaded",
             "model": model_id,

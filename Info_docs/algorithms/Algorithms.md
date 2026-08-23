@@ -9,7 +9,7 @@ updated: 2026-07-21
 
 SovereignAI Edge's efficiency rests on custom algorithms designed to squeeze maximum performance from constrained hardware while remaining entirely offline. Three foundational algorithms drive the system. The **Adaptive Memory Allocation Algorithm** prevents out-of-memory (OOM) crashes: it parses the GGUF header for total tensor bytes, queries free system RAM and VRAM, and routes execution to GPU (if VRAM is sufficient), FullRAM CPU (if total RAM exceeds model size by a 10% buffer), or LayerStream (if RAM is insufficient). The **LayerStream Execution Algorithm** breaks the traditional requirement that the entire model graph reside in memory: it locks the KV cache in RAM, allocates a two-layer sliding buffer, computes Layer N while asynchronously pre-fetching Layer N+1 from NVMe SSD, then discards and overwrites. The **Context Window Sliding Mechanism** pins the system prompt, prunes the oldest 50% of conversation history when the token limit is exceeded, and invalidates the corresponding KV cache entries.
 
-These algorithms together enable running 70B-parameter models on as little as 8 GB of RAM by effectively treating the SSD as virtualized model memory and the context window as a rolling buffer.
+These algorithms together enable running 3-8B Q4 models on 8 GB of RAM (measured: 0.40 tok/s) by effectively treating the SSD as virtualized model memory and the context window as a rolling buffer.
 
 ## Key Points
 

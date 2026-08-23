@@ -1,5 +1,10 @@
 ---
-tags: [algorithm, reference, NLP, RAG, inference]
+tags:
+  - algorithm
+  - reference
+  - NLP
+  - RAG
+  - inference
 source: "[[Docs/implemented_algorithms.md]]"
 created: 2026-07-21
 updated: 2026-07-21

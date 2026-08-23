@@ -1,0 +1,91 @@
+```mermaid
+erDiagram
+    MODELS ||--o{ SESSIONS : "model used in"
+    MODELS ||--o{ DOCUMENTS : "derived from / indexed in"
+    SESSIONS ||--o{ MESSAGES : "contains"
+    HARDWARE ||--|| MODELS : "determines mode (fullram / layerstream)"
+    HARDWARE ||--|| SETTINGS : "profile stored in"
+    PLUGINS ||--|| SESSIONS : "executed during"
+    AGENTS ||--|| SETTINGS : "agent config in settings DB"
+    AUDIT_LOG ||--|| SETTINGS : "audit entries in settings DB"
+
+    MODELS {
+        int model_id PK
+        string name
+        string family
+        string quant_type
+        string status
+        int last_used_timestamp
+        int use_count
+        string checksum
+        int storage_bytes
+    }
+
+    SESSIONS {
+        int session_id PK
+        int model_id FK
+        string session_name
+        datetime created_at
+        datetime updated_at
+        string snapshot_path
+    }
+
+    MESSAGES {
+        int message_id PK
+        int session_id FK
+        string role "user | assistant | system"
+        text content
+        int token_length
+        datetime timestamp
+    }
+
+    HARDWARE_PROFILES {
+        int profile_id PK
+        string cpu_model
+        int ram_total_gb
+        int ram_available_gb
+        int vram_total_gb
+        int disk_speed_mbps
+        datetime detected_at
+    }
+
+    DOCUMENTS {
+        int doc_id PK
+        string filename
+        string content_hash
+        int chunk_count
+        int total_tokens
+        datetime ingested_at
+    }
+
+    PLUGINS {
+        int plugin_id PK
+        string plugin_name
+        string import_path
+        string actions_json
+        datetime registered_at
+    }
+
+    SETTINGS {
+        string section PK "general / security / agents / audit"
+        text data_json
+    }
+
+    AGENTS {
+        string agent_id PK
+        string name
+        text config_json
+        bool is_active
+        int created_at
+    }
+
+    AUDIT_LOG {
+        int log_id PK
+        string event_type
+        string user_ref
+        text details_json
+        datetime timestamp
+    }
+```
+
+`ponytail:` item 13 (`ER diagram`) — maps the two SQLite DB schemas: `sovereign.db` (`models`, `sessions`, `messages`, `hardware_profiles`, `documents`, `plugins`) and `sovereign_settings.db` (`settings`, `agents`, `audit_log`). Created `entity_relationship_mermaid.txt` in root (`D:\SovereignAI`). Reused table/entity names (`MODELS`, `SESSIONS`, `MESSAGES`, `HARDWARE_PROFILES`, `DOCUMENTS`, `PLUGINS`, `SETTINGS`, `AGENTS`, `AUDIT_LOG`) — all named in `backend/app/database/` (`models_table.py`, `sessions_table.py`, `hardware_table.py`, `documents_table.py`, `plugins_table.py`, `audit_table.py`) and `backend/app/settings/database.py` (`settings`, `agents`, `audit_log` sections). No new entities; pure consolidation of `Info_docs/project/Visuals.md` line 20 (`ER diagram shows Models, Sessions, Messages, Hardware, and Plugins tables`). Skipped: full relationship cardinality for plugin-to-session execution (timeout-only sandbox gap documented elsewhere) and security-level encryption relationships (`ModelEncryption` uses machine salt from `platform.node()` + `getnode()` — not an entity relationship). Check: `MODELS` has `model_id`, `name`, `family`, `quant_type`, `status`, `checksum`, `storage_bytes` — verified in `schemas/db_schemas.py` (`ModelRecord`) and `models_table.py` lines 237-259 (`_row_to_record`); `HARDWARE_PROFILES` matches `hardware_table.py`; `SETTINGS` section-based (`general` / `security` / `agents` / `audit`) confirmed `settings/database.py` lines 96-148; `AGENTS` table with `agent_id`, `is_active` confirmed `defaults.py` (`DEFAULT_AGENTS`) and `database.py` lines 195-336.

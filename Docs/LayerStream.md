@@ -20,7 +20,7 @@ A ==memory-bounded inference architecture== that enables running large language 
 | **VRAM Usage** | Size of single layer (~1-2% of model) |
 | **Bottleneck** | Storage I/O bandwidth (SSD read speed) |
 | **Throughput** | ~1.14 tokens/sec on PCIe Gen3 for 7B model |
-| **Best For** | 70B+ models on 8GB RAM laptops |
+| **Best For** | 3-8B Q4 models on 8GB RAM (measured: 0.40 tok/s, 2.3GB peak RSS) |
 
 ## See Also
 

@@ -4,6 +4,7 @@ Pins the wire shapes any OpenAI SDK / client depends on:
 - non-streaming: ``choices[0].message.{content,reasoning}``, ``finish_reason``, ``usage``
 - streaming: SSE ``data:`` frames with ``choices[0].delta.{content,reasoning}``,
   ending in ``data: [DONE]``
+- error responses: ``{"error": {"message", "type", "param", "code"}}``
 
 ``delta.reasoning`` is a SovereignAI extension (thinking-mode output) — a
 standard OpenAI client ignores unknown delta keys, so this stays compatible.
@@ -16,6 +17,7 @@ removed). Pin httpx<0.28 or upgrade starlette to restore TestClient.
 """
 import asyncio
 import json
+import re
 
 import pytest
 from starlette.requests import Request
@@ -98,6 +100,9 @@ def test_non_streaming_shape():
     assert body["object"] == "chat.completion"
     assert body["model"] == "fake-model"
     assert isinstance(body["id"], str)
+    assert body["id"].startswith("chatcmpl-")
+    assert isinstance(body["created"], int)
+    assert body["created"] > 0
 
     choice = body["choices"][0]
     assert choice["index"] == 0
@@ -127,19 +132,24 @@ def test_streaming_shape_and_done_sentinel():
     # Last frame must be the OpenAI done sentinel
     assert payloads[-1] == "[DONE]"
 
-    deltas = []
-    for payload in payloads[:-1]:
-        chunk = json.loads(payload)
+    data_chunks = [json.loads(p) for p in payloads[:-1]]
+    for chunk in data_chunks:
         assert chunk["object"] == "chat.completion.chunk"
         assert chunk["choices"][0]["index"] == 0
-        deltas.append(chunk["choices"][0]["delta"])
+        assert isinstance(chunk["created"], int)
+        assert chunk["created"] > 0
+        assert re.match(r"^chatcmpl-", chunk["id"])
 
+    # All streaming chunks share the same id
+    ids = {c["id"] for c in data_chunks}
+    assert len(ids) == 1, f"expected one stream id, got {ids}"
+
+    deltas = [c["choices"][0]["delta"] for c in data_chunks]
     # Content tokens reassemble the full reply
     assert "".join(d.get("content", "") for d in deltas) == "Hello from the fake engine."
     # finish_reason arrives on the final choice (before [DONE]) — per OpenAI
     # spec it sits on the choice object, not inside delta
-    final_choices = [json.loads(p)["choices"][0] for p in payloads[:-1]]
-    assert final_choices[-1].get("finish_reason") == "stop"
+    assert data_chunks[-1]["choices"][0].get("finish_reason") == "stop"
 
 
 async def _collect(agen):
@@ -173,3 +183,9 @@ def test_no_model_loaded_is_400():
         )))
     # FastAPI raises HTTPException(400) — the client would see a 400 status
     assert getattr(excinfo.value, "status_code", None) == 400
+    # Error detail follows OpenAI shape
+    detail = excinfo.value.detail
+    assert isinstance(detail, dict)
+    assert "error" in detail
+    assert "message" in detail["error"]
+    assert "type" in detail["error"]

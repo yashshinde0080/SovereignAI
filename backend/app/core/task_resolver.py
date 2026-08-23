@@ -1,6 +1,7 @@
 """Task Resolver - Determines model task type dynamically"""
 from typing import Dict, Any, List
 from transformers import AutoConfig
+from app.config import settings
 
 class TaskResolver:
     """Resolves task capabilities from HuggingFace config"""
@@ -9,10 +10,10 @@ class TaskResolver:
     def resolve(model_path: str) -> Dict[str, Any]:
         """Inspect model config and determine task descriptors"""
         try:
-            config = AutoConfig.from_pretrained(model_path, trust_remote_code=True, local_files_only=True)
+            config = AutoConfig.from_pretrained(model_path, trust_remote_code=settings.trust_remote_code, local_files_only=True)
         except Exception:
             try:
-                config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
+                config = AutoConfig.from_pretrained(model_path, trust_remote_code=settings.trust_remote_code)
             except Exception as e:
                 # Provide a safe default for raw GGUF / unconfigured models
                 return {
@@ -49,7 +50,13 @@ class TaskResolver:
                 task_category = "causal_lm"
                 is_generative = True
             elif "seq2seqlm" in arch or "conditionalgeneration" in arch:
-                task_category = "seq2seq_lm"
+                # Decoder-only models (Qwen3.5, etc.) use ForConditionalGeneration
+                # in their arch name but are NOT encoder-decoder — route them to
+                # causal_lm so they load via AutoModelForCausalLM, not Seq2Seq.
+                if is_encoder_decoder:
+                    task_category = "seq2seq_lm"
+                else:
+                    task_category = "causal_lm"
                 is_generative = True
             elif "maskedlm" in arch:
                 task_category = "masked_lm"
@@ -109,7 +116,7 @@ class TaskResolver:
             elif "imagetoimage" in arch:
                 task_category = "image_to_image"
                 input_modality = "image"
-            elif "vision2seq" in arch or "llava" in model_type or "qwen" in model_type:
+            elif "vision2seq" in arch or "llava" in model_type:
                 task_category = "vision2seq"
                 input_modality = "multimodal"
                 is_generative = True
@@ -137,8 +144,11 @@ class TaskResolver:
                  # generic bare models (Backbone-only)
                  task_category = "text_encoding"
                  
-        # Additional heuristics: check for multimodal configs
-        if hasattr(config, "vision_config") or hasattr(config, "visual_config"):
+        # Additional heuristics: check for multimodal configs — only when
+        # the architecture check above didn't already match a known task.
+        # Without this guard, models like Qwen3.5 (text-only causal LM with
+        # a vision_config stub in config.json) get misclassified as vision2seq.
+        if task_category == "unknown" and (hasattr(config, "vision_config") or hasattr(config, "visual_config")):
             task_category = "vision2seq"
             input_modality = "multimodal"
             is_generative = True

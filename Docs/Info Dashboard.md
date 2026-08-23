@@ -55,7 +55,7 @@ PRD ──→ TRD ──→ Technical Architecture
 ## ==Key Concepts==
 
 - **==FullRAM==** — Load entire model into VRAM/RAM. Max speed. Needs 16GB+.
-- **==LayerStream==** — Load one layer at a time from disk. Runs 70B models on 8GB RAM.
+- **==LayerStream==** — Load one layer at a time from disk. 3-8B Q4 models on 8GB RAM (measured).
 - **==Dual-Engine==** — Hardware profiler auto-selects FullRAM or LayerStream at runtime.
 - **==Portable==** — Runs from USB. All paths relative. No registry/install needed.
 - **==Offline==** — 100% local. No telemetry. Zero bytes leave the machine.

@@ -448,3 +448,33 @@ Real bug fix in `backend/app/core/task_resolver.py` (+9/−3) — two misclassif
 - Tool verification: git log shows 6eb326c (21/8/2026), working tree clean, branch master, 3 recent commits ahead of origin/main (pending merge/push).
 - Note: GitHub push blocked (no gh binary, REST 404 unauth); commit exists locally only.
 - **Working tree**: clean before and after all three commits (`git status` empty; `origin/master` noted up-to-date, but that ref predates today's local commits).
+
+## [2026-08-23] implement / docs | ModelManager Scan Optimization + EngineFactory Size Lookup + Wiki Working Docs + Excalidraw Update
+Four commits (`76c1e31` → `df32fb2` → `9b1074a` → `6bb0a9b`, all "23/8/2026", 16:55–17:35 IST), two implementation + two documentation tranches. On `main` (fast-forwarded from `master`); working tree clean. GitHub MCP + `git fetch` unavailable (bad credentials / offline); `origin/main` is stale pre-fetch ref. **No push created.**
+
+### ModelManager scan optimization (commit `6bb0a9b`, 17:35 IST)
+**`backend/app/services/model_manager.py`** (+85/−26) + **`backend/app/services/registry.py`** (+27):
+- Batch-upsert discovered models in a single transaction (`registry.bulk_upsert`) instead of N individual `add_model()` calls (each opened its own DB connection + commit).
+- Size calculation via `os.scandir` (faster than `rglob` for deep trees).
+- Removed blocking `await scan_task` in `load_model()` — scan runs fully async; load proceeds with current registry state.
+- `_load_model_locked` now receives `all_models` from `load_model()` instead of re-querying the registry.
+- Net: model load latency reduced by removing redundant DB round-trips and filesystem scans; registry scan no longer blocks model loading.
+
+### EngineFactory size lookup optimization (commit `9b1074a`, 17:35 IST)
+**`backend/app/core/engine_factory.py`** (+24/−17) + **`backend/app/engines/fullram/executor.py`** (+9/−4):
+- `EngineFactory.create_engine()` now reads `size_gb` from registry metadata (passed via `model_metadata`) instead of re-scanning the model directory with `rglob` — avoids O(n) filesystem walk per engine creation.
+- `FullRAMEngine` accepts pre-resolved `task_metadata` from `EngineFactory`; skips redundant `TaskResolver.resolve()` call on load.
+- Task metadata threaded through `EngineFactory` → engine constructor → `_IkModelWrapper`.
+
+### Wiki working docs (commit `df32fb2`, 17:35 IST)
+**14 new files** under `Info_docs/working/` (+1451 lines) — source-grounded technical reference pages mirroring the AGENTS.md knowledge sections, each with `file:line` citations:
+- `00-architecture-overview.md` (97), `01-database-system.md` (86), `02-chat-api-flow.md` (120), `03-model-loading.md` (110), `04-engine-system.md` (118), `05-layer-by-layer.md` (153), `06-weight-splitting.md` (112), `07-model-downloading.md` (95), `08-settings-system.md` (95), `09-security.md` (87), `10-rag-vector-store.md` (112), `11-hardware-memory.md` (116), `12-task-resolution.md` (76), `13-websocket-metrics.md` (74).
+- These are working reference docs for the wiki layer — not user-facing; they back the Obsidian vault and can be promoted to `Info_docs/` proper after review.
+
+### Excalidraw diagram update (commit `76c1e31`, 16:55 IST)
+**`Info_docs/Diagrams.excalidraw.md`** (+1234/−1161): updated the consolidated Excalidraw canvas with the 10 mermaid diagrams from 08-20 (architecture, engine selection, LayerStream deep dive, inference pipeline, double buffering, context sliding, deployment, ER, user flow, CSS view). Binary blob refreshed; text elements keyed by Excalidraw IDs preserved.
+
+### Cross-branch / remote state
+- **Branch**: `main` (current, fast-forwarded from `master`); both at `6bb0a9b`. `master` is **14 commits behind** `main`.
+- **Remote blocked**: `git fetch origin` → `Could not resolve host: github.com` (offline); GitHub MCP → `Bad credentials`. `origin/main` is a stale pre-fetch ref.
+- **Working tree**: clean except for this log edit (`git status --short` shows `Info_docs/log.md`).

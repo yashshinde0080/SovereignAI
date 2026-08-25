@@ -1,0 +1,420 @@
+%% SovereignAI Edge - Complete System Architecture
+%% Cloud-style architecture diagram showing all components, data flows, and technical stack
+
+graph TB
+    %% ============================================
+    %% EXTERNAL LAYER - Users & Clients
+    %% ============================================
+    subgraph EXT["🌐 External Access Layer"]
+        direction TB
+        User["👤 User"]
+        
+        subgraph CLIENTS["Client Applications"]
+            direction LR
+            WebUI["🌐 React Web UI<br/>Next.js 16 + React 19<br/>TypeScript + Tailwind v4<br/>shadcn/ui (new-york)"]
+            ElectronApp["🖥️ Electron Desktop<br/>Electron 28<br/>Native Menus + Tray<br/>Custom Protocol (app://)"]
+            CLI["💻 Python CLI<br/>Typer + Rich + Prompt-Toolkit<br/>Commands: chat, run, serve, pull, import, benchmark"]
+        end
+    end
+
+    %% ============================================
+    %% NETWORK / EDGE LAYER
+    %% ============================================
+    subgraph EDGE["🔒 Network & Security Edge"]
+        direction TB
+        subgraph LOCALHOST["Localhost Only (Default)"]
+            direction LR
+            Port8000[("127.0.0.1:8000")]
+        end
+        
+        subgraph LAN["LAN Access (Opt-in)"]
+            direction LR
+            LANPort[("0.0.0.0:8000")]
+            Auth["🔐 Bearer Token Auth<br/>opt-in via settings<br/>slowapi 60 req/min"]
+            Encryption["🔒 Fernet Encryption<br/>PBKDF2HMAC 480k iters<br/>Machine-bound key"]
+        end
+    end
+
+    %% ============================================
+    %% API GATEWAY LAYER
+    %% ============================================
+    subgraph GATEWAY["⚡ API Gateway - FastAPI 0.109"]
+        direction TB
+        subgraph ROUTER["Router Mount (/v1/*)"]
+            direction LR
+            ChatRouter["💬 Chat API<br/>POST /v1/chat/completions<br/>POST /v1/chat/execute<br/>POST /v1/chat/mode/switch<br/>SSE Streaming"]
+            ModelsRouter["📦 Models API<br/>GET /v1/models<br/>POST /v1/models/import<br/>POST /v1/models/pull<br/>DELETE /v1/models/{id}"]
+            SystemRouter["⚙️ System API<br/>GET /v1/system/status<br/>GET /v1/system/hardware<br/>POST /v1/system/benchmark"]
+            RAGRouter["🔍 RAG API<br/>POST /v1/rag/index<br/>POST /v1/rag/query<br/>GET /v1/rag/stats"]
+            PluginsRouter["🔌 Plugins API<br/>GET /v1/plugins<br/>POST /v1/plugins/install<br/>POST /v1/plugins/execute"]
+            WorkspaceRouter["📁 Workspace API<br/>GET /v1/workspace/tree<br/>GET /v1/workspace/disk"]
+            SettingsRouter["⚙️ Settings API<br/>GET /v1/settings/{section}<br/>PATCH /v1/settings/{section}"]
+        end
+        
+        subgraph MIDDLEWARE["Middleware Stack"]
+            direction TB
+            Cors["CORS Middleware"]
+            AuthMw["LAN Auth Middleware<br/>(conditional)"]
+            RateLimit["Rate Limiter<br/>60 req/min"]
+            RequestLog["Request Logging"]
+        end
+        
+        subgraph WS["WebSocket"]
+            direction LR
+            WSMetrics["📊 /ws/metrics<br/>1s Hardware + Engine Broadcast"]
+        end
+    end
+
+    %% ============================================
+    %% CORE SERVICES LAYER
+    %% ============================================
+    subgraph CORE["🏗️ Core Services (app.state.*)"]
+        direction TB
+        
+        subgraph STARTUP["Lifespan Initialization (backend/app/main.py)"]
+            direction LR
+            DBInit["🗄️ DatabaseManager<br/>sovereign.db (WAL)"]
+            SettingsInit["⚙️ SettingsService<br/>sovereign_settings.db"]
+            HWDetect["🔧 HardwareDetector<br/>CPU, RAM, GPU, Disk"]
+            ModelMgrInit["🤖 ModelManager<br/>EngineFactory + MemoryManager"]
+            VectorInit["🔍 VectorStore (FAISS)<br/>sentence-transformers"]
+            PluginMgrInit["🔌 PluginManager<br/>importlib + sandbox"]
+        end
+        
+        subgraph SERVICES["Runtime Services"]
+            direction LR
+            ModelManager["🤖 ModelManager<br/>load_model()<br/>_load_model_locked()<br/>_fuzzy_match_model()"]
+            SettingsService["⚙️ SettingsService<br/>CRUD per section<br/>system_prompt builder<br/>bcrypt password"]
+            HardwareDetector["🔧 HardwareDetector<br/>detect() → HardwareProfile<br/>llmfit scoring"]
+            VectorStore["🔍 VectorStore Manager<br/>FAISS Index + Embedder<br/>Chunker + Retriever"]
+            PluginManager["🔌 PluginManager<br/>Dynamic importlib load<br/>30s timeout sandbox"]
+            DatabaseManager["🗄️ DatabaseManager<br/>aiosqlite + ConnectionPool<br/>Models, Sessions, Docs<br/>Hardware Profiles, Plugins"]
+            SettingsDatabase["⚙️ SettingsDatabase<br/>JSON-blob sections<br/>Agents + Audit Log"]
+        end
+    end
+
+    %% ============================================
+    %% ENGINE FACTORY & SELECTION
+    %% ============================================
+    subgraph ENGINE_FACTORY["🏭 Engine Factory & Selection Logic"]
+        direction TB
+        EngineFactory["🏭 EngineFactory.create_engine()<br/>Size compute + TaskResolver + MemoryManager"]
+        
+        subgraph SELECTION["Mode Selection Pipeline"]
+            direction TB
+            TaskResolver["🎯 TaskResolver.resolve()<br/>AutoConfig introspection<br/>→ task_type, is_generative"]
+            MemoryManager["🧠 MemoryManager.suggest_mode()<br/>llmfit.score_model_fit()<br/>fit>0.85 + RAM<70% → fullram<br/>fit>0.6 → layerstream<br/>else → threshold fallback"]
+            ThresholdFallback["📏 Threshold Fallback<br/>CUDA VRAM ≥1.1x → fullram<br/>RAM ≥1.1x → fullram<br/>RAM ≥0.1x → layerstream<br/>else → insufficient"]
+        end
+        
+        subgraph MODES["Execution Modes"]
+            direction LR
+            AutoMode["🤖 Auto<br/>(llmfit + threshold)"]
+            FullRAMMode["⚡ FullRAM<br/>transformers primary"]
+            LayerStreamMode["📦 LayerStream<br/>Layer-by-layer streaming"]
+        end
+    end
+
+    %% ============================================
+    %% INFERENCE ENGINES LAYER
+    %% ============================================
+    subgraph ENGINES["🧠 Inference Engines (BaseEngine ABC)"]
+        direction TB
+        BaseEngine["📋 BaseEngine (ABC)<br/>async load()<br/>async unload()<br/>async generate()<br/>async generate_stream()<br/>get_memory_usage()"]
+        
+        subgraph FULLRAM["FullRAM Engine (Primary)"]
+            direction TB
+            FullRAM["⚡ FullRAMEngine<br/>transformers.AutoModelForCausalLM<br/>TextIteratorStreamer (thread)<br/>device_map=auto<br/>torch.compile (optional)"]
+            GGUFFallback["📦 GGUF Fallback<br/>gguf_file= kwarg<br/>ik-llama-cpp-python ≥0.1.0<br/>llama-cpp-python ≥0.3.34<br/>Architecture: BitNet IQ2_BN"]
+        end
+        
+        subgraph LAYERSTREAM["LayerStream Engine (Low-RAM)"]
+            direction TB
+            LayerStream["📦 LayerStreamEngine<br/>_gen_loop thread<br/>Prefill → Decode rolling window<br/>_stream_delta batching"]
+            LayerLoader["📥 LayerWeightLoader<br/>ThreadPoolExecutor(prefetch=3)<br/>LRU byte-budget cache<br/>Pinned: embed/norm/lm_head<br/>int8/int4 dequantize on device"]
+            LayerExecutor["⚙️ LayerExecutor<br/>execute_forward(prefill/decode)<br/>Cached attention mask<br/>Pre-computed RoPE<br/>HFProxyCache / StatefulCache"]
+            Sampler["🎲 Sampler<br/>Top-K + Top-P + Multinomial<br/>Non-destructive"]
+            Splitter["✂️ WeightSplitter<br/>embed/layer_N/norm/lm_head.safetensors<br/>quant_config.json (none/int8/int4)"]
+        end
+        
+        subgraph SHARED["Shared Engine Utilities"]
+            direction LR
+            SafeTensors["🔄 SafeTensors Converter<br/>.bin → .safetensors<br/>CVE-2025-32434 fix"]
+            TurboQuant["🧪 TurboQuant (Default OFF)<br/>KV-cache compression<br/>Eval gate: FAILS<br/>reviews/turboquant.md"]
+        end
+    end
+
+    %% ============================================
+    %% ML / MODEL LAYER
+    %% ============================================
+    subgraph ML["🤖 ML Stack"]
+        direction TB
+        subgraph TRANSFORMERS["Transformers Primary Path"]
+            direction LR
+            AutoModel["AutoModelForCausalLM"]
+            AutoConfig["AutoConfig.introspection"]
+            ApplyChatTemplate["apply_chat_template<br/>enable_thinking toggle"]
+        end
+        
+        subgraph PYTORCH["PyTorch Core"]
+            direction LR
+            Torch["torch 2.5.1"]
+            Safetensors["safetensors ≥0.4.0"]
+            Accelerate["accelerate 0.34.1"]
+        end
+        
+        subgraph GGUF["GGUF Fallback Path"]
+            direction LR
+            IkLlama["ik-llama-cpp-python"]
+            LlamaCpp["llama-cpp-python"]
+            GGUFFormat["GGUF Format Support"]
+        end
+        
+        subgraph RAG_STACK["RAG Stack"]
+            direction LR
+            SentenceTransformers["sentence-transformers ≥2.2.0"]
+            FAISS["faiss-cpu ≥1.7.4"]
+            Chunker["Text Chunker"]
+        end
+    end
+
+    %% ============================================
+    %% DATA / STORAGE LAYER
+    %% ============================================
+    subgraph STORAGE["💾 Data & Storage (./workspace/)"]
+        direction TB
+        subgraph DATABASES["SQLite Databases (WAL Mode)"]
+            direction LR
+            SovereignDB[("sovereign.db<br/>Models, Sessions, Documents<br/>Hardware Profiles, Plugins<br/>Benchmark Results, Audit Log<br/>schema_version")]
+            SettingsDB[("sovereign_settings.db<br/>Settings (JSON blobs)<br/>Agents, Audit Log")]
+        end
+        
+        subgraph MODEL_STORAGE["Model Storage"]
+            direction LR
+            ModelsDir["models/<br/>.gguf checkpoints<br/>HF cache<br/>installed/ (import dest)"]
+            OffloadCache["offload_cache/<br/>LayerStream per-layer<br/>.safetensors chunks"]
+        end
+        
+        subgraph VECTOR_STORAGE["Vector Storage"]
+            direction LR
+            Vectors["vectors/<br/>FAISS Index Files"]
+            VectorIndex["vector_index/<br/>Metadata + Mappings"]
+        end
+        
+        subgraph OTHER_STORAGE["Other"]
+            direction LR
+            Sessions["sessions/<br/>Chat Snapshots"]
+            Plugins["plugins/<br/>User Python Scripts"]
+            Logs["logs/<br/>server_cli.log"]
+            HFCache["hf_cache/<br/>HuggingFace Cache"]
+        end
+    end
+
+    %% ============================================
+    %% PROVIDERS LAYER
+    %% ============================================
+    subgraph PROVIDERS["📦 Model Providers"]
+        direction LR
+        HFProvider["🤗 HuggingFace Provider<br/>hf_hub_download + snapshot"]
+        LocalProvider["📁 Local Provider<br/>File system scan"]
+        EnterpriseProvider["🏢 Enterprise Repo Provider<br/>Private registry"]
+        USBProvider["💾 USB Bundle Provider<br/>Offline model bundles"]
+    end
+
+    %% ============================================
+    %% FRONTEND BUILD / ELECTRON BUNDLE
+    %% ============================================
+    subgraph BUILD["🔨 Build & Bundle"]
+        direction TB
+        subgraph FRONTEND_BUILD["Frontend Build"]
+            direction LR
+            NextBuild["npm run build<br/>output: 'export'<br/>→ frontend/out/"]
+            StaticExport["Static HTML Export<br/>images.unoptimized<br/>trailingSlash=true"]
+        end
+        
+        subgraph ELECTRON_BUNDLE["Electron Builder"]
+            direction LR
+            ExtraResources["extraResources:<br/>../backend → backend/<br/>../frontend/out → frontend/"]
+            ElectronBuild["npm run build:win|mac|linux<br/>nsis / dmg / AppImage+deb<br/>appId: com.sovereignai.edge"]
+        end
+        
+        subgraph LAUNCH["Launch Scripts"]
+            direction LR
+            LaunchBat["launch.bat (Windows)<br/>Hardcoded 127.0.0.1:8000"]
+            LaunchSh["launch.sh (Unix)<br/>Hardcoded 127.0.0.1:8000"]
+            MainEntry["backend/main.py<br/>Reads settings DB<br/>Honors bind_localhost_only"]
+        end
+    end
+
+    %% ============================================
+    %% LANDING PAGE (Separate)
+    %% ============================================
+    subgraph LANDING["🌍 Landing Page (Separate App)"]
+        direction LR
+        LandingNext["Next.js 14 + React 18<br/>Tailwind v3<br/>Independent package.json"]
+    end
+
+    %% ============================================
+    %% CONNECTIONS - USER FLOWS
+    %% ============================================
+    
+    %% User to Clients
+    User --> WebUI
+    User --> ElectronApp
+    User --> CLI
+    
+    %% Clients to Edge
+    WebUI -.->|HTTP/WS| Port8000
+    ElectronApp -.->|HTTP/WS + app://| Port8000
+    CLI -.->|HTTP/WS| Port8000
+    
+    %% LAN Access Flow
+    LANPort --> Auth
+    Auth --> Encryption
+    Encryption --> Port8000
+    
+    %% Edge to Gateway
+    Port8000 --> Cors
+    Cors --> AuthMw
+    AuthMw --> RateLimit
+    RateLimit --> RequestLog
+    RequestLog --> ROUTER
+    
+    %% Router to individual APIs
+    ROUTER --> ChatRouter
+    ROUTER --> ModelsRouter
+    ROUTER --> SystemRouter
+    ROUTER --> RAGRouter
+    ROUTER --> PluginsRouter
+    ROUTER --> WorkspaceRouter
+    ROUTER --> SettingsRouter
+    
+    %% WebSocket
+    RequestLog --> WSMetrics
+    
+    %% Gateway to Core Services
+    ChatRouter --> ModelManager
+    ChatRouter --> SettingsService
+    ChatRouter --> VectorStore
+    ModelsRouter --> ModelManager
+    ModelsRouter --> SettingsService
+    ModelsRouter --> PROVIDERS
+    SystemRouter --> HardwareDetector
+    SystemRouter --> ModelManager
+    SystemRouter --> DatabaseManager
+    RAGRouter --> VectorStore
+    RAGRouter --> SettingsService
+    PluginsRouter --> PluginManager
+    WorkspaceRouter --> DatabaseManager
+    SettingsRouter --> SettingsService
+    SettingsRouter --> SettingsDatabase
+    
+    %% Startup Initialization
+    DBInit --> DatabaseManager
+    SettingsInit --> SettingsService
+    SettingsInit --> SettingsDatabase
+    HWDetect --> HardwareDetector
+    ModelMgrInit --> ModelManager
+    ModelMgrInit --> EngineFactory
+    VectorInit --> VectorStore
+    PluginMgrInit --> PluginManager
+    
+    %% Core Services Interconnections
+    ModelManager --> EngineFactory
+    ModelManager --> DatabaseManager
+    ModelManager --> SettingsService
+    ModelManager --> PROVIDERS
+    SettingsService --> SettingsDatabase
+    HardwareDetector --> DatabaseManager
+    VectorStore --> DatabaseManager
+    PluginManager --> DatabaseManager
+    
+    %% Engine Factory Selection Flow
+    EngineFactory --> TaskResolver
+    EngineFactory --> MemoryManager
+    TaskResolver --> MemoryManager
+    MemoryManager --> ThresholdFallback
+    MemoryManager --> AutoMode
+    ThresholdFallback --> AutoMode
+    AutoMode --> FullRAMMode
+    AutoMode --> LayerStreamMode
+    
+    %% Engine Instantiation
+    FullRAMMode --> FullRAM
+    LayerStreamMode --> LayerStream
+    
+    %% Engine Internals
+    FullRAM --> AutoModel
+    FullRAM --> GGUFFallback
+    GGUFFallback --> IkLlama
+    GGUFFallback --> LlamaCpp
+    
+    LayerStream --> LayerLoader
+    LayerStream --> LayerExecutor
+    LayerStream --> Sampler
+    LayerLoader --> Splitter
+    LayerExecutor --> SafeTensors
+    LayerExecutor --> TurboQuant
+    
+    %% Shared
+    SafeTensors --> AutoModel
+    TurboQuant -.->|Default OFF| LayerExecutor
+    
+    %% Model Providers to Storage
+    HFProvider --> ModelsDir
+    LocalProvider --> ModelsDir
+    EnterpriseProvider --> ModelsDir
+    USBProvider --> ModelsDir
+    
+    %% ModelManager to Storage
+    ModelManager --> ModelsDir
+    ModelManager --> OffloadCache
+    ModelManager --> HFCache
+    
+    %% VectorStore to Storage
+    VectorStore --> Vectors
+    VectorStore --> VectorIndex
+    
+    %% Database to Storage
+    DatabaseManager --> SovereignDB
+    SettingsDatabase --> SettingsDB
+    
+    %% Sessions/Logs
+    ChatRouter --> Sessions
+    ModelManager --> Logs
+    PluginManager --> Plugins
+    
+    %% Build Flow
+    NextBuild --> StaticExport
+    StaticExport --> ExtraResources
+    ExtraResources --> ElectronBuild
+    
+    %% Launch Discrepancy
+    LaunchBat -.->|Bypasses| MainEntry
+    LaunchSh -.->|Bypasses| MainEntry
+    MainEntry --> Port8000
+    
+    %% Styling
+    classDef external fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef edge fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef gateway fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef core fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef factory fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef engine fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    classDef ml fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    classDef storage fill:#fafafa,stroke:#616161,stroke-width:2px,stroke-dasharray: 5 5
+    classDef provider fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px
+    classDef build fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+    classDef landing fill:#eceff1,stroke:#546e7a,stroke-width:2px
+    
+    class User,WebUI,ElectronApp,CLI external
+    class Port8000,LANPort,Auth,Encryption edge
+    class ChatRouter,ModelsRouter,SystemRouter,RAGRouter,PluginsRouter,WorkspaceRouter,SettingsRouter,Cors,AuthMw,RateLimit,RequestLog,WSMetrics gateway
+    class DBInit,SettingsInit,HWDetect,ModelMgrInit,VectorInit,PluginMgrInit,ModelManager,SettingsService,HardwareDetector,VectorStore,PluginManager,DatabaseManager,SettingsDatabase core
+    class EngineFactory,TaskResolver,MemoryManager,ThresholdFallback,AutoMode,FullRAMMode,LayerStreamMode factory
+    class BaseEngine,FullRAM,GGUFFallback,LayerStream,LayerLoader,LayerExecutor,Sampler,Splitter,SafeTensors,TurboQuant engine
+    class AutoModel,AutoConfig,ApplyChatTemplate,Torch,Safetensors,Accelerate,IkLlama,LlamaCpp,GGUFFormat,SentenceTransformers,FAISS,Chunker ml
+    class SovereignDB,SettingsDB,ModelsDir,OffloadCache,Vectors,VectorIndex,Sessions,Plugins,Logs,HFCache storage
+    class HFProvider,LocalProvider,EnterpriseProvider,USBProvider provider
+    class NextBuild,StaticExport,ExtraResources,ElectronBuild,LaunchBat,LaunchSh,MainEntry build
+    class LandingNext landing

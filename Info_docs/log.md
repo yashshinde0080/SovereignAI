@@ -446,3 +446,29 @@ Real bug fix in `backend/app/core/task_resolver.py` (+9/−3) — two misclassif
 - Tool verification: git log shows 6eb326c (21/8/2026), working tree clean, branch master, 3 recent commits ahead of origin/main (pending merge/push).
 - Note: GitHub push blocked (no gh binary, REST 404 unauth); commit exists locally only.
 - **Working tree**: clean before and after all three commits (`git status` empty; `origin/master` noted up-to-date, but that ref predates today's local commits).
+
+## [2026-08-23] docs | Excalidraw Diagram Update
+Commit `76c1e31` (16:55 IST): Updated `Info_docs/Diagrams.excalidraw.md` (+1234/−1161) — refreshed the consolidated Excalidraw canvas with the latest architecture, data flow, engine internals, and deployment diagrams. The Excalidraw artifact consolidates the 10 mermaid diagrams from the 08-20 tranche into a single editable canvas with text elements keyed by Excalidraw IDs and compressed binary element blobs. Working tree clean; `master` up to date with `origin/master`.
+
+## [2026-08-25] benchmark / docs | Inference Engine Benchmark Report + Mermaid Diagram Suite
+Two commits (`420566f`, `1d3995b`, both 21:11 IST), one benchmark documentation + one architecture visualization tranche. Working tree clean; `master` up to date with `origin/master`.
+
+### Benchmark report (commit `420566f`)
+**`BENCHMARK_REPORT.md`** (new, +67): Head-to-head comparison of three inference engines on Qwen2.5-0.5B-Instruct (fp16, ~988 MB) with 64-token generation on GTX 1650 (4 GB VRAM) + 8 GB RAM Windows:
+| Metric | FullRAM | LayerStream (legacy) | AirLLM |
+|---|---|---|---|
+| Load time | 3.7 s | 3.1 s | 1.4 s |
+| Generate time | 8.04 s | 8.86 s | 41.55 s |
+| **Throughput** | **7.96 tok/s** | **7.22 tok/s** | **1.54 tok/s** |
+| RAM used | 1.67 GB | 1.94 GB | 1.99 GB |
+| VRAM peak | 959 MB | ~300 MB | 301 MB |
+
+**Selection guidance**: FullRAM when model fits in RAM/VRAM (fastest); LayerStream when near RAM limit (LRU cache keeps hot layers); AirLLM when model **exceeds** RAM (only engine that never loads full model). AirLLM is ~4.7× slower than LayerStream on a model that fits in RAM — an architectural limitation (per-token full-model disk-to-GPU moves), not a bug. The `auto` selector (`MemoryManager.suggest_mode`) picks FullRAM when RAM > 1.1× model, AirLLM when RAM > 0.1× model, refuses otherwise.
+
+### Mermaid diagram suite (commit `1d3995b`)
+New `Diagram/` directory with 5 cloud-style mermaid diagrams (+1132 lines):
+- `Diagram/README.md` (+92): Index with diagram list and render instructions (VS Code Mermaid preview, Mermaid CLI, GitHub, Notion/Obsidian).
+- `Diagram/system-architecture.mmd` (+420): Complete system architecture — external clients (React/Electron/CLI/Curl) → FastAPI Gateway → ModelManager/EngineFactory/TaskResolver/MemoryManager → FullRAM & LayerStream engines → LayerStream internals (Splitter, Loader, Executor, Sampler, Cache, QuantConfig, KVCache) → backend services (DB, VectorStore, Security, Plugins, Providers, Settings, Hardware) → workspace runtime (models, database, offload_cache, sessions, vectors, plugins, logs). Tech stack annotated per layer.
+- `Diagram/tech-stack.mmd` (+311): Technology stack by layer — Frontend (Next.js 16, React 19, TypeScript 5, Tailwind v4, shadcn/ui, Zustand 5, Framer Motion, Recharts); Backend (Python 3.10+, FastAPI 0.109, Uvicorn, Pydantic 2, PyTorch 2.5, transformers 4.45, accelerate, safetensors, gguf, llama-cpp, sentence-transformers, FAISS, aiosqlite, cryptography, bcrypt, slowapi, typer, rich, prompt-toolkit); Desktop (Electron 28, electron-builder 24, nsis/dmg/AppImage); Infra (UV, npm, static export `output: 'export'`, no Docker).
+- `Diagram/data-flow-storage.mmd` (+181): Cloud-style data flow — user request → gateway → model manager → engine factory → engine → storage layer (model weights: HF cache / GGUF / split safetensors; app data: sovereign.db + sovereign_settings.db SQLite WAL; vector index: FAISS + session snapshots; offload cache: per-layer safetensors; plugins: user Python scripts; logs). Data movement paths annotated with protocols (REST/WS, SQLite, FAISS, file I/O, IPC).
+- `Diagram/user-request-flow.mmd` (+128): Sequence diagram — User → Frontend (ChatModule → useChat → apply_chat_template) → POST /v1/chat/completions → FastAPI (system prompt + RAG context) → ModelManager (load model, EngineFactory.create_engine, TaskResolver.resolve, MemoryManager.suggest_mode) → Engine (FullRAM: AutoModelForCausalLM + TextIteratorStreamer | LayerStream: _gen_loop → execute_forward → Sampler) → stream_response (SSE batching ~96 chars, _split_think/_trim_tag_prefix) → Frontend (rAF batching, React.memo MessageItem).

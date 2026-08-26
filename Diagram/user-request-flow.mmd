@@ -1,0 +1,128 @@
+%% SovereignAI Edge - User Request Flow (Chat Completion)
+%% Sequence diagram showing the complete chat request lifecycle
+
+sequenceDiagram
+    autonumber
+    actor User
+    participant Client as Client (Web/Electron/CLI)
+    participant Gateway as FastAPI Gateway (127.0.0.1:8000)
+    participant Middleware as Middleware Stack
+    participant ChatAPI as POST /v1/chat/completions
+    participant Settings as SettingsService
+    participant VectorStore as VectorStore (RAG)
+    participant Template as apply_chat_template
+    participant ModelMgr as ModelManager
+    participant EngineFactory as EngineFactory
+    participant TaskResolver as TaskResolver
+    participant MemoryMgr as MemoryManager
+    participant Engine as Active Engine (FullRAM/LayerStream)
+    participant Transformers as transformers / PyTorch
+    participant SSE as SSE Stream Response
+
+    Note over User, SSE: === CHAT REQUEST FLOW ===
+    
+    User->>Client: Types message, hits Enter
+    Client->>Gateway: POST /v1/chat/completions<br/>{model, messages, stream:true, temperature...}
+    Gateway->>Middleware: CORS → Auth(conditional) → RateLimit → Logging
+    Middleware->>ChatAPI: Request validated, forwarded
+    
+    Note over ChatAPI, Settings: --- PRE-PROCESSING ---
+    ChatAPI->>Settings: get_system_prompt()
+    Settings-->>ChatAPI: System prompt string
+    ChatAPI->>VectorStore: build_context(top_k=5) [if RAG enabled]
+    VectorStore-->>ChatAPI: RAG context chunks
+    ChatAPI->>Template: apply_chat_template(messages + system + RAG, enable_thinking)
+    Template-->>ChatAPI: Formatted prompt tokens
+    
+    Note over ChatAPI, Engine: --- MODEL LOAD / ENGINE SELECTION ---
+    alt Model not loaded or mode mismatch
+        ChatAPI->>ModelMgr: load_model(model_id, mode="auto")
+        ModelMgr->>ModelMgr: _fuzzy_match_model() → base model path
+        ModelMgr->>ModelMgr: _load_model_locked() (asyncio.Lock)
+        ModelMgr->>EngineFactory: create_engine(model_path, mode="auto")
+        EngineFactory->>EngineFactory: Compute model size (params × bytes)
+        EngineFactory->>TaskResolver: resolve(model_path)
+        TaskResolver->>TaskResolver: AutoConfig.from_pretrained()
+        TaskResolver-->>EngineFactory: {task_type, is_generative, architecture}
+        EngineFactory->>MemoryMgr: suggest_mode(model_size, hw_profile)
+        MemoryMgr->>MemoryMgr: llmfit.score_model_fit() → fit_score
+        alt fit > 0.85 AND RAM < 70%
+            MemoryMgr-->>EngineFactory: "fullram"
+        else if fit > 0.6
+            MemoryMgr-->>EngineFactory: "layerstream"
+        else
+            MemoryMgr->>MemoryMgr: Threshold fallback (VRAM/RAM ratios)
+            MemoryMgr-->>EngineFactory: "fullram" | "layerstream" | "insufficient"
+        end
+        EngineFactory-->>ModelMgr: Engine instance (FullRAM/LayerStream)
+        ModelMgr->>Engine: engine.load()
+        Note right of Engine: FullRAM: AutoModelForCausalLM.load()<br/>LayerStream: WeightSplitter + LayerLoader init
+        Engine-->>ModelMgr: Loaded + memory usage
+        ModelMgr->>ModelMgr: app.state.active_engine = engine<br/>app.state.active_model = model_id<br/>app.state.active_mode = mode
+    else Model already loaded
+        ModelMgr-->>ChatAPI: Existing active_engine
+    end
+    
+    Note over ChatAPI, Engine: --- GENERATION ---
+    alt Streaming (stream=true)
+        ChatAPI->>Engine: generate_stream(input_data, **gen_kwargs)
+        Note right of Engine: FullRAM: TextIteratorStreamer thread<br/>LayerStream: _gen_loop thread (prefill→decode)
+        Engine-->>ChatAPI: AsyncGenerator[Dict]
+        ChatAPI->>SSE: stream_response() generator
+        Note right of SSE: _split_think() → reasoning separation<br/>_trim_tag_prefix() → think tag cleanup<br/>~96 chars/frame batching<br/>is_disconnected() check
+        loop For each token chunk
+            SSE-->>Client: SSE: data: {token, ...}\n\n
+            Client->>User: Render token incrementally
+        end
+        SSE-->>Client: SSE: data: [DONE]\n\n
+    else Non-streaming (stream=false)
+        ChatAPI->>Engine: generate(input_data, **gen_kwargs)
+        Engine->>Transformers: model.generate() (in thread pool)
+        Transformers-->>Engine: Complete token IDs
+        Engine-->>ChatAPI: {text, usage, finish_reason}
+        ChatAPI-->>Client: JSON Response
+        Client->>User: Render complete response
+    end
+    
+    Note over User, SSE: === MODE SWITCH FLOW (POST /v1/chat/mode/switch) ===
+    User->>Client: Request mode switch (fullram/layerstream/auto)
+    Client->>Gateway: POST /v1/chat/mode/switch?mode=layerstream
+    Gateway->>ChatAPI: Route to mode switch handler
+    ChatAPI->>ModelMgr: load_model(current_model, mode="layerstream")
+    ModelMgr->>ModelMgr: Unload current engine (engine.unload())
+    ModelMgr->>EngineFactory: create_engine(model_path, mode="layerstream")
+    EngineFactory->>MemoryMgr: suggest_mode() [re-evaluates]
+    MemoryMgr-->>EngineFactory: Mode decision
+    EngineFactory-->>ModelMgr: New LayerStreamEngine
+    ModelMgr->>Engine: engine.load()
+    Engine-->>ModelMgr: Ready
+    ModelMgr->>ModelMgr: Update app.state.active_*
+    ModelMgr-->>ChatAPI: {mode, model, status}
+    ChatAPI-->>Client: JSON Response
+    Client->>User: "Mode switched to LayerStream"
+    
+    Note over User, SSE: === BENCHMARK FLOW (POST /v1/system/benchmark) ===
+    User->>Client: Run benchmark
+    Client->>Gateway: POST /v1/system/benchmark {model, prompts, mode}
+    Gateway->>SystemRouter: Route to benchmark endpoint
+    SystemRouter->>ModelMgr: load_model(model, mode)
+    SystemRouter->>Engine: generate() × N prompts
+    Engine-->>SystemRouter: Latency, tokens/sec, peak RAM
+    SystemRouter->>DatabaseManager: INSERT benchmark_results
+    SystemRouter-->>Client: Benchmark results
+    Client->>User: Display metrics
+
+    %% Styling
+    classDef user fill:#e3f2fd,stroke:#1565c0
+    classDef client fill:#e3f2fd,stroke:#1565c0
+    classDef gateway fill:#e8f5e9,stroke:#2e7d32
+    classDef service fill:#f3e5f5,stroke:#7b1fa2
+    classDef engine fill:#fff8e1,stroke:#f57f17
+    classDef ml fill:#e0f2f1,stroke:#00695c
+    classDef sse fill:#fff3e0,stroke:#ef6c00
+    
+    class User,Client user
+    class Gateway,Middleware,ChatAPI gateway
+    class Settings,VectorStore,Template,ModelMgr,EngineFactory,TaskResolver,MemoryMgr service
+    class Engine,Transformers engine
+    class SSE sse

@@ -152,9 +152,9 @@ Six commits (`2831555` → `40379b6`), one coherent tranche: after the 2026-08-0
 - **CLI honesty** (`2831555`): `sovereign benchmark-turboquant` no longer prints fabricated bit-packed estimates — labels ratio "Measured … (synthetic K/V, no real model)" and points at the eval-gate report.
 - **Tests** (`a6d286f`): 11 new `TestAffineScheme` tests — roundtrip NMSE, affine-beats-polar on structured data (≤0.5× NMSE), same-chunking bit-exactness, chunk-boundary scale consistency (≤1.5×), scale shapes, asymmetric bits, ratio >3.0, no-requant invariant, default-scheme. 43 turboquant / 86 full suite.
 - **Re-gate results** (`a6d286f`): `reviews/eval_gate_affine_2026-08-10.json` (Qwen2-0.5B, wikitext, 704 tokens):
-  | config | ppl | deg | needle |
+  |config|ppl|deg|needle|
   |---|---|---|---|
-  | baseline | **8.34** | — | ✅ PINEAPPLE123. The |
+  |baseline| **8.34** | — | ✅ PINEAPPLE123. The |
   | affine-3.5 | 259.9 | +3017% | ❌ |
   | affine-4.0 | 304.2 | +3548% | ❌ |
   | affine-4k5v | 358.6 | +4201% | ❌ |

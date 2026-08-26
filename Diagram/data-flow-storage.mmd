@@ -1,0 +1,181 @@
+%% SovereignAI Edge - Data Flow & Storage Architecture
+%% Cloud-style data flow diagram showing all storage components and data movement
+
+graph TB
+    %% ============================================
+    %% DATA FLOW LAYERS
+    %% ============================================
+    
+    subgraph INPUT["📥 Data Ingestion"]
+        direction TB
+        UserInput["User Input<br/>Chat messages, prompts, files"]
+        ModelDownload["Model Download<br/>HF Hub, Local, USB, Enterprise"]
+        DocumentUpload["Document Upload<br/>RAG indexing source"]
+        PluginInstall["Plugin Install<br/>User Python scripts"]
+    end
+    
+    subgraph PROCESSING["⚙️ Data Processing Pipeline"]
+        direction TB
+        
+        subgraph CHAT_PIPELINE["Chat Processing"]
+            direction LR
+            PromptBuild["Prompt Builder<br/>System + History + RAG"]
+            Tokenize["Tokenization<br/>apply_chat_template"]
+            Inference["Engine Inference<br/>FullRAM / LayerStream"]
+            Detokenize["Detokenization<br/>+ Think-tag split"]
+            StreamFormat["SSE Formatting<br/>~96 char frames"]
+        end
+        
+        subgraph MODEL_PIPELINE["Model Processing"]
+            direction LR
+            ModelFetch["Fetch/Verify<br/>SHA256 + size check"]
+            ModelSplit["WeightSplitter<br/>(LayerStream only)<br/>→ safetensors chunks"]
+            ModelQuant["Quantization<br/>none / int8 / int4<br/>quant_config.json"]
+            ModelCache["HF Cache<br/>~/.cache/huggingface<br/>→ workspace/hf_cache"]
+        end
+        
+        subgraph RAG_PIPELINE["RAG Processing"]
+            direction LR
+            Chunk["Text Chunker<br/>RecursiveCharacterTextSplitter"]
+            Embed["Embeddings<br/>sentence-transformers<br/>all-MiniLM-L6-v2 default"]
+            Index["FAISS Index Build<br/>IVF + PQ / Flat"]
+            Store["Vector Store<br/>vectors/ + vector_index/"]
+        end
+        
+        subgraph PLUGIN_PIPELINE["Plugin Processing"]
+            direction LR
+            Validate["Validate Plugin<br/>PluginInterface ABC"]
+            Sandbox["Sandbox Load<br/>importlib + 30s timeout"]
+            Register["Register Actions<br/>get_actions()"]
+        end
+    end
+    
+    subgraph STORAGE_LAYER["💾 Storage Layer (./workspace/)"]
+        direction TB
+        
+        subgraph SQL_DBS["SQLite Databases (WAL, mmap=256MB)"]
+            direction LR
+            SovereignDB[("sovereign.db<br/>┌─────────────────────────┐<br/>│ models                  │<br/>│ sessions                │<br/>│ documents               │<br/>│ hardware_profiles       │<br/>│ plugins                 │<br/>│ benchmark_results       │<br/>│ audit_log               │<br/>│ schema_version          │<br/>└─────────────────────────┘")]
+            SettingsDB[("sovereign_settings.db<br/>┌─────────────────────────┐<br/>│ settings (JSON blobs)   │<br/>│ general, security,      │<br/>│ inference, ui, plugins  │<br/>│ agents                  │<br/>│ audit_log               │<br/>└─────────────────────────┘")]
+        end
+        
+        subgraph MODEL_FILES["Model Files"]
+            direction LR
+            ModelsDir["models/<br/>├── installed/           ← User imports<br/>├── <model_id>/          ← HF downloads<br/>│   ├── config.json<br/>│   ├── *.safetensors<br/>│   └── tokenizer.*<br/>├── *.gguf               ← GGUF checkpoints<br/>└── hf_cache/            ← HF Hub cache"]
+            OffloadCache["offload_cache/<br/>├── embed.safetensors<br/>├── layer_0.safetensors<br/>├── layer_1.safetensors<br/>├── ...<br/>├── norm.safetensors<br/>├── lm_head.safetensors<br/>└── quant_config.json"]
+        end
+        
+        subgraph VECTOR_FILES["Vector Index Files"]
+            direction LR
+            VectorsDir["vectors/<br/>├── index.faiss<br/>├── index.pkl<br/>└── metadata.json"]
+            VectorIndexDir["vector_index/<br/>├── doc_id_map.json<br/>├── chunk_metadata.json<br/>└── embedder_config.json"]
+        end
+        
+        subgraph RUNTIME_FILES["Runtime Files"]
+            direction LR
+            SessionsDir["sessions/<br/>├── session_<uuid>.json<br/>│   {messages, model,<br/>    timestamp, metadata}<br/>└── ..."]
+            PluginsDir["plugins/<br/>├── <plugin_name>/<br/>│   ├── plugin.py<br/>│   ├── requirements.txt<br/>│   └── manifest.json<br/>└── ..."]
+            LogsDir["logs/<br/>├── server_cli.log<br/>└── ..."]
+            HF_Cache["hf_cache/<br/>├── hub/<br/>│   ├── models--*/<br/>│   └── ...<br/>└── ..."]
+        end
+    end
+    
+    subgraph OUTPUT["📤 Data Output"]
+        direction TB
+        StreamTokens["Streaming Tokens<br/>SSE to Client"]
+        FullResponse["Complete Response<br/>JSON to Client"]
+        BenchmarkResults["Benchmark Metrics<br/>tokens/s, peak RAM, latency"]
+        SystemStatus["System Status<br/>Hardware, Engine, Model"]
+        RAGResults["RAG Query Results<br/>Top-K chunks + scores"]
+        PluginOutput["Plugin Execution Result<br/>Action output"]
+    end
+    
+    %% ============================================
+    %% DATA FLOW CONNECTIONS
+    %% ============================================
+    
+    %% Input to Processing
+    UserInput --> PromptBuild
+    ModelDownload --> ModelFetch
+    DocumentUpload --> Chunk
+    PluginInstall --> Validate
+    
+    %% Chat Pipeline Flow
+    PromptBuild --> Tokenize
+    Tokenize --> Inference
+    Inference --> Detokenize
+    Detokenize --> StreamFormat
+    StreamFormat --> StreamTokens
+    Detokenize --> FullResponse
+    
+    %% Model Pipeline Flow
+    ModelFetch --> ModelSplit
+    ModelSplit --> ModelQuant
+    ModelQuant --> ModelCache
+    ModelCache --> ModelsDir
+    ModelSplit --> OffloadCache
+    ModelQuant --> OffloadCache
+    
+    %% RAG Pipeline Flow
+    Chunk --> Embed
+    Embed --> Index
+    Index --> Store
+    Store --> VectorsDir
+    Store --> VectorIndexDir
+    
+    %% Plugin Pipeline Flow
+    Validate --> Sandbox
+    Sandbox --> Register
+    Register --> PluginsDir
+    
+    %% Storage Reads for Processing
+    ModelsDir -.->|Load weights| Inference
+    OffloadCache -.->|Layer streaming| Inference
+    VectorsDir -.->|Similarity search| PromptBuild
+    VectorIndexDir -.->|Metadata lookup| PromptBuild
+    SovereignDB -.->|Model metadata| ModelFetch
+    SovereignDB -.->|Session history| PromptBuild
+    SovereignDB -.->|Plugin registry| Sandbox
+    SettingsDB -.->|Config (port, auth,<br/>system prompt, mode)| Inference
+    SettingsDB -.->|Benchmark config| BenchmarkResults
+    PluginsDir -.->|Plugin code| Sandbox
+    HF_Cache -.->|Cached weights| ModelFetch
+    
+    %% Processing Writes to Storage
+    Inference -->|Benchmark metrics| SovereignDB
+    ModelFetch -->|Model registry| SovereignDB
+    DocumentUpload -->|Document metadata| SovereignDB
+    PromptBuild -->|Session save| SessionsDir
+    PluginInstall -->|Plugin registry| SovereignDB
+    BenchmarkResults -->|Results| SovereignDB
+    
+    %% Output Connections
+    StreamTokens --> UserInput
+    FullResponse --> UserInput
+    BenchmarkResults --> UserInput
+    SystemStatus --> UserInput
+    RAGResults --> UserInput
+    PluginOutput --> UserInput
+    
+    %% Cross-cutting: Settings reads everywhere
+    SettingsDB -.->|Runtime config| PromptBuild
+    SettingsDB -.->|Runtime config| Inference
+    SettingsDB -.->|Runtime config| ModelFetch
+    SettingsDB -.->|Runtime config| Chunk
+    SettingsDB -.->|Runtime config| Validate
+    
+    %% ============================================
+    %% STYLING
+    %% ============================================
+    classDef input fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef processing fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef storage fill:#fafafa,stroke:#616161,stroke-width:2px,stroke-dasharray: 5 5
+    classDef output fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef db fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef files fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    
+    class UserInput,ModelDownload,DocumentUpload,PluginInstall input
+    class PromptBuild,Tokenize,Inference,Detokenize,StreamFormat,ModelFetch,ModelSplit,ModelQuant,ModelCache,Chunk,Embed,Index,Store,Validate,Sandbox,Register processing
+    class SovereignDB,SettingsDB db
+    class ModelsDir,OffloadCache,VectorsDir,VectorIndexDir,SessionsDir,PluginsDir,LogsDir,HF_Cache files
+    class StreamTokens,FullResponse,BenchmarkResults,SystemStatus,RAGResults,PluginOutput output

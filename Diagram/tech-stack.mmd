@@ -1,0 +1,311 @@
+%% SovereignAI Edge - Technical Stack Architecture
+%% Cloud-style technology stack diagram organized by layer
+
+graph TB
+    %% ============================================
+    %% TECHNOLOGY STACK LAYERS
+    %% ============================================
+    
+    subgraph FRONTEND_LAYER["🎨 Frontend Layer"]
+        direction TB
+        
+        subgraph WEB_APP["Web Application (Next.js 16 + React 19)"]
+            direction LR
+            NextJS["Next.js 16<br/>App Router + RSC<br/>Static Export (output: 'export')"]
+            React["React 19<br/>Server Components<br/>Concurrent Features"]
+            TypeScript["TypeScript 5<br/>Strict Mode"]
+            Tailwind["Tailwind CSS v4<br/>@theme inline<br/>CSS Variables + oklch"]
+            Shadcn["shadcn/ui (new-york)<br/>Radix UI Primitives<br/>Lucide Icons"]
+            Zustand["Zustand v5<br/>Global State"]
+            Framer["Framer Motion 12<br/>Animations"]
+            Recharts["Recharts 3<br/>Charts"]
+        end
+        
+        subgraph ELECTRON_APP["Electron Desktop (v28)"]
+            direction LR
+            Electron["Electron 28<br/>Chromium 120+<br/>Node 18+<br/>V8 12.0"]
+            ElectronBuilder["electron-builder 24<br/>NSIS (Win) / DMG (Mac)<br/>AppImage + deb (Linux)"]
+            MainProcess["Main Process<br/>main.js<br/>Backend Spawn + Window"]
+            Preload["Preload Script<br/>preload.js<br/>Context Bridge API"]
+            CustomProtocol["Custom Protocol<br/>app:// → frontend/out/"]
+            DevServer["Dev Mode<br/>USE_DEV_SERVER=true<br/>localhost:3000"]
+        end
+        
+        subgraph LANDING_PAGE["Landing Page (Separate)"]
+            direction LR
+            LandingNext["Next.js 14<br/>React 18"]
+            LandingTailwind["Tailwind v3<br/>Legacy Config"]
+        end
+    end
+    
+    subgraph BACKEND_LAYER["⚙️ Backend Layer (Python 3.10+)"]
+        direction TB
+        
+        subgraph FRAMEWORK["Web Framework"]
+            direction LR
+            FastAPI["FastAPI 0.109<br/>OpenAPI 3.1<br/>Pydantic 2.5 Validation"]
+            Uvicorn["Uvicorn 0.27<br/>ASGI Server<br/>Worker Processes"]
+            Starlette["Starlette 0.36<br/>Core ASGI"]
+        end
+        
+        subgraph ASYNC["Async Runtime"]
+            direction LR
+            Asyncio["asyncio (stdlib)"]
+            ThreadPool["ThreadPoolExecutor<br/>Blocking PyTorch Ops"]
+            AsyncGen["Async Generators<br/>SSE Streaming"]
+        end
+        
+        subgraph CONFIG["Configuration"]
+            direction LR
+            PydanticSettings["pydantic-settings 2.1<br/>BaseSettings + Env<br/>Prefix: SOVEREIGN_"]
+            DotEnv["python-dotenv<br/>.env Support (Optional)"]
+        end
+        
+        subgraph SERIALIZATION["Serialization"]
+            direction LR
+            Pydantic["Pydantic 2.5<br/>v2 Core Schema"]
+            JSON["orjson / json (stdlib)"]
+            SSEFormat["Custom SSE Formatter<br/>~96 char frames"]
+        end
+    end
+    
+    subgraph ML_LAYER["🤖 ML / Inference Layer"]
+        direction TB
+        
+        subgraph PRIMARY["Primary: Transformers + PyTorch"]
+            direction LR
+            Transformers["transformers 4.45<br/>AutoModelForCausalLM<br/>AutoConfig<br/>apply_chat_template"]
+            Torch["PyTorch 2.5.1<br/>CUDA 12.1 / CPU<br/>torch.compile (opt)"]
+            Accelerate["accelerate 0.34<br/>Device Map Auto<br/>Quantization Config"]
+            SafeTensors["safetensors ≥0.4<br/>Fast Tensor Loading<br/>CVE-2025-32434 Fix"]
+            Tokenizers["tokenizers (Rust)<br/>Fast Encoding/Decoding"]
+        end
+        
+        subgraph FALLBACK["Fallback: GGUF / llama.cpp"]
+            direction LR
+            IkLlama["ik-llama-cpp-python 0.1<br/>BitNet IQ2_BN Support"]
+            LlamaCpp["llama-cpp-python 0.3.34<br/>GGUF Standard Support"]
+            GGUF["GGUF Format<br/>Quantized Weights<br/>Metal/CPU/CUDA Backends"]
+        end
+        
+        subgraph LAYERSTREAM["LayerStream (Custom)"]
+            direction LR
+            WeightSplitter["WeightSplitter<br/>.safetensors Chunking<br/>quant_config.json"]
+            LayerLoader["LayerWeightLoader<br/>ThreadPool(prefetch=3)<br/>LRU Byte Budget Cache"]
+            LayerExecutor["LayerExecutor<br/>Layer-by-Layer Forward<br/>Cached Attention Mask"]
+            Sampler["Sampler<br/>Top-K + Top-P + Multinomial<br/>Non-destructive"]
+            KVCache["KVCacheManager<br/>HFProxyCache / StatefulCache<br/>Rolling Window"]
+            RoPE["Pre-computed RoPE<br/>Cached Cos/Sin Tables"]
+        end
+        
+        subgraph QUANT["Quantization"]
+            direction LR
+            Int8["Int8 Dynamic<br/>Per-tensor Scale"]
+            Int4["Int4 Group-wise<br/>Group Size 32/64"]
+            TurboQuant["TurboQuant (OFF)<br/>KV-Cache Compression<br/>QJL + Codebook<br/>EVAL GATE: FAILS"]
+        end
+        
+        subgraph RAG_ML["RAG Stack"]
+            direction LR
+            SentenceT["sentence-transformers 2.2<br/>all-MiniLM-L6-v2 (default)"]
+            FAISS["faiss-cpu 1.7<br/>IVF+PQ / Flat Index<br/>SIMD Optimized"]
+            Chunker["RecursiveChunker<br/>Chunk Size / Overlap"]
+        end
+    end
+    
+    subgraph DATA_LAYER["💾 Data Layer"]
+        direction TB
+        
+        subgraph DATABASES["Databases"]
+            direction LR
+            SQLite["sqlite3 (stdlib)<br/>WAL Mode<br/>synchronous=NORMAL<br/>mmap_size=256MB"]
+            Aiosqlite["aiosqlite 0.19<br/>Async Wrapper<br/>Connection Pool"]
+        end
+        
+        subgraph ENCRYPTION["Encryption"]
+            direction LR
+            Fernet["cryptography 41<br/>Fernet (AES-128-GCM)"]
+            PBKDF2["PBKDF2HMAC<br/>SHA-256, 480k Iters<br/>Machine Salt"]
+        end
+        
+        subgraph AUTH["Authentication"]
+            direction LR
+            Bearer["Bearer Token<br/>secrets.compare_digest<br/>Opt-in Only"]
+            Bcrypt["bcrypt 4.2<br/>Password Hashing"]
+            SlowAPI["slowapi 0.1.9<br/>Rate Limiting<br/>60 req/min default"]
+        end
+    end
+    
+    subgraph INFRA_LAYER["🏗️ Infrastructure & Tooling"]
+        direction TB
+        
+        subgraph PKG_MGMT["Package Management"]
+            direction LR
+            UV["uv (Canonical)<br/>backend/uv.lock<br/>Fast Resolution"]
+            Pip["pip + venv<br/>Launcher Fallback<br/>.venv/"]
+            NPM["npm<br/>Frontend/Electron/Landing<br/>package-lock.json"]
+        end
+        
+        subgraph TESTING["Testing"]
+            direction LR
+            Pytest["pytest 8.0<br/>pytest-asyncio 0.23<br/>asyncio_mode=auto"]
+            Markers["@pytest.mark.slow<br/>Real Engine Round-trip"]
+            NoConftest["No conftest.py<br/>Inline Fixtures"]
+        end
+        
+        subgraph BENCHMARKS["Benchmarks (Non-pytest)"]
+            direction LR
+            AccEval["accuracy_eval.py<br/>Eval Gate (TurboQuant)"]
+            LSBench["benchmark_layerstream.py<br/>tok/s + Peak RAM"]
+            PhaseA["layerstream_phase_a.py<br/>LRU/Prefetch Perf"]
+            QJL["qjl_ablation.py<br/>QJL Probes"]
+        end
+        
+        subgraph DEV_TOOLS["Dev Tools"]
+            direction LR
+            ESLint["ESLint 9<br/>Frontend Linting"]
+            Prettier["Prettier<br/>Code Format"]
+            TypeCheck["tsc --noEmit<br/>Type Checking"]
+            Pyright["pyright / mypy<br/>Python Type Check"]
+        end
+    end
+    
+    subgraph HARDWARE["🖥️ Hardware Targets"]
+        direction TB
+        CPU["CPU Inference<br/>AVX2 / AVX-512<br/>torch.compile Inductor"]
+        CUDA["NVIDIA CUDA<br/>VRAM ≥ Model Size<br/>FullRAM Primary"]
+        MPS["Apple Metal (MPS)<br/>Unified Memory<br/>LayerStream Viable"]
+        RAM["System RAM<br/>8GB+ Minimum<br/>LayerStream Target"]
+        Disk["NVMe SSD<br/>Offload Cache<br/>LayerStream Streaming"]
+        USB["USB 3.0+<br/>Portable Deployment<br/>workspace/ on USB"]
+    end
+    
+    %% ============================================
+    %% DEPENDENCY FLOWS
+    %% ============================================
+    
+    %% Frontend deps
+    NextJS --> React
+    NextJS --> TypeScript
+    NextJS --> Tailwind
+    React --> Zustand
+    React --> Framer
+    React --> Recharts
+    Shadcn --> Radix["Radix UI (via shadcn)"]
+    Shadcn --> Lucide["Lucide Icons"]
+    Tailwind --> CSSVars["CSS Variables (oklch)"]
+    
+    Electron --> MainProcess
+    Electron --> Preload
+    Electron --> CustomProtocol
+    ElectronBuilder --> Electron
+    DevServer --> Electron
+    
+    LandingNext --> LandingTailwind
+    
+    %% Backend deps
+    FastAPI --> Starlette
+    FastAPI --> Pydantic
+    Uvicorn --> FastAPI
+    PydanticSettings --> Pydantic
+    PydanticSettings --> DotEnv
+    
+    %% Async deps
+    FastAPI --> Asyncio
+    Inference["Engine Inference"] --> ThreadPool
+    ChatAPI["Chat API"] --> AsyncGen
+    
+    %% ML Primary
+    Transformers --> Torch
+    Transformers --> Accelerate
+    Transformers --> SafeTensors
+    Transformers --> Tokenizers
+    AutoConfig["AutoConfig"] --> Transformers
+    
+    %% ML Fallback
+    IkLlama --> LlamaCpp
+    LlamaCpp --> GGUF
+    FullRAM["FullRAMEngine"] --> Transformers
+    FullRAM -.->|GGUF Fallback| IkLlama
+    
+    %% LayerStream
+    WeightSplitter --> SafeTensors
+    LayerLoader --> ThreadPool
+    LayerExecutor --> KVCache
+    LayerExecutor --> RoPE
+    LayerExecutor --> Sampler
+    LayerStream["LayerStreamEngine"] --> LayerLoader
+    LayerStream --> LayerExecutor
+    
+    %% Quant
+    TurboQuant -.->|Default OFF| LayerExecutor
+    WeightSplitter --> Int8
+    WeightSplitter --> Int4
+    
+    %% RAG
+    SentenceT --> Torch
+    FAISS --> SentenceT
+    Chunker --> FAISS
+    
+    %% Data
+    Aiosqlite --> SQLite
+    Fernet --> PBKDF2
+    Bearer --> SlowAPI
+    Bcrypt --> Settings["Settings Service"]
+    
+    %% Infra
+    UV --> Pip
+    Pytest --> NoConftest
+    Pytest --> Markers
+    
+    %% Hardware mapping
+    CUDA --> FullRAM
+    MPS --> LayerStream
+    RAM --> LayerStream
+    Disk --> LayerStream
+    USB --> Portable["Portable Deployment"]
+    
+    %% ============================================
+    %% STYLING
+    %% ============================================
+    classDef frontend fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef electron fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px
+    classDef landing fill:#eceff1,stroke:#546e7a,stroke-width:2px
+    classDef framework fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef async fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+    classDef config fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef serial fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef primary fill:#e0f2f1,stroke:#00695c,stroke-width:2px
+    classDef fallback fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    classDef layerstream fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef quant fill:#fafafa,stroke:#616161,stroke-width:2px,stroke-dasharray: 5 5
+    classDef rag fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef db fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef enc fill:#fff3e0,stroke:#ef6c00,stroke-width:2px
+    classDef auth fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef pkg fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef test fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    classDef bench fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+    classDef dev fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+    classDef hw fill:#fafafa,stroke:#616161,stroke-width:2px,stroke-dasharray: 5 5
+    
+    class NextJS,React,TypeScript,Tailwind,Shadcn,Zustand,Framer,Recharts frontend
+    class Electron,ElectronBuilder,MainProcess,Preload,CustomProtocol,DevServer electron
+    class LandingNext,LandingTailwind landing
+    class FastAPI,Uvicorn,Starlette framework
+    class Asyncio,ThreadPool,AsyncGen async
+    class PydanticSettings,DotEnv config
+    class Pydantic,JSON,SSEFormat serial
+    class Transformers,Torch,Accelerate,SafeTensors,Tokenizers,AutoConfig primary
+    class IkLlama,LlamaCpp,GGUF fallback
+    class WeightSplitter,LayerLoader,LayerExecutor,Sampler,KVCache,RoPE layerstream
+    class Int8,Int4,TurboQuant quant
+    class SentenceT,FAISS,Chunker rag
+    class SQLite,Aiosqlite db
+    class Fernet,PBKDF2 enc
+    class Bearer,Bcrypt,SlowAPI auth
+    class UV,Pip,NPM pkg
+    class Pytest,Markers,NoConftest test
+    class AccEval,LSBench,PhaseA,QJL bench
+    class ESLint,Prettier,TypeCheck,Pyright dev
+    class CPU,CUDA,MPS,RAM,Disk,USB hw

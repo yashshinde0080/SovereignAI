@@ -1,4 +1,6 @@
 # 🛡️ SovereignAI Edge
+[![License](https://img.shields.io/github/license/SovereignAI/Edge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/SovereignAI/Edge)](https://github.com/SovereignAI/Edge/stargazers)
 
 ![SovereignAI Edge Hero](./Info_docs/assets/hero.png)
 
@@ -7,6 +9,18 @@
 
 ---
 
+## 📚 Table of Contents
+
+- [Key Features](#-key-features)
+- [System Architecture](#-system-architecture)
+- [Performance](#-performance-the-dual-engine-advantage)
+- [File System Layout](#-file-system-layout)
+- [Quick Start](#-quick-start)
+- [Privacy First](#-privacy-first)
+- [OpenAI-Compatible API](#-openai-compatible-api)
+- [Known Limitations](#-known-limitations)
+- [Contributing](#-contributing)
+- [License](#-license)
 ## 🚀 Key Features
 
 | Feature | Description |
@@ -46,6 +60,7 @@ graph TB
     Direction -- High RAM --> FullRAM
     Direction -- Low RAM --> LayerStream
 ```
+Architecture layers: UI→FastAPI backend→Engine (FullRAM or LayerStream). Plugin manager loads extensions; vector store supplies RAG embeddings.
 
 ---
 
@@ -59,6 +74,12 @@ Loads the entire model checkpoint into active memory. Best for systems with high
 ### 2. LayerStream Engine
 A fallback engine that iteratively loads and unloads individual neural network layers from Disk to RAM, so models larger than free RAM still run. Sweet spot: **3-8B Q4 models on 8GB RAM** (measured: 1.9GB model → 2.3GB peak RSS). Large models (70B+) run but slowly — see [reviews/benchmark-2026-08-14.md](reviews/benchmark-2026-08-14.md) for honest numbers.
 
+### Benchmarks
+
+| Model | Mode | Tokens/s |
+|-------|------|----------|
+| Qwen2-0.5B (int4) | FullRAM | 0.85 |
+| Qwen3.5-0.8B (int4) | LayerStream | 0.40 |
 ---
 
 ## 📦 File System Layout
@@ -88,6 +109,12 @@ SovereignAI/
    - **Windows:** Run `launch.bat`
    - **Linux/macOS:** Run `./launch.sh`
 
+### Installation
+
+1. Install backend deps: `cd backend && pip install -r requirements.txt`
+2. Install frontend deps: `cd frontend && npm ci`
+3. Install electron deps (optional): `cd electron && npm ci`
+4. Configure env (optional): create `.env` with `SOVEREIGN_BIND_LOCALHOST_ONLY=false` for remote access.
 ---
 
 ## 🛡️ Privacy First
@@ -126,5 +153,12 @@ ignore the extra key. Shapes are pinned by
 ---
 
 <p align="center">
+## 🤝 Contributing
+
+We welcome contributions. Fork repo, create feature branch, run tests (`python -m pytest -m "not slow"`). Submit PR.
+
+## 📄 License
+
+MIT License. See `LICENSE` file.
   Built with ❤️ for the Open Source AI Community.
 </p>

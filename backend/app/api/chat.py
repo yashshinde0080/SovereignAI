@@ -128,7 +128,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     
     if chat_request.stream:
         return StreamingResponse(
-            stream_response(app.state.active_engine, prompt, chat_request, rag_metadata_out, request),
+            stream_response(app.state.active_engine, prompt, chat_request, rag_metadata_out, request, app.state.active_model),
             media_type="text/event-stream"
         )
     
@@ -195,6 +195,7 @@ async def stream_response(
     request: ChatRequest,
     rag_metadata: list = None,
     http_request: Request = None,
+    model_name: str = None,
 ) -> AsyncGenerator[str, None]:
     """Stream tokens, splitting <think>...</think> reasoning out of content.
 
@@ -213,13 +214,17 @@ async def stream_response(
 
     # Stable stream id — one per request, all chunks share it
     stream_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+    first_chunk = True
 
     def _emit(content: str, reasoning: str = "", finish_reason: str = None) -> str:
-        nonlocal chunk_no
+        nonlocal chunk_no, first_chunk
         chunk_no += 1
         delta = {"content": content}
         if reasoning and reasoning.strip():
             delta["reasoning"] = reasoning
+        if first_chunk and model_name:
+            delta["model_name"] = model_name
+            first_chunk = False
         data = StreamChunk(
             id=stream_id,
             choices=[{"index": 0, "delta": delta, "finish_reason": finish_reason}]

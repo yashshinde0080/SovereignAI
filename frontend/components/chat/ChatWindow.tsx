@@ -13,9 +13,10 @@ interface ChatWindowProps {
   editingIndex?: number | null;
   onEditMessage?: (index: number) => void;
   onRegenerate?: () => void;
+  modelName?: string;
 }
 
-export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, onRegenerate }: ChatWindowProps) {
+export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, onRegenerate, modelName }: ChatWindowProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const lastScrollTop = useRef(0);
@@ -145,6 +146,7 @@ export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, o
             onRegenerate={onRegenerate}
             editingIndex={editingIndex}
             isLoading={isLoading}
+            modelName={modelName}
           />
           {isLoading && (
             <div className="flex items-center gap-3 text-muted-foreground mt-3 mb-6">

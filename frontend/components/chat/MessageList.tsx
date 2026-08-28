@@ -15,6 +15,7 @@ interface MessageListProps {
   onRegenerate?: () => void;
   editingIndex?: number | null;
   isLoading?: boolean;
+  modelName?: string;
 }
 
 const CodeBlock = ({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
@@ -156,6 +157,7 @@ const MessageItem = memo(function MessageItem({
   isEditing,
   isLast,
   isLoading,
+  modelName,
   onEditMessage,
   onRegenerate,
   onViewSource,
@@ -165,6 +167,7 @@ const MessageItem = memo(function MessageItem({
   isEditing: boolean;
   isLast: boolean;
   isLoading: boolean;
+  modelName?: string;
   onEditMessage?: (index: number) => void;
   onRegenerate?: () => void;
   onViewSource: (source: RagSource) => void;
@@ -180,8 +183,15 @@ const MessageItem = memo(function MessageItem({
       )}
     >
       {message.role === 'assistant' && (
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 border border-primary/20 shadow-sm mt-1">
-          <Bot className="h-5 w-5 text-primary" />
+        <div className="flex flex-col items-center gap-1 flex-shrink-0 mt-1">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-sm">
+            <Bot className="h-5 w-5 text-primary" />
+          </div>
+          {(modelName || message.model) && (
+            <span className="text-[9px] font-medium text-muted-foreground/60 max-w-[52px] truncate text-center leading-tight" title={message.model || modelName}>
+              {message.model || modelName}
+            </span>
+          )}
         </div>
       )}
 
@@ -307,7 +317,7 @@ const MessageItem = memo(function MessageItem({
   );
 });
 
-export function MessageList({ messages, onEditMessage, onRegenerate, editingIndex, isLoading }: MessageListProps) {
+export function MessageList({ messages, onEditMessage, onRegenerate, editingIndex, isLoading, modelName }: MessageListProps) {
   const [viewSource, setViewSource] = useState<RagSource | null>(null);
 
   if (messages.length === 0) {
@@ -382,6 +392,7 @@ export function MessageList({ messages, onEditMessage, onRegenerate, editingInde
             isEditing={index === editingIndex}
             isLast={index === messages.length - 1}
             isLoading={!!isLoading}
+            modelName={modelName}
             onEditMessage={onEditMessage}
             onRegenerate={onRegenerate}
             onViewSource={setViewSource}

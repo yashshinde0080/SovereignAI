@@ -209,6 +209,7 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
           editingIndex={editingIndex}
           onEditMessage={handleEditMessage}
           onRegenerate={handleRegenerate}
+          modelName={model}
         />
       </div>
 

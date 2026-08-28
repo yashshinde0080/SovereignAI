@@ -14,6 +14,8 @@ export interface Message {
   reasoning?: string;
   /** RAG sources cited by an assistant reply (from stream rag_metadata). */
   sources?: RagSource[];
+  /** Which model answered this message (from stream model_name delta). */
+  model?: string;
 }
 
 export interface Model {

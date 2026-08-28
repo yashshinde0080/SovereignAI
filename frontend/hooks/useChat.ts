@@ -212,6 +212,7 @@ export function useChat() {
 
         let assistantContent = '';
         let assistantReasoning = '';
+        let assistantModel = '';
         let buffer = '';
         const decoder = new TextDecoder();
 
@@ -237,6 +238,7 @@ export function useChat() {
           patchLastMessage({
             content: assistantContent,
             reasoning: assistantReasoning || undefined,
+            ...(assistantModel ? { model: assistantModel } : {}),
           });
         };
         const scheduleFlush = () => {
@@ -294,6 +296,10 @@ export function useChat() {
                     continue;
                   }
 
+                  // Model name arrives in the first chunk's delta.
+                  const modelName = chunk.choices?.[0]?.delta?.model_name;
+                  if (modelName && !assistantModel) assistantModel = modelName;
+
                   // Reasoning (thinking) deltas arrive before content for
                   // reasoning models; both accumulate into the same message.
                   const reasoningToken = chunk.choices?.[0]?.delta?.reasoning || '';
@@ -327,6 +333,7 @@ export function useChat() {
         patchLastMessage({
           content: assistantContent,
           reasoning: assistantReasoning || undefined,
+          ...(assistantModel ? { model: assistantModel } : {}),
         });
       } else {
         // Fallback for non-streaming
@@ -342,7 +349,7 @@ export function useChat() {
         }
         setMessages((prev) => [
           ...prev,
-          { role: 'assistant', content, ...(reasoning ? { reasoning } : {}) },
+          { role: 'assistant', content, ...(reasoning ? { reasoning } : {}), ...(data.model ? { model: data.model } : {}) },
         ]);
       }
     } catch (error) {

@@ -2,7 +2,6 @@
 import asyncio
 import json
 import logging
-import re
 import uuid
 from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
@@ -115,11 +114,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     prompt = ""
     if tokenizer and hasattr(tokenizer, "apply_chat_template"):
         try:
-            template_kwargs = {"tokenize": False, "add_generation_prompt": True}
-            # Thinking toggle for reasoning models (Qwen3.5); None = template default
-            if chat_request.enable_thinking is not None:
-                template_kwargs["enable_thinking"] = chat_request.enable_thinking
-            prompt = tokenizer.apply_chat_template(messages_dicts, **template_kwargs)
+            prompt = tokenizer.apply_chat_template(messages_dicts, tokenize=False, add_generation_prompt=True)
         except Exception as e:
             # Fallback
             prompt = build_prompt(messages_dicts)
@@ -142,23 +137,14 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
         top_p=chat_request.top_p
     )
     
-    raw_output = response.get("output", "") if "output" in response else response.get("text", "")
-    if _prompt_opens_think(prompt):
-        raw_output = _OPEN_TAG + raw_output  # opener lived in the prompt template
-    content, reasoning = _split_think(raw_output)
-    if "<think>" in raw_output:
-        content = content.strip()
-        reasoning = (reasoning or "").strip() or None
-    message = {"role": "assistant", "content": content}
-    if reasoning:
-        message["reasoning"] = reasoning
+    content = response.get("output", "") if "output" in response else response.get("text", "")
     
     return ChatResponse(
         id=f"chatcmpl-{uuid.uuid4().hex[:24]}",
         model=chat_request.model or app.state.active_model,
         choices=[{
             "index": 0,
-            "message": message,
+            "message": {"role": "assistant", "content": content},
             "finish_reason": response.get("finish_reason", "stop")
         }],
         usage={
@@ -180,8 +166,6 @@ async def execute_task(request: Request):
     
     # Delegate to Engine's unified generate implementation directly
     try:
-        # Check task type compatibility to fail early?
-        # That's handled inside the engine.
         result = await engine.generate(input_data=body, **body.get("generation_kwargs", {}))
         return result
     except Exception as e:
@@ -197,26 +181,17 @@ async def stream_response(
     http_request: Request = None,
     model_name: str = None,
 ) -> AsyncGenerator[str, None]:
-    """Stream tokens, splitting <think>...</think> reasoning out of content.
-
-    The raw stream accumulates in ``full_text``; each chunk we strip think
-    blocks from the whole text and emit the newly-appeared content and
-    reasoning deltas (holding back any trailing chars that could open a tag,
-    so a tag split across chunk boundaries never leaks). Reasoning arrives in
-    ``delta.reasoning``; content in ``delta.content``.
-    """
+    """Stream tokens from the engine."""
     chunk_no = 0
 
     # Stable stream id — one per request, all chunks share it
     stream_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     first_chunk = True
 
-    def _emit(content: str, reasoning: str = "", finish_reason: str = None) -> str:
+    def _emit(content: str, finish_reason: str = None) -> str:
         nonlocal chunk_no, first_chunk
         chunk_no += 1
         delta = {"content": content}
-        if reasoning and reasoning.strip():
-            delta["reasoning"] = reasoning
         if first_chunk and model_name:
             delta["model_name"] = model_name
             first_chunk = False
@@ -227,44 +202,18 @@ async def stream_response(
         return f"data: {json.dumps(data.model_dump())}\n\n"
 
     # Batch several engine tokens per SSE frame instead of one frame per token.
-    # Cuts frame count + JSON serialization ~10x; deltas stay in order and the
-    # frontend's rAF flush already coalesces renders. ponytail: fixed char
-    # budget, tune only if frame latency ever matters more than frame count.
     BATCH_CHARS = 96
-    pending_c: list[str] = []
-    pending_r: list[str] = []
+    pending: list[str] = []
     pending_chars = 0
 
     def _take_pending() -> str:
-        nonlocal pending_c, pending_r, pending_chars
-        if not pending_c and not pending_r:
+        nonlocal pending, pending_chars
+        if not pending:
             return ""
-        frame = _emit("".join(pending_c), "".join(pending_r))
-        pending_c = []
-        pending_r = []
+        frame = _emit("".join(pending))
+        pending = []
         pending_chars = 0
         return frame
-
-    # ── Incremental think-state tracker ─────────────────────────────────
-    # Tracks whether we're inside a <think> block, buffers trailing chars
-    # that could be a partial tag, and emits content/reasoning deltas
-    # without reprocessing the full accumulated text each token.
-    in_think = _prompt_opens_think(prompt)
-    _TAG_LEN = len(_OPEN_TAG)  # 7
-    _CLOSE_LEN = len(_CLOSE_TAG)  # 8
-    _tag_buf = ""  # trailing chars that could start a tag
-
-    def _flush_tag_buf(to_think: bool):
-        """Emit buffered chars into the right bucket."""
-        nonlocal _tag_buf
-        if _tag_buf:
-            if to_think:
-                pending_r.append(_tag_buf)
-            else:
-                pending_c.append(_tag_buf)
-            nonlocal pending_chars
-            pending_chars += len(_tag_buf)
-            _tag_buf = ""
 
     try:
         async for chunk in engine.generate_stream(
@@ -280,52 +229,24 @@ async def stream_response(
             if not token and finish is None:
                 continue
 
-            # Feed token char-by-char through the tag-boundary detector.
-            for ch in token:
-                _tag_buf += ch
-                # Check if buffer completes an open or close tag
-                if in_think and _tag_buf.endswith(_CLOSE_TAG):
-                    _tag_buf = _tag_buf[:-_CLOSE_LEN]  # strip the tag
-                    _flush_tag_buf(True)                 # emit remaining as reasoning
-                    in_think = False
-                    _tag_buf = ""
-                elif not in_think and _tag_buf.endswith(_OPEN_TAG):
-                    _tag_buf = _tag_buf[:-_TAG_LEN]  # strip the tag
-                    _flush_tag_buf(False)              # emit remaining as content
-                    in_think = True
-                    _tag_buf = ""
-                elif (len(_tag_buf) >= _TAG_LEN
-                      and not any(_tag_buf.endswith(t) for t in (_OPEN_TAG, _CLOSE_TAG))):
-                    # Buffer is longer than any tag and doesn't end with one —
-                    # safe to emit all but the last (tag_len-1) chars.
-                    safe = _tag_buf[:-(_TAG_LEN - 1)]
-                    _tag_buf = _tag_buf[-(_TAG_LEN - 1):]
-                    if in_think:
-                        pending_r.append(safe)
-                    else:
-                        pending_c.append(safe)
-                    pending_chars += len(safe)
-
+            pending.append(token)
+            pending_chars += len(token)
             if pending_chars >= BATCH_CHARS:
                 frame = _take_pending()
                 if frame:
                     yield frame
 
             if finish is not None:
-                _flush_tag_buf(in_think)
                 frame = _take_pending()
                 if frame:
                     yield frame
-                yield _emit("", "", finish)
-                in_think = False
-                _tag_buf = ""
+                yield _emit("", finish)
     except Exception as e:
         logger.error("Stream generation failed: %s", e)
-        # Flush any partial content before sending the error
         frame = _take_pending()
         if frame:
             yield frame
-        yield _emit("", "", "error")
+        yield _emit("", "error")
 
     # Flush any remaining batched deltas before the metadata/DONE trailers.
     frame = _take_pending()
@@ -344,63 +265,6 @@ async def stream_response(
         yield f"data: {json.dumps(meta_chunk.model_dump())}\n\n"
     
     yield "data: [DONE]\n\n"
-
-
-_OPEN_TAG = "<think>"
-_CLOSE_TAG = "</think>"
-
-
-def _prompt_opens_think(prompt: str) -> bool:
-    """True if the chat template left an unclosed <think> opener at the end of
-    the prompt (thinking mode); then the completion holds only the close tag."""
-    return prompt.rstrip().endswith(_OPEN_TAG)
-
-
-def _trim_tag_prefix(text: str) -> str:
-    """Drop trailing chars that could start <think> or </think> (longest match)."""
-    for k in range(min(len(text), 8), 0, -1):  # len("</think>") == 8
-        tail = text[-k:]
-        if _OPEN_TAG.startswith(tail) or _CLOSE_TAG.startswith(tail):
-            return text[:-k]
-    return text
-
-
-def _split_think(text: str):
-    """Strip <think>...</think> reasoning out of generated text.
-
-    Returns (content, reasoning). Reasoning is None when there is no think
-    block. Handles full blocks, unclosed trailing blocks (the model stopped
-    mid-think, so there is no answer to lose), and a bare </think> whose
-    opener the chat template left in the prompt (everything before it is
-    reasoning). Without any think tag the text passes through untouched.
-    Text is returned raw (no whitespace cleanup) so streaming deltas stay
-    prefix-stable; callers may strip as they see fit.
-    """
-    if _OPEN_TAG not in text and _CLOSE_TAG not in text:
-        return text, None
-    content, reasoning = [], []
-    pos = 0
-    in_think = False
-    for m in re.finditer(r"<think>|</think>", text):
-        chunk = text[pos:m.start()]
-        pos = m.end()
-        if m.group() == _OPEN_TAG:
-            if chunk:
-                content.append(chunk)  # content before the opener
-            in_think = True
-        else:  # </think>
-            # Chunk between an opener and its close is reasoning. A stray
-            # close with no opener in this text is not a reasoning marker:
-            # thinking mode is handled by callers seeding the opener, so a
-            # bare close here keeps its text in content (the tag itself is
-            # dropped) — reclassifying it would desync streamed output.
-            if chunk:
-                (reasoning if in_think else content).append(chunk)
-            in_think = False
-    tail = text[pos:]
-    if tail:
-        (reasoning if in_think else content).append(tail)
-    return "".join(content), "".join(reasoning) or None
 
 
 def build_prompt(messages: list) -> str:
@@ -430,7 +294,6 @@ async def switch_mode(request: Request, mode: str):
         raise HTTPException(status_code=400, detail="No model loaded")
     
     try:
-        # Use ModelManager's load_model to handle engine creation and path resolution
         result = await app.state.model_manager.load_model(
             model_id=app.state.active_model,
             mode=mode

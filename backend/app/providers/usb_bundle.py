@@ -324,10 +324,15 @@ class USBBundleProvider(BaseProvider):
             async with aiofiles.open(checksum_path, 'r') as f:
                 checksum = (await f.read()).strip().split()[0]
         
-        # Calculate total size
-        total_size = sum(
-            f.stat().st_size for f in dir_path.rglob("*") if f.is_file()
-        )
+        # Calculate total size — os.scandir is faster than rglob
+        total_size = 0
+        for entry in os.scandir(dir_path):
+            if entry.is_file(follow_symlinks=False):
+                total_size += entry.stat().st_size
+            elif entry.is_dir(follow_symlinks=False):
+                for sub in os.scandir(entry):
+                    if sub.is_file(follow_symlinks=False):
+                        total_size += sub.stat().st_size
         
         return BundleInfo(
             path=dir_path,

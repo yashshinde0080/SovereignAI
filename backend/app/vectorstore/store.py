@@ -263,6 +263,40 @@ class VectorMetadataStore:
             })
         return results
 
+    def get_chunks_by_documents(
+            self, document_ids: List[str]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Batch: get all chunks for multiple documents in one query."""
+        if not document_ids:
+            return {}
+        placeholders = ','.join('?' * len(document_ids))
+        cursor = self._conn.execute(
+            f"""
+            SELECT chunk_id, document_id, content, chunk_index,
+                   start_char, end_char, token_count,
+                   metadata_json, created_at
+            FROM chunks
+            WHERE document_id IN ({placeholders})
+            ORDER BY document_id, chunk_index
+            """,
+            tuple(document_ids)
+        )
+        grouped: Dict[str, List[Dict[str, Any]]] = {did: [] for did in document_ids}
+        for row in cursor.fetchall():
+            did = row["document_id"]
+            grouped[did].append({
+                "chunk_id": row["chunk_id"],
+                "document_id": did,
+                "content": row["content"],
+                "chunk_index": row["chunk_index"],
+                "start_char": row["start_char"],
+                "end_char": row["end_char"],
+                "token_count": row["token_count"],
+                "metadata": json.loads(row["metadata_json"]),
+                "created_at": row["created_at"]
+            })
+        return grouped
+
     def delete_document_data(self, document_id: str):
         """
         Delete all chunks and embeddings for a document.

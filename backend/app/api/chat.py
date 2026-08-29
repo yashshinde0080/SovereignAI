@@ -205,11 +205,6 @@ async def stream_response(
     so a tag split across chunk boundaries never leaks). Reasoning arrives in
     ``delta.reasoning``; content in ``delta.content``.
     """
-    # If the chat template opened <think> in the prompt, the completion starts
-    # mid-reasoning — seed the buffer with the opener so the close is matched.
-    full_text = _OPEN_TAG if _prompt_opens_think(prompt) else ""
-    sent = 0   # chars of stripped content already emitted
-    rsent = 0  # chars of stripped reasoning already emitted
     chunk_no = 0
 
     # Stable stream id — one per request, all chunks share it
@@ -250,6 +245,27 @@ async def stream_response(
         pending_chars = 0
         return frame
 
+    # ── Incremental think-state tracker ─────────────────────────────────
+    # Tracks whether we're inside a <think> block, buffers trailing chars
+    # that could be a partial tag, and emits content/reasoning deltas
+    # without reprocessing the full accumulated text each token.
+    in_think = _prompt_opens_think(prompt)
+    _TAG_LEN = len(_OPEN_TAG)  # 7
+    _CLOSE_LEN = len(_CLOSE_TAG)  # 8
+    _tag_buf = ""  # trailing chars that could start a tag
+
+    def _flush_tag_buf(to_think: bool):
+        """Emit buffered chars into the right bucket."""
+        nonlocal _tag_buf
+        if _tag_buf:
+            if to_think:
+                pending_r.append(_tag_buf)
+            else:
+                pending_c.append(_tag_buf)
+            nonlocal pending_chars
+            pending_chars += len(_tag_buf)
+            _tag_buf = ""
+
     try:
         async for chunk in engine.generate_stream(
             input_data=prompt,
@@ -257,45 +273,52 @@ async def stream_response(
             temperature=request.temperature,
             top_p=request.top_p
         ):
-            # Stop generating when the client goes away: an abandoned stream would
-            # otherwise run to completion on a slow local engine, stealing RAM/CPU.
-            # The engine's generator is closed by GC on return.
             if http_request is not None and await http_request.is_disconnected():
                 return
             token = chunk.get("token", "")
             finish = chunk.get("finish_reason")
             if not token and finish is None:
                 continue
-            full_text += token
 
-            content, reasoning = _split_think(full_text)
-            # Hold back trailing partial tags (e.g. "<thi", "</thi") so neither
-            # stream leaks a half-emitted tag or overshoots its offset
-            content = _trim_tag_prefix(content)
-            reasoning = _trim_tag_prefix(reasoning or "")
-            c_out = r_out = ""
-            if len(content) > sent:
-                c_out = content[sent:]
-                sent = len(content)
-            if len(reasoning) > rsent:
-                r_out = reasoning[rsent:]
-                rsent = len(reasoning)
-            if c_out or r_out:
-                pending_c.append(c_out)
-                pending_r.append(r_out)
-                pending_chars += len(c_out) + len(r_out)
-                if pending_chars >= BATCH_CHARS:
-                    frame = _take_pending()
-                    if frame:
-                        yield frame
+            # Feed token char-by-char through the tag-boundary detector.
+            for ch in token:
+                _tag_buf += ch
+                # Check if buffer completes an open or close tag
+                if in_think and _tag_buf.endswith(_CLOSE_TAG):
+                    _tag_buf = _tag_buf[:-_CLOSE_LEN]  # strip the tag
+                    _flush_tag_buf(True)                 # emit remaining as reasoning
+                    in_think = False
+                    _tag_buf = ""
+                elif not in_think and _tag_buf.endswith(_OPEN_TAG):
+                    _tag_buf = _tag_buf[:-_TAG_LEN]  # strip the tag
+                    _flush_tag_buf(False)              # emit remaining as content
+                    in_think = True
+                    _tag_buf = ""
+                elif (len(_tag_buf) >= _TAG_LEN
+                      and not any(_tag_buf.endswith(t) for t in (_OPEN_TAG, _CLOSE_TAG))):
+                    # Buffer is longer than any tag and doesn't end with one —
+                    # safe to emit all but the last (tag_len-1) chars.
+                    safe = _tag_buf[:-(_TAG_LEN - 1)]
+                    _tag_buf = _tag_buf[-(_TAG_LEN - 1):]
+                    if in_think:
+                        pending_r.append(safe)
+                    else:
+                        pending_c.append(safe)
+                    pending_chars += len(safe)
+
+            if pending_chars >= BATCH_CHARS:
+                frame = _take_pending()
+                if frame:
+                    yield frame
 
             if finish is not None:
+                _flush_tag_buf(in_think)
                 frame = _take_pending()
                 if frame:
                     yield frame
                 yield _emit("", "", finish)
-                sent, rsent = 0, 0
-                full_text = ""
+                in_think = False
+                _tag_buf = ""
     except Exception as e:
         logger.error("Stream generation failed: %s", e)
         # Flush any partial content before sending the error

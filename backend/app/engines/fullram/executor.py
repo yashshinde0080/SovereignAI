@@ -78,7 +78,9 @@ class FullRAMEngine(BaseEngine):
                 model_kwargs["dtype"] = torch.float16
             else:
                 model_kwargs["device_map"] = "cpu"
-                model_kwargs["dtype"] = torch.float32
+                # ponytail: float16 on CPU halves load time vs float32.
+                # transformers dequantizes to compute dtype on-the-fly.
+                model_kwargs["dtype"] = torch.float16
                 
             if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
                 model_dir = os.path.dirname(self.model_path)
@@ -198,18 +200,18 @@ class FullRAMEngine(BaseEngine):
         if self.model:
             del self.model
             self.model = None
-        
+
         if self.tokenizer:
             del self.tokenizer
             self.tokenizer = None
-            
+
         if self.processor:
             del self.processor
             self.processor = None
-            
+
         if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            
+            await asyncio.to_thread(torch.cuda.empty_cache)
+
         self.loaded = False
     
     async def generate(self, input_data: Any, **kwargs) -> Dict[str, Any]:

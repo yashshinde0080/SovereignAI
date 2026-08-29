@@ -137,7 +137,8 @@ class LayerWeightLoader:
             "process_rss_mb": psutil.Process().memory_info().rss / (1024 ** 2),
         }
 
-    def clear_cache(self):
+    def close(self):
+        """Shut down the thread pool. Call on engine unload."""
         for f in self.futures.values():
             f.cancel()
         self.futures.clear()
@@ -146,6 +147,9 @@ class LayerWeightLoader:
         self._cached_bytes = 0
         self._pinned_bytes = 0
         self.executor.shutdown(wait=False)
+
+    def clear_cache(self):
+        self.close()
         gc.collect()
 
 

@@ -20,8 +20,16 @@ class VectorStore:
         self.documents: Dict[str, Dict[str, Any]] = {}
         self.vectors: Optional[np.ndarray] = None
         self.doc_ids: List[str] = []
+        self._chunk_idx: Dict[str, int] = {}  # doc_id -> chunk_index offset (precomputed)
         
         self._load()
+    
+    def _rebuild_chunk_idx(self):
+        """Precompute doc_id -> chunk offset mapping. O(n) once, O(1) per lookup."""
+        self._chunk_idx.clear()
+        for i, doc_id in enumerate(self.doc_ids):
+            if doc_id not in self._chunk_idx:
+                self._chunk_idx[doc_id] = i
     
     def _load(self):
         """Load existing index"""
@@ -33,6 +41,8 @@ class VectorStore:
         
         if self.vectors_path.exists():
             self.vectors = np.load(self.vectors_path)
+        
+        self._rebuild_chunk_idx()
     
     def _save(self):
         """Save index"""
@@ -78,6 +88,10 @@ class VectorStore:
         # Track doc IDs per vector
         for _ in chunks:
             self.doc_ids.append(doc_id)
+        
+        # Update chunk index offset for this doc_id
+        if doc_id not in self._chunk_idx:
+            self._chunk_idx[doc_id] = len(self.doc_ids) - len(chunks)
         
         self._save()
         
@@ -131,7 +145,8 @@ class VectorStore:
         for idx in top_indices:
             doc_id = self.doc_ids[idx]
             doc = self.documents[doc_id]
-            chunk_idx = sum(1 for i, d in enumerate(self.doc_ids[:idx]) if d == doc_id)
+            # O(1) lookup via precomputed offset instead of O(n) scan
+            chunk_idx = idx - self._chunk_idx.get(doc_id, 0)
             
             results.append({
                 "text": doc["chunks"][chunk_idx] if chunk_idx < len(doc["chunks"]) else "",

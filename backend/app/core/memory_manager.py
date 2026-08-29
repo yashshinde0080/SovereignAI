@@ -13,6 +13,14 @@ class MemoryManager:
 
     def __init__(self, max_usage_percent: float = 0.75):
         self.max_usage_percent = max_usage_percent
+        self._llmfit_hw = None  # cached hardware probe — hardware doesn't change mid-session
+
+    def _get_llmfit_hw(self):
+        """Lazy-init cached llmfit hardware probe."""
+        if self._llmfit_hw is None:
+            from llmfit.hardware import probe_hardware
+            self._llmfit_hw = probe_hardware()
+        return self._llmfit_hw
 
     def suggest_mode(self, model_size_bytes: int, model_metadata: Optional[Dict[str, Any]] = None) -> str:
         """Suggest execution mode based on memory, VRAM, and optional llmfit score.
@@ -26,14 +34,13 @@ class MemoryManager:
         if model_metadata and (model_metadata.get("name") or model_metadata.get("id")):
             try:
                 from llmfit import score_model_fit
-                from llmfit.hardware import probe_hardware
 
                 model_name = (
                     model_metadata.get("name")
                     or model_metadata.get("id")
                     or ""
                 )
-                hw = probe_hardware()
+                hw = self._get_llmfit_hw()
                 fit = score_model_fit(model_name, hw)
                 if fit.fit_score > 0.85 and fit.ram_required_gb < hw.ram_total_gb * 0.7:
                     return "fullram"

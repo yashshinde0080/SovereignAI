@@ -255,13 +255,15 @@ class VectorStoreManager:
         self.index_builder.reset()
         self.index_builder.create_index()
 
-        # Re-embed all chunks
+        # Re-embed all chunks — single batch query instead of N separate queries
         all_embeddings = []
         all_chunks = []
         new_embedding_records = []
 
+        chunks_by_doc = self.metadata_store.get_chunks_by_documents(doc_ids)
+
         for doc_id in doc_ids:
-            chunks_data = self.metadata_store.get_chunks_by_document(doc_id)
+            chunks_data = chunks_by_doc.get(doc_id, [])
             texts = [c["content"] for c in chunks_data]
 
             if not texts:
@@ -353,9 +355,14 @@ class VectorStoreManager:
             raise RuntimeError("Vector store not initialized")
             
         doc_ids = self.metadata_store.get_document_ids()
+        if not doc_ids:
+            return []
+
+        # Single batch query instead of N separate get_chunks_by_document calls
+        chunks_by_doc = self.metadata_store.get_chunks_by_documents(doc_ids)
         result = []
         for doc_id in doc_ids:
-            chunks = self.metadata_store.get_chunks_by_document(doc_id)
+            chunks = chunks_by_doc.get(doc_id, [])
             if not chunks:
                 continue
             first_chunk = chunks[0]

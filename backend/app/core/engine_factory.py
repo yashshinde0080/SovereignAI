@@ -12,10 +12,15 @@ from app.engines.layerstream.executor import LayerStreamEngine
 
 class EngineFactory:
     """Factory for creating inference engines"""
-    
+
+    # ponytail: single MemoryManager per session — hardware doesn't change
+    _shared_memory_manager: Optional[MemoryManager] = None
+
     def __init__(self, hardware_profile: Dict[str, Any]):
         self.hardware = hardware_profile
-        self.memory_manager = MemoryManager()
+        if EngineFactory._shared_memory_manager is None:
+            EngineFactory._shared_memory_manager = MemoryManager()
+        self.memory_manager = EngineFactory._shared_memory_manager
     
     async def create_engine(
         self,
@@ -43,7 +48,14 @@ class EngineFactory:
              if (model_path / "config.json").exists():
                  engine_model_path_str = str(model_path)
                  if not model_size:
-                     model_size = sum(f.stat().st_size for f in model_path.rglob("*") if f.is_file())
+                     # ponytail: os.scandir 2-level is faster than rglob for shallow HF repos
+                     for entry in os.scandir(model_path):
+                         if entry.is_file(follow_symlinks=False):
+                             model_size += entry.stat().st_size
+                         elif entry.is_dir(follow_symlinks=False):
+                             for sub in os.scandir(entry):
+                                 if sub.is_file(follow_symlinks=False):
+                                     model_size += sub.stat().st_size
              else:
                  # Try to find GGUF or SafeTensors as fallback for size calculations
                  gguf_files = list(model_path.glob("*.gguf")) + list(model_path.glob("*.gguf.enc"))
@@ -63,8 +75,12 @@ class EngineFactory:
             engine_model_path_str = str(model_path)
             
         # 1. Resolve task to determine if streaming is possible
+        # For GGUF files, resolve from the parent dir (config.json lives there)
         from app.core.task_resolver import TaskResolver
-        task_metadata = TaskResolver.resolve(engine_model_path_str)
+        resolve_path = engine_model_path_str
+        if engine_model_path_str.endswith(('.gguf', '.gguf.enc')):
+            resolve_path = str(model_path.parent)
+        task_metadata = TaskResolver.resolve(resolve_path)
         is_generative = task_metadata.get("is_generative", False)
 
         # Determine mode

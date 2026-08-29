@@ -57,7 +57,7 @@ async def get_status(request: Request):
 async def get_resources(request: Request):
     """Get current resource usage"""
     memory = psutil.virtual_memory()
-    cpu_percent = psutil.cpu_percent(interval=0.1)
+    cpu_percent = psutil.cpu_percent(interval=None)
     
     disk_io = psutil.disk_io_counters()
     

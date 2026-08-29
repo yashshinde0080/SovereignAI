@@ -429,8 +429,9 @@ class ModelManager:
         self.app.state.active_model = None
         self.app.state.active_mode = None
         
+        # ponytail: gc.collect() blocks the event loop; run in thread
         import gc
-        gc.collect()
+        await asyncio.to_thread(gc.collect)
 
     async def list_models(self) -> List[Dict[str, Any]]:
         """List all installed models"""
@@ -502,12 +503,18 @@ class ModelManager:
             # Get specific file info for metadata
             file_info = info.get_file_by_quant(actual_quant) or info.get_best_file() if actual_quant else None
             
-            # calculate size accurately
+            # calculate size accurately — os.scandir is faster than rglob
             total_size_bytes = 0
             if model_path.is_file():
                 total_size_bytes = model_path.stat().st_size
             else:
-                total_size_bytes = sum(f.stat().st_size for f in model_path.rglob("*") if f.is_file())
+                for entry in os.scandir(model_path):
+                    if entry.is_file(follow_symlinks=False):
+                        total_size_bytes += entry.stat().st_size
+                    elif entry.is_dir(follow_symlinks=False):
+                        for sub in os.scandir(entry):
+                            if sub.is_file(follow_symlinks=False):
+                                total_size_bytes += sub.stat().st_size
             
             # Map download quant string to engine quant_method.
             # GGUF quant variants (Q4_K_M, Q5_K_M, Q8_0, etc.) imply gguf quant_method.

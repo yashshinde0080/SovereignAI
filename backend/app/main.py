@@ -79,6 +79,10 @@ async def lifespan(app: FastAPI):
     _patch_gguf_quant_types()
     logger.info("Starting %s v%s", settings.app_name, settings.app_version)
 
+    # Seed cpu_percent so non-blocking calls (interval=None) return real values
+    import psutil as _psutil
+    _psutil.cpu_percent(interval=None)
+
     # Initialize database
     from app.database.manager import DatabaseManager
     app.state.db = DatabaseManager()

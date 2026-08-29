@@ -16,10 +16,9 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useChat } from '@/hooks/useChat';
-import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
-import { Download, Trash2, FileText, X, Sparkles, Brain, Square } from 'lucide-react';
+import { Download, Trash2, FileText, X, Sparkles, Square } from 'lucide-react';
 import { errMsg } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -42,8 +41,6 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
   const {
     messages,
     isLoading,
-    enableThinking,
-    setEnableThinking,
     sendMessage,
     editAndResend,
     regenerate,
@@ -269,21 +266,6 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
           )}
         </AnimatePresence>
         <div className="flex items-center justify-between gap-2 mb-1.5 px-1">
-          <div className="flex items-center gap-2">
-            {/* Thinking toggle */}
-            <label
-              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
-              title="Let reasoning models think out loud before answering"
-            >
-              <Brain className="h-3.5 w-3.5" />
-              Thinking
-            </label>
-            <Switch
-              checked={enableThinking}
-              onCheckedChange={setEnableThinking}
-              aria-label="Toggle thinking mode"
-            />
-          </div>
           {isLoading && (
             <Button
               variant="ghost"

@@ -3,7 +3,7 @@
 import { memo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Message, RagSource } from '@/types';
-import { User, Bot, Copy, Check, Pencil, RefreshCw, FileText, Brain, ChevronDown, Code, Lightbulb, MessageSquare } from 'lucide-react';
+import { User, Bot, Copy, Check, Pencil, RefreshCw, FileText, Code, Lightbulb, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,69 +55,6 @@ const CodeBlock = ({ inline, className, children }: { inline?: boolean; classNam
     <code className={cn("bg-muted/50 rounded-md px-1.5 py-0.5 text-sm font-mono text-primary", className)}>
       {children}
     </code>
-  );
-};
-
-// Collapsible reasoning block for assistant messages with a <think> trace.
-// Auto-opens while the reasoning is still streaming (live); collapsed once the
-// answer starts. The user's own toggle wins either way.
-const ThinkingBlock = ({ reasoning, live }: { reasoning: string; live?: boolean }) => {
-  const [open, setOpen] = useState(live);
-  const [copied, setCopied] = useState(false);
-
-  const copyReasoning = () => {
-    navigator.clipboard.writeText(reasoning);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="mb-3 rounded-lg border border-border/50 bg-muted/30 overflow-hidden">
-      <div className="flex items-center gap-1 px-2 py-1.5">
-        <button
-          onClick={() => setOpen(!open)}
-          className="flex flex-1 min-w-0 items-center gap-2 px-1 py-0.5 text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-          title={open ? 'Hide reasoning' : 'Show reasoning'}
-          aria-expanded={open}
-        >
-          <Brain className={cn('h-3.5 w-3.5 shrink-0', live && 'animate-pulse')} />
-          <span className="font-semibold tracking-wide">{live ? 'Thinking…' : 'Thinking'}</span>
-        </button>
-        <button
-          onClick={copyReasoning}
-          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
-          title={copied ? 'Copied!' : 'Copy reasoning'}
-          aria-label="Copy reasoning"
-        >
-          {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          onClick={() => setOpen(!open)}
-          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer"
-          title={open ? 'Hide reasoning' : 'Show reasoning'}
-          aria-label={open ? 'Hide reasoning' : 'Show reasoning'}
-        >
-          <ChevronDown
-            className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')}
-          />
-        </button>
-      </div>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <pre className="whitespace-pre-wrap px-3 pb-3 text-[12.5px] leading-relaxed font-mono text-muted-foreground/90 border-t border-border/40">
-              {reasoning}
-            </pre>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   );
 };
 
@@ -236,24 +173,10 @@ const MessageItem = memo(function MessageItem({
           <p className="whitespace-pre-wrap">{message.content}</p>
         ) : (
           <>
-          {message.reasoning && (
-            <ThinkingBlock
-              reasoning={message.reasoning}
-              live={isLoading && isLast && !message.content.trim()}
-            />
-          )}
-          {!message.content.trim() && !message.reasoning &&
+          {!message.content.trim() &&
             isLoading && isLast && (
               <p className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse">
-                <Brain className="h-4 w-4" />
                 Thinking…
-              </p>
-            )}
-          {message.reasoning && !message.content.trim() &&
-            !(isLoading && isLast) && (
-              <p className="text-sm text-muted-foreground">
-                The model stopped thinking before producing an answer — try
-                asking again, or turn thinking off for a quicker reply.
               </p>
             )}
           <ReactMarkdown

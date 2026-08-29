@@ -27,12 +27,8 @@ function normalizeSources(sources: unknown): RagSource[] | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-// One session ID per browser tab (sessionStorage is per-tab), so concurrent
-// tabs persist under separate localStorage keys and never overwrite each
-// other. Survives refresh within the tab; closing the tab starts a fresh
-// session.
 function getSessionId(): string {
-  if (typeof window === 'undefined') return ''; // SSR placeholder, never stored
+  if (typeof window === 'undefined') return '';
   try {
     let id = window.sessionStorage.getItem(SESSION_KEY);
     if (!id) {
@@ -46,11 +42,7 @@ function getSessionId(): string {
 }
 
 const STORAGE_KEY = `sovereignai.chat.messages.${getSessionId()}`;
-// Thinking toggle persisted per session, same key scheme as the messages, so
-// it survives refreshes within the tab (a new tab = fresh session = default).
-const THINKING_KEY = `sovereignai.chat.thinking.${getSessionId()}`;
 
-// Validate parsed JSON into a Message[] (shared by load + legacy migration).
 function sanitizeMessages(parsed: unknown): Message[] {
   if (!Array.isArray(parsed)) return [];
   return parsed
@@ -64,21 +56,6 @@ function sanitizeMessages(parsed: unknown): Message[] {
     .map((m) => ({ ...m, sources: normalizeSources((m as Record<string, unknown>).sources) }));
 }
 
-// Restore the persisted thinking toggle for this session. Missing or corrupt
-// stored values fall back to the default (true). Browser only; SSR-safe.
-function loadThinking(): boolean {
-  if (typeof window === 'undefined') return true;
-  try {
-    const raw = window.localStorage.getItem(THINKING_KEY);
-    if (raw === null) return true;
-    const parsed: unknown = JSON.parse(raw);
-    return typeof parsed === 'boolean' ? parsed : true;
-  } catch {
-    return true;
-  }
-}
-
-// Restore any persisted history for this session. Browser only; SSR-safe.
 function loadMessages(): Message[] {
   if (typeof window === 'undefined') return [];
   try {
@@ -93,48 +70,18 @@ function loadMessages(): Message[] {
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-
-  // AbortController for the in-flight request — lets the user stop an
-  // unkillable generation on a slow local engine (D1). Aborting rejects the
-  // fetch with AbortError, which the catch block swallows as a normal stop.
   const abortRef = useRef<AbortController | null>(null);
-
-  // Live messages in a ref so sendMessage/editAndResend/regenerate keep stable
-  // identities (they read current state without re-creating themselves every
-  // render). Stable callbacks let MessageItem (React.memo) skip re-rendering
-  // completed messages when only the streaming tail changes.
   const messagesRef = useRef(messages);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  // Thinking mode for reasoning models (Qwen3.5 etc.): toggles the backend's
-  // enable_thinking chat-template flag. Default ON so reasoning models think
-  // out loud; harmless for models whose template ignores the flag. Kept in a
-  // ref so runCompletion always reads the live value, never a stale closure.
-  const [enableThinking, setEnableThinking] = useState<boolean>(loadThinking);
-  const thinkingRef = useRef(enableThinking);
-  useEffect(() => {
-    thinkingRef.current = enableThinking;
-    // Persist so the toggle survives a page refresh within the session.
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(THINKING_KEY, JSON.stringify(enableThinking));
-    } catch {
-      // storage unavailable (private mode, quota) — non-fatal
-    }
-  }, [enableThinking]);
-
-  // Restore persisted history once on mount, after hydration, so SSR and the
-  // first client render agree (avoids a hydration mismatch from localStorage).
   useEffect(() => {
     const restored = loadMessages();
     if (restored.length > 0) {
       setMessages(restored);
       return;
     }
-    // One-time migration: the pre-multi-session single key. Load it, then the
-    // persist effect writes it under this session's key; drop the legacy key.
     try {
       const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
       if (legacy) {
@@ -146,14 +93,10 @@ export function useChat() {
         }
       }
     } catch {
-      // ignore migration failures — fresh session is fine
+      // ignore
     }
   }, []);
 
-  // Persist so the chat survives a page refresh. Skipped while streaming (one
-  // synchronous localStorage write per token would jank long generations); the
-  // final write happens when the stream completes and isLoading flips false.
-  // Empty-content entries (streaming placeholders) are skipped regardless.
   useEffect(() => {
     if (typeof window === 'undefined' || isLoading) return;
     try {
@@ -162,7 +105,7 @@ export function useChat() {
         JSON.stringify(messages.filter((m) => m.content.trim()))
       );
     } catch {
-      // storage unavailable (private mode, quota) — non-fatal
+      // non-fatal
     }
   }, [messages, isLoading]);
 
@@ -170,13 +113,7 @@ export function useChat() {
     setMessages(messagesToSend);
     setIsLoading(true);
 
-    // rAF flush handle lives here so the finally block can cancel it if the
-    // stream errors mid-generation — a late flush would otherwise overwrite
-    // the appended error message with partial content.
     let flushRaf: number | null = null;
-
-    // Fresh controller per request; abort() from stop() cancels the fetch and
-    // the reader loop below.
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -189,19 +126,13 @@ export function useChat() {
           messages: messagesToSend,
           stream: true,
           use_rag: true,
-          // Thinking models burn tokens on <think> before the answer — the
-          // backend's 512 default truncates mid-reasoning, leaving content
-          // empty. Give thinking a headroom budget; keep 512 otherwise.
-          max_tokens: thinkingRef.current ? 1024 : 512,
-          enable_thinking: thinkingRef.current,
+          max_tokens: 512,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const err = new Error(errorData.detail || 'Chat request failed');
-        // Keep the HTTP status on the error so the catch can distinguish
-        // capacity failures (507 OOM / disk-full) from other errors.
         (err as Error & { status?: number }).status = response.status;
         throw err;
       }
@@ -211,13 +142,10 @@ export function useChat() {
         if (!reader) throw new Error('No response body');
 
         let assistantContent = '';
-        let assistantReasoning = '';
         let assistantModel = '';
         let buffer = '';
         const decoder = new TextDecoder();
 
-        // Replace the streaming placeholder (or keep patching the growing
-        // reply) with the accumulated content + reasoning so both stream live.
         const patchLastMessage = (patch: Partial<Message>) => {
           setMessages((prev) => {
             const newMessages = [...prev];
@@ -229,15 +157,10 @@ export function useChat() {
           });
         };
 
-        // One setState per token re-renders the whole message list (and
-        // re-parses every message's markdown) each tick. Accumulate into the
-        // content/reasoning locals and commit at most once per animation
-        // frame; the final patch on stream end is synchronous.
         const flush = () => {
           flushRaf = null;
           patchLastMessage({
             content: assistantContent,
-            reasoning: assistantReasoning || undefined,
             ...(assistantModel ? { model: assistantModel } : {}),
           });
         };
@@ -246,20 +169,14 @@ export function useChat() {
           flushRaf = requestAnimationFrame(flush);
         };
 
-        // Add placeholder message
         setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
-        // Abort while streaming: the reader.read() rejects with AbortError.
-        // If the user stopped mid-answer, keep whatever partial content
-        // arrived — fall through to the final patch below instead of letting
-        // the error bubble up into an Error bubble.
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
-
             const lines = buffer.split('\n\n');
             buffer = lines.pop() || '';
 
@@ -271,8 +188,6 @@ export function useChat() {
                 try {
                   const chunk = JSON.parse(data);
 
-                  // Handle Stream Metadata (Sources / RAG). Sources become
-                  // structured chips on the assistant message, not appended text.
                   if (chunk.choices?.[0]?.delta?.rag_metadata) {
                     const sources = chunk.choices[0].delta.rag_metadata as RagSource[];
                     if (sources && sources.length > 0) {
@@ -282,7 +197,6 @@ export function useChat() {
                         seen.add(s.filename);
                         return true;
                       });
-
                       setMessages((prev) => {
                         const newMessages = [...prev];
                         newMessages[newMessages.length - 1] = {
@@ -296,17 +210,14 @@ export function useChat() {
                     continue;
                   }
 
-                  // Model name arrives in the first chunk's delta.
                   const modelName = chunk.choices?.[0]?.delta?.model_name;
                   if (modelName && !assistantModel) assistantModel = modelName;
 
-                  // Reasoning (thinking) deltas arrive before content for
-                  // reasoning models; both accumulate into the same message.
-                  const reasoningToken = chunk.choices?.[0]?.delta?.reasoning || '';
                   const token = chunk.choices?.[0]?.delta?.content || '';
-                  if (reasoningToken) assistantReasoning += reasoningToken;
-                  if (token) assistantContent += token;
-                  if (reasoningToken || token) scheduleFlush();
+                  if (token) {
+                    assistantContent += token;
+                    scheduleFlush();
+                  }
                 } catch (e) {
                   console.error('JSON parse error:', e, data);
                 }
@@ -315,51 +226,28 @@ export function useChat() {
           }
         } catch (e) {
           if ((e as Error)?.name !== 'AbortError') throw e;
-          // Stop requested — keep partial content, fall through to final patch.
         }
 
-        // If the model stopped mid-think (reasoning but no answer text),
-        // surface its reasoning as the reply instead of an empty bubble.
-        // Small Qwen3.5 models emit a 'Thinking Process' outline and then
-        // EOS without closing <think>, so content stays empty otherwise.
-        if (!assistantContent.trim() && assistantReasoning.trim()) {
-          assistantContent = assistantReasoning;
-          assistantReasoning = '';
-        }
         if (flushRaf !== null) {
           cancelAnimationFrame(flushRaf);
           flushRaf = null;
         }
         patchLastMessage({
           content: assistantContent,
-          reasoning: assistantReasoning || undefined,
           ...(assistantModel ? { model: assistantModel } : {}),
         });
       } else {
-        // Fallback for non-streaming
         const data = await response.json();
         const msg = data.choices?.[0]?.message || {};
-        let content = msg.content || "";
-        let reasoning = msg.reasoning || undefined;
-        // Same mid-think fallback as streaming: reasoning-only replies are
-        // surfaced as the answer so the bubble is never empty.
-        if (!content.trim() && reasoning?.trim()) {
-          content = reasoning;
-          reasoning = undefined;
-        }
         setMessages((prev) => [
           ...prev,
-          { role: 'assistant', content, ...(reasoning ? { reasoning } : {}), ...(data.model ? { model: data.model } : {}) },
+          { role: 'assistant', content: msg.content || '', ...(data.model ? { model: data.model } : {}) },
         ]);
       }
     } catch (error) {
-      // A deliberate stop is not an error: keep the partial reply (flushed
-      // below) instead of appending an Error bubble.
       if ((error as Error)?.name !== 'AbortError') {
         console.error('Chat error:', error);
         const status = (error as Error & { status?: number })?.status;
-        // OOM / disk-full (507): tell the user what to change instead of a
-        // bare traceback — smaller quant, FullRAM vs LayerStream, free disk.
         const body =
           status === 507
             ? `${errMsg(error) || 'Not enough memory or disk space.'} \n\n**How to fix:** load a smaller quant (Q4_K_M), or switch mode (FullRAM ↔ LayerStream) — and make sure the drive has room for the model + swap cache.`
@@ -379,8 +267,6 @@ export function useChat() {
     }
   }, []);
 
-  // User pressed Stop: cancel the in-flight request. Partial content already
-  // streamed stays on the message (the catch/finally handle the cleanup).
   const stop = useCallback(() => {
     if (abortRef.current) {
       abortRef.current.abort();
@@ -394,15 +280,12 @@ export function useChat() {
     runCompletion([...messagesRef.current, { role: 'user', content: trimmed }]);
   }, [runCompletion]);
 
-  // Replace the user message at `index`, drop everything after it, re-run.
   const editAndResend = useCallback((index: number, content: string) => {
     const trimmed = content.trim();
     if (!trimmed) return;
     runCompletion([...messagesRef.current.slice(0, index), { role: 'user', content: trimmed }]);
   }, [runCompletion]);
 
-  // Re-run the last exchange: keep history up to the last user message,
-  // drop the trailing assistant reply, and re-run the completion.
   const regenerate = useCallback(() => {
     const current = messagesRef.current;
     let lastUserIndex = -1;
@@ -420,7 +303,6 @@ export function useChat() {
     setMessages([]);
   }, []);
 
-  // Download the conversation as a markdown file.
   const exportChat = useCallback(() => {
     const date = new Date();
     const stamp = date.toISOString().slice(0, 19).replace(/[:T]/g, '-');
@@ -435,9 +317,6 @@ export function useChat() {
     for (const m of messages) {
       if (!m.content.trim()) continue;
       lines.push(`## ${m.role === 'user' ? 'User' : 'Assistant'}`, '');
-      if (m.reasoning?.trim()) {
-        lines.push('**Thinking:**', '', `> ${m.reasoning.trim().split('\n').join('\n> ')}`, '');
-      }
       lines.push(m.content, '');
       if (m.sources?.length) {
         lines.push('**Sources Used:**', ...m.sources.map((s) => `- ${s.filename}`), '');
@@ -457,8 +336,6 @@ export function useChat() {
   return {
     messages,
     isLoading,
-    enableThinking,
-    setEnableThinking,
     sendMessage,
     editAndResend,
     regenerate,
@@ -467,4 +344,3 @@ export function useChat() {
     exportChat,
   };
 }
-

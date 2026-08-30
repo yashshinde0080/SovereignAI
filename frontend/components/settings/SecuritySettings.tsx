@@ -26,7 +26,6 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
     allowed_origins: ["http://localhost:3000"],
     session_timeout_minutes: 0,
     audit_logging: true,
-    disable_external_plugins: true,
     max_concurrent_requests: 4,
     ...data,
   });
@@ -288,11 +287,6 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
             key: "audit_logging",
             label: "Audit logging",
             desc: "Log all settings changes and actions",
-          },
-          {
-            key: "disable_external_plugins",
-            label: "Disable external plugins",
-            desc: "Only allow built-in plugins",
           },
         ].map(({ key, label, desc }) => (
           <div key={key} className="flex items-center justify-between">

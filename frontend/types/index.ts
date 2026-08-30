@@ -29,17 +29,6 @@ export interface Model {
   created_at?: string;
 }
 
-export interface Plugin {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  author: string;
-  enabled: boolean;
-  builtin: boolean;
-  actions: string[];
-}
-
 export interface SystemStatus {
   model_loaded: boolean;
   current_model: string | null;

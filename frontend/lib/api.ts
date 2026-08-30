@@ -7,7 +7,6 @@ import type {
   Hardware,
   Message,
   Model,
-  Plugin,
   QueryResult,
   Recommendation,
   SettingsMap,
@@ -178,19 +177,6 @@ class ApiClient {
 
   async deleteDocument(docId: string) {
     return this.request(`/v1/rag/documents/${docId}`, { method: 'DELETE' });
-  }
-
-  // Plugins
-  async listPlugins(): Promise<Plugin[]> {
-    return this.request('/v1/plugins/');
-  }
-
-  async enablePlugin(pluginId: string) {
-    return this.request(`/v1/plugins/${pluginId}/enable`, { method: 'POST' });
-  }
-
-  async disablePlugin(pluginId: string) {
-    return this.request(`/v1/plugins/${pluginId}/disable`, { method: 'POST' });
   }
 
   // Workspace Snapshots

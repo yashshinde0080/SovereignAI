@@ -1,3 +1,10 @@
+## [2026-08-30] refactor | Plugin system removal + readme rework
+- Backend: deleted plugins REST API (`api/plugins.py`, 67 lines) and schemas (`schemas/plugins.py`, 19 lines); unmounted route from `api/router.py`
+- Frontend: deleted plugins page (`app/plugins/page.tsx`), `PluginCard`/`PluginList` components, `usePlugins` hook, plugins API client + types; Sidebar entry removed
+- Net: 406 lines deleted across 11 files; plugin backend internals (`app/plugins/` manager/sandbox/interface) untouched
+- Docs: readme.md reworked (+265/-104)
+- Commits: 0301f16, 213afa5, 6f1f25b, 0ffe786, f5c6116
+
 ## [2026-08-29] refactor | Thinking-mode rollback + DB connection reuse + hardware cache + font rebrand
 - Backend: reverted reasoning feature end-to-end — removed `_split_think`, `_trim_tag_prefix`, incremental tag tracker and `enable_thinking` template flag from `chat.py`/`schemas/chat.py`; deleted `test_think_strip.py`; stream now emits plain content with 96-char batching only
 - Frontend: removed Thinking toggle, ThinkingBlock, `Message.reasoning` and reasoning-delta handling in useChat (back to fixed `max_tokens: 512`); per-message model badge kept

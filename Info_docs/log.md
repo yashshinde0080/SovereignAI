@@ -20,3 +20,6 @@
 
 ## [2026-08-26] docs | Documentation updates + research references
 - Documentation updates: added research references to algorithms-and-formulas.md and research-results.md; updated log.md with new entry; verified 112 tests passing
+
+## [2026-08-31] feat | Desktop/Web starter scripts
+- Backend: created `start-desktop.bat` and `start-web.bat` (14 lines each) for one-click server launch; these scripts hardcode `--host 127.0.0.1 --port 8000` when invoking `uvicorn app.main:app`

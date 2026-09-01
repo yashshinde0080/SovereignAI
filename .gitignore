@@ -142,3 +142,6 @@ opencode.jsonc
 .zed/
 .codex
 .omp/
+
+.agents/
+.vscode/

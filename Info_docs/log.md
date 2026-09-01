@@ -1,3 +1,5 @@
+## [2026-09-01] doc | Added technical report
+- Docs: added `TECHNICAL_REPORT.md` (+759 lines) (c16147c)
 ## [2026-08-30] refactor | Plugin system removal + readme rework
 - Backend: deleted plugins REST API (`api/plugins.py`, 67 lines) and schemas (`schemas/plugins.py`, 19 lines); unmounted route from `api/router.py`
 - Frontend: deleted plugins page (`app/plugins/page.tsx`), `PluginCard`/`PluginList` components, `usePlugins` hook, plugins API client + types; Sidebar entry removed

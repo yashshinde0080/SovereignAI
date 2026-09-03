@@ -120,10 +120,18 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
             prompt = build_prompt(messages_dicts)
     else:
         prompt = build_prompt(messages_dicts)
+
+    # Cloud engines consume structured messages (system role preserved for
+    # provider translation); local engines consume the rendered prompt string.
+    input_data = (
+        messages_dicts
+        if getattr(app.state.active_engine, "mode", None) == "cloud"
+        else prompt
+    )
     
     if chat_request.stream:
         return StreamingResponse(
-            stream_response(app.state.active_engine, prompt, chat_request, rag_metadata_out, request, app.state.active_model),
+            stream_response(app.state.active_engine, input_data, chat_request, rag_metadata_out, request, app.state.active_model),
             media_type="text/event-stream"
         )
     
@@ -131,7 +139,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     if await request.is_disconnected():
         raise HTTPException(status_code=499, detail="Client disconnected")
     response = await app.state.active_engine.generate(
-        input_data=prompt,
+        input_data=input_data,
         max_tokens=chat_request.max_tokens,
         temperature=chat_request.temperature,
         top_p=chat_request.top_p

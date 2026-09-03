@@ -8,6 +8,7 @@ from app.api.benchmark import router as benchmark_router
 from app.api.rag import router as rag_router
 from app.api.workspace import router as workspace_router
 from app.settings.router import router as settings_router
+from app.api.cloud import router as cloud_router
 
 
 api_router = APIRouter()
@@ -18,4 +19,5 @@ api_router.include_router(system_router, prefix="/system", tags=["system"])
 api_router.include_router(benchmark_router, prefix="/benchmark", tags=["benchmark"])
 api_router.include_router(rag_router, prefix="/rag", tags=["rag"])
 api_router.include_router(workspace_router, prefix="/workspace", tags=["workspace"])
-api_router.include_router(settings_router)
+api_router.include_router(settings_router)
+api_router.include_router(cloud_router)

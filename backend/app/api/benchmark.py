@@ -110,7 +110,7 @@ async def _legacy_benchmark(app, bench_request: BenchmarkRequest) -> BenchmarkRe
 
         start_time = time.perf_counter()
         response = await engine.generate(
-            prompt=prompt,
+            input_data=prompt,
             max_tokens=bench_request.max_tokens,
         )
         elapsed = time.perf_counter() - start_time

@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useChat } from '@/hooks/useChat';
+import { useStore } from '@/store';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 import { Download, Trash2, FileText, X, Sparkles, Square } from 'lucide-react';
@@ -38,6 +39,13 @@ interface ChatModuleProps {
 
 export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
   const autoAskSent = useRef(false);
+  const { systemStatus } = useStore();
+  // Cloud models are "<provider_id>/<model_id>" — show "Online · model" and
+  // hide the internal provider id from the chat UI.
+  const isCloud = systemStatus?.current_mode === 'cloud';
+  const displayModel = isCloud && model.includes('/')
+    ? `Online · ${model.split('/').slice(1).join('/')}`
+    : model;
   const {
     messages,
     isLoading,
@@ -206,7 +214,7 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
           editingIndex={editingIndex}
           onEditMessage={handleEditMessage}
           onRegenerate={handleRegenerate}
-          modelName={model}
+          modelName={displayModel}
         />
       </div>
 

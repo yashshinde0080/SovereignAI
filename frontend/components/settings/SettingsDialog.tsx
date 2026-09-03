@@ -20,6 +20,7 @@ import {
   Baby,
   RotateCcw,
   Info,
+  Cloud,
 } from "lucide-react";
 import { GeneralSettings } from "./GeneralSettings";
 import { ProjectSettings } from "./ProjectSettings";
@@ -29,6 +30,7 @@ import { PersonalizationSettings } from "./PersonalizationSettings";
 import { DataControlsSettings } from "./DataControlsSettings";
 import { SecuritySettings } from "./SecuritySettings";
 import { ParentalControlsSettings } from "./ParentalControlsSettings";
+import { CloudProvidersSettings } from "./CloudProvidersSettings";
 import { useToast } from "@/components/ui/use-toast";
 import { api } from "@/lib/api";
 import type { Agent, SettingsMap } from "@/types";
@@ -40,7 +42,8 @@ type Section =
   | "personalization"
   | "data_controls"
   | "security"
-  | "parental_controls";
+  | "parental_controls"
+  | "cloud";
 
 
 const EMPTY: Record<string, unknown> = {};
@@ -53,6 +56,7 @@ const sections: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: "data_controls", label: "Data Controls", icon: Database },
   { key: "security", label: "Security", icon: Shield },
   { key: "parental_controls", label: "Parental Controls", icon: Baby },
+  { key: "cloud", label: "Cloud / Online", icon: Cloud },
 ];
 
 
@@ -230,6 +234,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       }
                     />
                   )}
+                  {activeSection === "cloud" && <CloudProvidersSettings />}
                 </>
               )}
             </ScrollArea>

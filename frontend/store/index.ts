@@ -12,13 +12,13 @@ interface Store {
   // New Universal Task State
   currentModel: string;
   taskType: string;
-  executionMode: "fullram" | "layerstream" | "auto";
+  executionMode: "fullram" | "layerstream" | "auto" | "cloud";
   inputSchema: Record<string, unknown>;
   isGenerative: boolean;
 
   setCurrentModel: (model: string) => void;
   setTaskType: (task: string) => void;
-  setExecutionMode: (mode: "fullram" | "layerstream" | "auto") => void;
+  setExecutionMode: (mode: "fullram" | "layerstream" | "auto" | "cloud") => void;
   setIsGenerative: (isGen: boolean) => void;
 
   // Metrics

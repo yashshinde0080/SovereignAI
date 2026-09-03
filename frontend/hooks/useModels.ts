@@ -47,11 +47,11 @@ export function useModels() {
     }
   }
 
-  const loadModel = useCallback(async (model: string) => {
+  const loadModel = useCallback(async (model: string, mode: string = 'auto') => {
     setLoading(true);
     setLoadingId(model);
     try {
-      await api.loadModel(model);
+      await api.loadModel(model, mode);
       const status: SystemStatus = await api.getSystemStatus();
       setSystemStatus(status);
 
@@ -59,7 +59,7 @@ export function useModels() {
       if (current.loaded) {
         setCurrentModel(current.model);
         setTaskType(current.task_type);
-        setExecutionMode(current.mode as "fullram" | "layerstream" | "auto");
+        setExecutionMode(current.mode as "fullram" | "layerstream" | "auto" | "cloud");
         setIsGenerative(current.is_generative);
       }
 
@@ -175,7 +175,7 @@ export function useModels() {
       await api.switchMode(mode);
       const current: CurrentModel = await api.getCurrentModel();
       if (current.loaded) {
-        setExecutionMode(current.mode as "fullram" | "layerstream" | "auto");
+        setExecutionMode(current.mode as "fullram" | "layerstream" | "auto" | "cloud");
       }
       toast({
         title: 'Mode switched',

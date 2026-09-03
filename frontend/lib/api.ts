@@ -1,6 +1,9 @@
 import type {
   Agent,
   BenchmarkResult,
+  CloudModel,
+  CloudProvider,
+  CloudProviderType,
   CurrentModel,
   Document,
   DownloadStatus,
@@ -260,6 +263,55 @@ class ApiClient {
 
   async deactivateAllAgents() {
     return this.request('/v1/settings/agents/deactivate', { method: 'POST' });
+  }
+
+  // Cloud providers
+  async listCloudProviders(): Promise<{ providers: CloudProvider[] }> {
+    return this.request('/v1/cloud/providers');
+  }
+
+  async addCloudProvider(cfg: {
+    name: string;
+    provider_type: CloudProviderType;
+    api_key: string;
+    base_url?: string | null;
+  }): Promise<CloudProvider> {
+    return this.request('/v1/cloud/providers', {
+      method: 'POST',
+      body: JSON.stringify(cfg),
+    });
+  }
+
+  async updateCloudProvider(
+    id: string,
+    patch: {
+      name?: string;
+      api_key?: string;
+      base_url?: string | null;
+      is_enabled?: boolean;
+      rate_limit_rpm?: number;
+    }
+  ): Promise<CloudProvider> {
+    return this.request(`/v1/cloud/providers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(patch),
+    });
+  }
+
+  async deleteCloudProvider(id: string) {
+    return this.request(`/v1/cloud/providers/${id}`, { method: 'DELETE' });
+  }
+
+  async testCloudProvider(id: string): Promise<{ ok: boolean; message: string }> {
+    return this.request(`/v1/cloud/test/${id}`, { method: 'POST' });
+  }
+
+  async listCloudModels(): Promise<{ models: CloudModel[] }> {
+    return this.request('/v1/cloud/models');
+  }
+
+  async refreshCloudModels(): Promise<{ status: string; count: number }> {
+    return this.request('/v1/cloud/models/refresh', { method: 'POST' });
   }
 }
 

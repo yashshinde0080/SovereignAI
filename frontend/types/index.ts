@@ -177,6 +177,29 @@ export interface DownloadStatus {
   error?: string;
 }
 
+export type CloudProviderType = "openai" | "anthropic" | "google" | "mistral" | "custom";
+
+export interface CloudProvider {
+  id: string;
+  name: string;
+  provider_type: CloudProviderType;
+  /** Masked key ("sk-…xxxx") — the backend never returns the raw key. */
+  api_key_masked: string;
+  base_url?: string | null;
+  is_enabled: boolean;
+  rate_limit_rpm: number;
+}
+
+export interface CloudModel {
+  /** "<provider_id>/<model_id>" e.g. "prov_abc123/gpt-4o" */
+  id: string;
+  name: string;
+  provider_id: string;
+  provider_type: string;
+  context_window?: number | null;
+  supports_streaming: boolean;
+}
+
 export interface SettingsMap {
   agents?: Agent[];
   general?: Record<string, unknown>;

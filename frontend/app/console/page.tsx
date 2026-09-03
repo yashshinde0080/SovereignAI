@@ -55,7 +55,7 @@ function ConsoleContent() {
         if (current.loaded) {
           setCurrentModel(current.model);
           setTaskType(current.task_type);
-          setExecutionMode(current.mode as "fullram" | "layerstream" | "auto");
+          setExecutionMode(current.mode as "fullram" | "layerstream" | "auto" | "cloud");
           setIsGenerative(current.is_generative || current.task_type === 'causal_lm');
         }
       } catch (e) {
@@ -114,13 +114,17 @@ function ConsoleContent() {
              <span className="font-semibold px-2 py-0.5 bg-primary/10 rounded-full text-primary">Model: {activeModel}</span>
              <span className="font-semibold px-2 py-0.5 bg-secondary rounded-full text-secondary-foreground">Task: {activeIsGen && activeTask === 'unknown' ? 'Generative Chat' : activeTask.replace(/_/g, ' ')}</span>
 
-             <span className="font-semibold px-2 py-0.5 bg-muted rounded-full">Mode: {activeMode}</span>
+             {activeMode === 'cloud' ? (
+               <span className="font-semibold px-2 py-0.5 bg-blue-500/15 text-blue-400 rounded-full">Online · Cloud API</span>
+             ) : (
+               <span className="font-semibold px-2 py-0.5 bg-muted rounded-full">Mode: {activeMode}</span>
+             )}
           </div>
         </div>
         
-        {/* Mode Switch UI conditional rendering */}
+        {/* Mode Switch UI — hidden for cloud models (no local engine to switch) */}
         <div className="flex items-center gap-4">
-          <ModeSwitcher />
+          {activeMode !== 'cloud' && <ModeSwitcher />}
         </div>
       </div>
 

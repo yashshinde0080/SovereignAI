@@ -111,6 +111,7 @@ def help():
         ("remove <model>", "Delete a model (-f to skip confirm)", "sovereign remove llama3:8b"),
         ("serve", "Start the API server (settings-DB host/port)", "sovereign serve"),
         ("benchmark-turboquant <model>", "KV-compression benchmark", "sovereign benchmark-turboquant m.gguf"),
+        ("cloud", "Manage cloud API providers + online models", "sovereign cloud add --type openai --key sk-..."),
     ]:
         table.add_row(cmd, desc, example)
 
@@ -501,8 +502,8 @@ async def _show_stats(client: httpx.AsyncClient) -> None:
 
 async def _switch_mode(client: httpx.AsyncClient, new_mode: str) -> None:
     """/mode <m> — switch execution mode."""
-    if new_mode not in ("fullram", "layerstream", "auto"):
-        console.print("[red]Invalid mode. Use: fullram, layerstream, auto[/red]")
+    if new_mode not in ("fullram", "layerstream", "auto", "cloud"):
+        console.print("[red]Invalid mode. Use: fullram, layerstream, auto, cloud[/red]")
         return
     response = await client.post(f"{API_BASE}/chat/mode/switch", params={"mode": new_mode})
     if response.status_code == 200:
@@ -816,6 +817,159 @@ def benchmark_turboquant(
 
     console.print(table)
     console.print(f"\n[dim]Synthetic data only. Real accuracy depends on attention distribution. See reviews/autoplan-report-2026-08-09.md for eval-gate results.[/dim]")
+
+
+# ── cloud providers ──
+
+cloud_app = typer.Typer(
+    name="cloud",
+    help="Manage cloud API providers and online models",
+    add_completion=False,
+    no_args_is_help=True,
+)
+app.add_typer(cloud_app, name="cloud")
+
+
+@cloud_app.command(name="add")
+def cloud_add(
+    name: str = typer.Option("", "--name", "-n", help="Display name (defaults to provider type)"),
+    provider_type: str = typer.Option(..., "--type", "-t", help="openai | anthropic | google | mistral | custom"),
+    api_key: str = typer.Option(..., "--key", "-k", help="API key (encrypted at rest on the server)"),
+    base_url: str = typer.Option(None, "--base-url", "-b", help="Base URL (required for custom endpoints)"),
+):
+    """Add a cloud API provider"""
+    async def _add():
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    f"{API_BASE}/cloud/providers",
+                    json={
+                        "name": name,
+                        "provider_type": provider_type,
+                        "api_key": api_key,
+                        "base_url": base_url or None,
+                    },
+                )
+                if response.status_code == 200:
+                    p = response.json()
+                    console.print(f"[green]✓ Provider added:[/green] [cyan]{p['name']}[/cyan] ({p['id']})")
+                    console.print("[dim]Test it with 'sovereign cloud test <id>'.[/dim]")
+                else:
+                    console.print(f"[red]Error:[/red] {response.json().get('detail', response.text)}")
+            except httpx.ConnectError:
+                console.print("[red]Cannot connect to server. Is it running? ('sovereign serve')[/red]")
+    asyncio.run(_add())
+
+
+@cloud_app.command(name="list")
+def cloud_list():
+    """List configured providers (masked keys)"""
+    async def _list():
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(f"{API_BASE}/cloud/providers")
+                if response.status_code != 200:
+                    console.print(f"[red]Error:[/red] {response.text}")
+                    return
+                providers = response.json().get("providers", [])
+                if not providers:
+                    console.print("[dim]No providers configured.[/dim]")
+                    console.print("Add one: 'sovereign cloud add --type openai --key sk-...'")
+                    return
+                table = Table(title="Cloud Providers", box=box.ROUNDED)
+                table.add_column("ID", style="cyan")
+                table.add_column("Name")
+                table.add_column("Type")
+                table.add_column("Key")
+                table.add_column("Base URL")
+                table.add_column("Status")
+                for p in providers:
+                    enabled = "[green]enabled[/green]" if p.get("is_enabled") else "[red]disabled[/red]"
+                    table.add_row(
+                        p["id"], p["name"], p["provider_type"],
+                        p.get("api_key_masked") or "", p.get("base_url") or "",
+                        enabled,
+                    )
+                console.print(table)
+            except httpx.ConnectError:
+                console.print("[red]Cannot connect to server. Is it running? ('sovereign serve')[/red]")
+    asyncio.run(_list())
+
+
+@cloud_app.command(name="remove")
+def cloud_remove(
+    provider_id: str = typer.Argument(..., help="Provider id (from 'sovereign cloud list')"),
+    force: bool = typer.Option(False, "--force", "-f"),
+):
+    """Remove a provider"""
+    async def _remove():
+        if not force:
+            confirm = typer.confirm(f"Remove provider '{provider_id}'?")
+            if not confirm:
+                console.print("[dim]Cancelled[/dim]")
+                return
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.delete(f"{API_BASE}/cloud/providers/{provider_id}")
+                if response.status_code == 200:
+                    console.print(f"[green]✓ Provider removed: {provider_id}[/green]")
+                else:
+                    console.print(f"[red]Error:[/red] {response.json().get('detail', response.text)}")
+            except httpx.ConnectError:
+                console.print("[red]Cannot connect to server. Is it running? ('sovereign serve')[/red]")
+    asyncio.run(_remove())
+
+
+@cloud_app.command(name="test")
+def cloud_test(provider_id: str = typer.Argument(..., help="Provider id")):
+    """Test a provider's API key + connectivity"""
+    async def _test():
+        async with httpx.AsyncClient(timeout=60) as client:
+            try:
+                response = await client.post(f"{API_BASE}/cloud/test/{provider_id}")
+                data = response.json()
+                if data.get("ok"):
+                    console.print(f"[green]✓ Connection OK:[/green] {data.get('message')}")
+                else:
+                    console.print(f"[red]✗ Failed:[/red] {data.get('message')}")
+            except httpx.ConnectError:
+                console.print("[red]Cannot connect to server. Is it running? ('sovereign serve')[/red]")
+    asyncio.run(_test())
+
+
+@cloud_app.command(name="models")
+def cloud_models(
+    provider: str = typer.Option(None, "--provider", "-p", help="Only list models from this provider id"),
+):
+    """List available online models (fetched live from providers)"""
+    async def _models():
+        async with httpx.AsyncClient(timeout=120) as client:
+            try:
+                url = f"{API_BASE}/cloud/models/{provider}" if provider else f"{API_BASE}/cloud/models"
+                response = await client.get(url)
+                if response.status_code != 200:
+                    console.print(f"[red]Error:[/red] {response.json().get('detail', response.text)}")
+                    return
+                models = response.json().get("models", [])
+                if not models:
+                    console.print("[dim]No models returned (check provider keys/enabled state).[/dim]")
+                    return
+                table = Table(title="Cloud Models", box=box.ROUNDED)
+                table.add_column("ID", style="cyan")
+                table.add_column("Name")
+                table.add_column("Provider")
+                table.add_column("Context", justify="right")
+                for m in models:
+                    ctx = m.get("context_window") or ""
+                    table.add_row(
+                        m["id"], m["name"], m["provider_id"],
+                        str(ctx) if ctx else "",
+                    )
+                console.print(table)
+                console.print("[dim]Load one with: sovereign run <provider_id>/<model_id> --mode cloud[/dim]")
+            except httpx.ConnectError:
+                console.print("[red]Cannot connect to server. Is it running? ('sovereign serve')[/red]")
+    asyncio.run(_models())
 
 
 if __name__ == "__main__":

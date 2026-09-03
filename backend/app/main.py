@@ -105,6 +105,10 @@ async def lifespan(app: FastAPI):
     from app.settings.service import SettingsService
     app.state.settings_service = SettingsService()
 
+    # Cloud provider registry (sovereign_settings.db, Fernet-encrypted keys)
+    from app.engines.cloud.registry import CloudProviderRegistry
+    app.state.cloud_provider_registry = CloudProviderRegistry()
+
     # Load startup model if configured
     try:
         general = app.state.settings_service.get_general()
@@ -137,6 +141,8 @@ async def lifespan(app: FastAPI):
         app.state.db.shutdown()
     if hasattr(app.state, 'vector_store'):
         app.state.vector_store.shutdown()
+    if hasattr(app.state, 'cloud_provider_registry'):
+        app.state.cloud_provider_registry.close()
 
 
 app = FastAPI(

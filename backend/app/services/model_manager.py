@@ -278,6 +278,16 @@ class ModelManager:
 
         logger.info("LOAD: Request for model %s (mode=%s)", model_id, mode)
 
+        # Cloud models live in the provider registry, not on disk — skip the
+        # local registry/scan entirely and let the factory resolve the provider.
+        if mode == "cloud":
+            if not self.app:
+                raise RuntimeError("ModelManager not linked to FastAPI application state")
+            async with self._load_lock:
+                return await self._load_model_locked(
+                    model_id, "cloud", {"id": model_id, "path": model_id}, []
+                )
+
         # Try to find the model from the existing registry FIRST.
         # Only await the background scan if the model isn't known yet.
         all_models = await self.list_models()

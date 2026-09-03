@@ -29,7 +29,31 @@ class EngineFactory:
         model_metadata: Optional[Dict[str, Any]] = None,
     ) -> BaseEngine:
         """Create appropriate engine"""
-        
+
+        # Cloud mode has no local files — model_path is "{provider_id}/{model_id}".
+        # Resolve the provider from the registry and return early (before any
+        # filesystem path handling mangles the provider/model id).
+        if mode == "cloud":
+            parts = str(model_path).split("/", 1)
+            if len(parts) != 2 or not parts[0] or not parts[1]:
+                raise ValueError(
+                    f"Cloud model must be '<provider_id>/<model_id>', got: {model_path}"
+                )
+            provider_id, model_id = parts
+            from app.engines.cloud import registry as cloud_registry
+            # ponytail: fresh registry per load — one sqlite conn, GC'd after.
+            provider = cloud_registry.CloudProviderRegistry().get_provider(provider_id)
+            if provider is None:
+                raise ValueError(f"Provider '{provider_id}' not found")
+            from app.engines.cloud.engine import CloudAPIEngine
+            return CloudAPIEngine(
+                model_path=str(model_path),
+                hardware=self.hardware,
+                memory_manager=self.memory_manager,
+                provider=provider,
+                model_id=model_id,
+            )
+
         model_path = Path(model_path)
         engine_model_path_str = str(model_path)
 

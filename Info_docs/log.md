@@ -25,3 +25,10 @@
 
 ## [2026-08-31] feat | Desktop/Web starter scripts
 - Backend: created `start-desktop.bat` and `start-web.bat` (14 lines each) for one-click server launch; these scripts hardcode `--host 127.0.0.1 --port 8000` when invoking `uvicorn app.main:app`
+## [2026-09-03] feat | Cloud model UI + Models frontend refactor
+- Frontend: added CloudModelList.tsx (142 lines), ModelControlPanel.tsx (53 lines modified), OnlineServices.tsx (239 lines), CloudProvidersSettings.tsx (303 lines), SettingsDialog.tsx (7 lines modified), ChatModule.tsx (10 lines modified), tabs.tsx (66 lines added)
+- Frontend: updated useModels.ts, api.ts, store/index.ts, types/index.ts for models integration
+- Frontend: added todo_front.md (174 lines) with task tracking
+## [2026-09-04]
+- No git commits; working tree modifications to `backend/tests/test_cloud.py`, `frontend/app/console/page.tsx`, `frontend/components/chat/DocumentViewerModal.tsx`, `frontend/components/task/ChatModule.tsx`
+

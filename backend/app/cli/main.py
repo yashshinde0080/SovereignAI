@@ -5,7 +5,22 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+from rich.live import Live
+from rich.markdown import Markdown
+from rich.text import Text
+from rich._spinners import SPINNERS as RICH_SPINNERS
+from rich.columns import Columns
+from rich.align import Align
 from rich import box
+
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.history import FileHistory, History
+    from prompt_toolkit.formatted_text import HTML
+    from prompt_toolkit.widgets import TextArea, Frame
+    from typing import Iterable
+except ImportError:
+    PromptSession = None  # plain input() fallback
 import httpx
 import asyncio
 import json
@@ -24,6 +39,66 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
     except (AttributeError, ValueError):
         pass
+
+# rich ships no crown spinner — register a sliding one (CLI mascot).
+RICH_SPINNERS["crown"] = {
+    "interval": 160,
+    "frames": ["👑      ", "  👑    ", "    👑  ", "      👑", "    👑  ", "  👑    "],
+}
+
+_HISTORY_FILE = Path(__file__).resolve().parents[3] / "workspace" / "logs" / "cli_history"
+
+
+class _BoxHistory(History):
+    """File-backed history for the TextArea input box. Subclasses prompt_toolkit's
+    History (used natively by Buffer/TextArea — no adapter protocol needed)."""
+
+    def __init__(self, path):
+        super().__init__()
+        self._fh = FileHistory(str(path))
+
+    def load_history_strings(self) -> Iterable[str]:
+        # FileHistory implements the file format, newline handling, newest-first.
+        return self._fh.load_history_strings()
+
+    def store_string(self, string: str) -> None:
+        self._fh.store_string(string)
+
+
+async def _pt_input(session, prompt_markup: str) -> str:
+    """Read input inside a real prompt_toolkit Frame box — full border while
+    typing, adaptive width, ↑/↓ history. Falls back to plain console.input
+    when prompt_toolkit is unavailable."""
+    if session is None:
+        return console.input(prompt_markup)
+    from prompt_toolkit.application import Application
+    from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.layout import Layout
+
+    ta = TextArea(
+        multiline=False,
+        wrap_lines=True,
+        history=_BoxHistory(_HISTORY_FILE),  # path, not session.history (a FileHistory object)
+    )
+    kb = KeyBindings()
+
+    @kb.add("enter")
+    def _(event):
+        ta.buffer.append_to_history()  # custom binding bypasses widget accept
+        event.app.exit(result=ta.text)
+
+    @kb.add("c-c")
+    def _(event):
+        event.app.exit(exception=KeyboardInterrupt)
+
+    app = Application(
+        layout=Layout(Frame(ta, title="You", width=console.width)),
+        key_bindings=kb,
+        full_screen=False,
+    )
+    # run_async: our chat loop already runs inside asyncio.run(); sync
+    # Application.run() would call asyncio.run() again and explode.
+    return await app.run_async()
 
 app = typer.Typer(
     name="sovereign",
@@ -81,6 +156,57 @@ def _chat_banner(model: str, mode: str, ram: float | None = None) -> Panel:
     )
 
 
+def _tui_header(title: str = "SovereignAI Edge") -> Panel:
+    """Branded dashboard header: crown logo · title · version pill."""
+    left = Align.left(Text("  ♛", style="bold yellow"))
+    mid = Align.center(Text(title, style="bold blue"))
+    right = Align.right(Text(f"v{__version__}  ", style="dim"))
+    return Panel(Columns([left, mid, right], expand=True, equal=False),
+                 border_style="yellow", box=box.HEAVY, height=3)
+
+
+def _status_bar(model: str, mode: str, server: str, ok: bool) -> Panel:
+    """One-line dashboard footer: model · mode · connection · commands."""
+    conn = "[green]● online[/green]" if ok else "[red]● offline[/red]"
+    return Panel(
+        Text.from_markup(
+            f" [cyan]{model}[/cyan] · [magenta]{mode}[/magenta] · {conn} "
+            f"· [dim]server {server}[/dim] · [dim]/help /stats /clear /exit[/dim]"
+        ),
+        border_style="blue", box=box.ROUNDED,
+    )
+
+
+def _bubble(title: str, body: str, style: str = "green", footer: str | None = None) -> None:
+    """Print one chat message as a rounded, boxed bubble."""
+    content = Markdown(body) if body.strip() else Text("")
+    console.print(Panel(
+        content,
+        title=f"[{style}]{title}[/{style}]",
+        title_align="left",
+        border_style=style,
+        box=box.ROUNDED,
+        subtitle=f"[dim]{footer}[/dim]" if footer else None,
+        subtitle_align="right",
+    ))
+
+
+def _error_box(msg: str, hint: str | None = None) -> Panel:
+    """Red error panel with optional fix-it hint."""
+    body = f"[bold red]✗ {msg}[/bold red]"
+    if hint:
+        body += f"\n[dim]{hint}[/dim]"
+    return Panel.fit(body, border_style="red", box=box.ROUNDED,
+                     title="Error", title_align="left")
+
+
+def _warn_box(msg: str) -> Panel:
+    """Yellow warning panel."""
+    return Panel.fit(f"[bold yellow]⚠ {msg}[/bold yellow]",
+                     border_style="yellow", box=box.ROUNDED,
+                     title="Warning", title_align="left")
+
+
 @app.command()
 def version():
     """Show version information"""
@@ -94,7 +220,7 @@ def version():
 @app.command()
 def help():
     """Show the full command reference"""
-    table = Table(title="SovereignAI Edge — Commands", box=box.ROUNDED)
+    table = Table(title="👑 SovereignAI Edge — Commands", box=box.ROUNDED)
     table.add_column("Command", style="cyan")
     table.add_column("What it does")
     table.add_column("Example")
@@ -124,6 +250,29 @@ def help():
         "(or: cd backend/app && python -m cli.main <command>)",
         title="Tips", border_style="blue", box=box.ROUNDED
     ))
+
+
+_CROWN = r"""
+           .:::.
+         ::: ::: ::.
+        :::   ♛   :::
+        ':w:w:w:w:w:'
+"""
+
+
+@app.callback(invoke_without_command=True)
+def _welcome(ctx: typer.Context):
+    """Bare `sovereign` shows a welcome screen instead of a plain help dump."""
+    if ctx.invoked_subcommand is not None:
+        return
+    console.print(Panel.fit(
+        f"[bold yellow]{_CROWN.strip()}[/bold yellow]\n\n"
+        f"[bold blue]SovereignAI Edge[/bold blue] [dim]v{__version__}[/dim] — "
+        "portable offline AI platform\n"
+        "[dim]Get started: [bold]sovereign chat <model>[/bold][/dim]",
+        border_style="blue", box=box.ROUNDED, title="👑 Welcome",
+    ))
+    help()
 
 
 @app.command()
@@ -261,7 +410,7 @@ def pull(
 
                 # Poll for progress with a live bar
                 with Progress(
-                    SpinnerColumn(),
+                    SpinnerColumn("crown"),
                     TextColumn("[progress.description]{task.description}"),
                     BarColumn(),
                     TaskProgressColumn(),
@@ -387,14 +536,25 @@ async def _run_chat(model: str, mode: str) -> None:
 
             result = response.json()
             ram = result.get("ram_usage", {}).get("ram_used_gb", 0)
+            console.print(_tui_header())
             console.print(_chat_banner(result.get("model"), result.get("mode"), ram))
-            console.print("[dim]Type a message · /help for commands · /exit to quit[/dim]")
+            console.print(_status_bar(result.get("model"), result.get("mode"),
+                                      SERVER_ORIGIN, True))
 
             messages = []
 
+            # prompt_toolkit session: ↑ history, soft wrapping, ^C-safe input.
+            try:
+                _HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+                session = PromptSession(history=FileHistory(str(_HISTORY_FILE)))
+            except Exception:
+                session = None
+            _bubble("SovereignAI Edge",
+                    "Type a message · /help for commands · /exit to quit")
+
             while True:
                 try:
-                    user_input = console.input("[bold cyan]You >[/bold cyan] ")
+                    user_input = await _pt_input(session, "[bold cyan]You >[/bold cyan] ")
                 except (KeyboardInterrupt, EOFError):
                     console.print("\n[dim]Goodbye![/dim]")
                     break
@@ -416,11 +576,16 @@ async def _run_chat(model: str, mode: str) -> None:
                 if cmd == "/clear":
                     messages.clear()
                     console.clear()
+                    console.print(_tui_header())
                     console.print(_chat_banner(result.get("model"), result.get("mode"), ram))
-                    console.print("[dim]Conversation cleared[/dim]")
+                    console.print(_status_bar(result.get("model"), result.get("mode"),
+                                              SERVER_ORIGIN, True))
+                    _bubble("SovereignAI Edge", "Conversation cleared")
                     continue
-                if cmd == "/stats":
+                if cmd in ("/status", "/stats"):
                     await _show_stats(client)
+                    console.print(_status_bar(result.get("model"), result.get("mode"),
+                                              SERVER_ORIGIN, True))
                     continue
                 if cmd.startswith("/mode "):
                     await _switch_mode(client, cmd.split(" ", 1)[1])
@@ -435,12 +600,18 @@ async def _run_chat(model: str, mode: str) -> None:
                     continue
 
                 messages.append({"role": "user", "content": user_input})
-                console.print(f"\n[bold cyan]You >[/bold cyan] {user_input}")
-                console.print("[bold green]AI >[/bold green] ", end="")
+                console.print()
 
-                # Stream response
+                # Stream into a live region: raw tokens while streaming, the
+                # final frame is re-rendered as markdown on completion.
+                # ponytail: full re-render each frame, visible overflow — swap
+                # to incremental rendering if long responses flicker on legacy terminals.
                 full_response = ""
                 started = time.perf_counter()
+                status = console.status("[green]👑 Thinking…[/green]", spinner="crown")
+                status.start()
+                live = None
+                stream_err = None
                 try:
                     async with client.stream(
                         "POST",
@@ -461,34 +632,55 @@ async def _run_chat(model: str, mode: str) -> None:
                             if data == "[DONE]":
                                 break
                             content, reasoning = _sse_delta(data)
+                            if not (content or reasoning):
+                                continue
+                            if live is None:
+                                status.stop()
+                                # transient: erase the raw token stream on stop,
+                                # the final markdown bubble is printed once below
+                                # (visible overflow left it in scrollback = doubled output)
+                                live = Live(
+                                    console=console, refresh_per_second=12,
+                                    transient=True,
+                                )
+                                live.start()
                             if content:
-                                console.print(content, end="")
                                 full_response += content
+                                live.update(Text(full_response))
                             elif reasoning:
                                 # thinking models (e.g. Qwen3.5) send reasoning deltas first
-                                console.print(f"[dim]{reasoning}[/dim]", end="")
+                                live.update(Text(reasoning, style="dim"))
                 except httpx.HTTPError as e:
-                    console.print(f"\n[red]Error: {e}[/red]")
+                    stream_err = e
+                finally:
+                    if live is not None:
+                        if full_response.strip():
+                            live.update(Markdown(full_response))
+                        live.stop()
+                    else:
+                        status.stop()
+                if stream_err is not None:
+                    console.print(f"\n[red]Error: {stream_err}[/red]")
                     continue
 
                 elapsed = time.perf_counter() - started
-                console.print(
-                    f"\n[dim]· {elapsed:.1f}s · {len(full_response.split())} words[/dim]"
-                )
-                console.rule(style="dim")
+                footer = f"· {elapsed:.1f}s · {len(full_response.split())} words"
                 if full_response.strip():
+                    _bubble(result.get("model") or "AI", full_response, footer=footer)
                     messages.append({"role": "assistant", "content": full_response})
+                else:
+                    console.print(f"[dim]{footer}[/dim]")
 
         except httpx.ConnectError:
-            console.print("[red]Error: Cannot connect to server[/red]")
-            console.print("Make sure the backend is running: 'sovereign serve'")
+            console.print(_error_box("Cannot connect to server",
+                                     "Make sure the backend is running: 'sovereign serve'"))
 
 
 async def _show_stats(client: httpx.AsyncClient) -> None:
     """/stats — show model, mode, RAM and disk usage."""
     response = await client.get(f"{API_BASE}/system/status")
     if response.status_code != 200:
-        console.print("[red]Could not fetch stats[/red]")
+        console.print(_error_box(f"Could not fetch stats (HTTP {response.status_code})"))
         return
     s = response.json()
     console.print(Panel.fit(
@@ -503,7 +695,7 @@ async def _show_stats(client: httpx.AsyncClient) -> None:
 async def _switch_mode(client: httpx.AsyncClient, new_mode: str) -> None:
     """/mode <m> — switch execution mode."""
     if new_mode not in ("fullram", "layerstream", "auto", "cloud"):
-        console.print("[red]Invalid mode. Use: fullram, layerstream, auto, cloud[/red]")
+        console.print(_warn_box("Invalid mode. Use: fullram, layerstream, auto, cloud"))
         return
     response = await client.post(f"{API_BASE}/chat/mode/switch", params={"mode": new_mode})
     if response.status_code == 200:
@@ -518,8 +710,10 @@ async def _switch_model(client: httpx.AsyncClient, name: str, mode: str, message
     if response.status_code == 200:
         messages.clear()
         console.clear()
+        console.print(_tui_header())
         console.print(_chat_banner(name, mode))
-        console.print("[dim]Conversation reset[/dim]")
+        console.print(_status_bar(name, mode, SERVER_ORIGIN, True))
+        _bubble("SovereignAI Edge", "Conversation reset")
     else:
         detail = response.json().get("detail", response.status_code)
         console.print(f"[red]Failed:[/red] {detail}")
@@ -558,7 +752,7 @@ def _start_server():
 async def _wait_for_server(proc, timeout: float = 90.0) -> bool:
     """Poll /health until the server responds. True when healthy."""
     with Progress(
-        SpinnerColumn(),
+        SpinnerColumn("crown"),
         TextColumn("[progress.description]{task.description}"),
         console=console, transient=True
     ) as progress:
@@ -642,7 +836,7 @@ def benchmark(
                         return
 
                 with Progress(
-                    SpinnerColumn(),
+                    SpinnerColumn("crown"),
                     TextColumn("[progress.description]{task.description}"),
                     console=console, transient=True
                 ) as progress:

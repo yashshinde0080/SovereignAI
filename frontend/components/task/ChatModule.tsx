@@ -19,7 +19,7 @@ import { useChat } from '@/hooks/useChat';
 import { useStore } from '@/store';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
-import { Download, Trash2, FileText, X, Sparkles, Square } from 'lucide-react';
+import { Download, Trash2, FileText, X, Sparkles, Square, Cloud } from 'lucide-react';
 import { errMsg } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -43,9 +43,11 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
   // Cloud models are "<provider_id>/<model_id>" — show "Online · model" and
   // hide the internal provider id from the chat UI.
   const isCloud = systemStatus?.current_mode === 'cloud';
-  const displayModel = isCloud && model.includes('/')
-    ? `Online · ${model.split('/').slice(1).join('/')}`
+  const providerId = model.includes('/') ? model.split('/')[0] : '';
+  const cloudLabel = isCloud
+    ? `Online · ${model.includes('/') ? model.split('/').slice(1).join('/') : model}`
     : model;
+  const displayModel = cloudLabel;
   const {
     messages,
     isLoading,
@@ -60,6 +62,7 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
   const [docs, setDocs] = useState<RAGDoc[]>([]);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [prefillText, setPrefillText] = useState<string | undefined>(undefined);
+  const [providerName, setProviderName] = useState<string | null>(null);
 
   // Listen for send events from empty-state suggestion cards (one-click send)
   useEffect(() => {
@@ -131,6 +134,24 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
       sendMessage(text);
     }
   };
+
+  useEffect(() => {
+    if (!model.includes('/')) return;
+    let cancelled = false;
+    api
+      .listCloudProviders()
+      .then((res) => {
+        if (cancelled) return;
+        const p = (res.providers || []).find((x) => x.id === providerId);
+        if (p) setProviderName(p.name);
+      })
+      .catch(() => {
+        if (!cancelled) setProviderName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [model, providerId]);
 
   const handleClear = () => {
     clearMessages();
@@ -297,7 +318,14 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
           onUploadSuggestion={handleUploadSuggestion}
         />
         <div className="text-center mt-2 text-[11px] text-muted-foreground/60">
-          AI can make mistakes. Verify important information.
+          {isCloud && providerName ? (
+            <span className="inline-flex items-center gap-1">
+              <Cloud className="h-3 w-3" />
+              Answering via {providerName}
+            </span>
+          ) : (
+            'AI can make mistakes. Verify important information.'
+          )}
         </div>
       </div>
     </div>

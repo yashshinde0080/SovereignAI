@@ -33,3 +33,7 @@
 - Backend: added crown spinner (`RICH_SPINNERS["crown"]`) to `backend/app/cli/main.py`; `_tui_header()` with crown logo · title · version pill; `_status_bar()` replacing `[dim]` banner; `_bubble()` for cleared messages; SpinnerColumn("crown") in `pull()` and `_run_chat()`; table title updated to `👑 SovereignAI Edge`
 - Net: +187 lines, -23 lines in `backend/app/cli/main.py`
 
+
+## [2026-09-07] feat | Crown spinner theme + CLI polish
+- Backend: added crown spinner (`RICH_SPINNERS["crown"]`) to `backend/app/cli/main.py`; `_tui_header()` with crown logo · title · version pill; `_status_bar()` replacing `[dim]` banner; `_bubble()` for cleared messages; SpinnerColumn("crown") in `pull()` and `_run_chat()`; table title updated to `👑 SovereignAI Edge`
+- Net: +187 lines, -23 lines in `backend/app/cli/main.py`

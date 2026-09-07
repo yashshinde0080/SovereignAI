@@ -32,8 +32,8 @@ interface Store {
   setHistory: (history: HistoryPoint[] | ((prev: HistoryPoint[]) => HistoryPoint[])) => void;
 
   // UI State
-  settingsOpen: boolean;
-  setSettingsOpen: (open: boolean) => void;
+  settingsOpen: boolean | string;
+  setSettingsOpen: (open: boolean | string) => void;
 }
 
 
@@ -67,5 +67,5 @@ export const useStore = create<Store>((set) => ({
   })),
 
   settingsOpen: false,
-  setSettingsOpen: (open) => set({ settingsOpen: open }),
+  setSettingsOpen: (open: boolean | string) => set({ settingsOpen: open }),
 }));

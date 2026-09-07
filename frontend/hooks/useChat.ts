@@ -127,6 +127,7 @@ export function useChat() {
           stream: true,
           use_rag: true,
           max_tokens: 512,
+          model: messagesToSend[0]?.model,
         }),
       });
 

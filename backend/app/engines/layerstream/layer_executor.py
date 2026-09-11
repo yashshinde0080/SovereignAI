@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from typing import Dict, Any, List, Optional
 
+import psutil
+
 from .loader import LayerWeightLoader, dequantize_on_device
 from .kv_cache import KVCacheManager, HFProxyCache, StatefulCache
 from .benchmark import BenchmarkTracker
@@ -90,7 +92,16 @@ class LayerExecutor:
             free_vram, _ = torch.cuda.mem_get_info()
             self.dev_cache_budget = int(free_vram * 0.5)
         else:
-            self.dev_cache_budget = 0
+            # CPU also gets a device-cache budget: without it every decode
+            # step re-copies + re-casts every layer (bf16 split → fp32
+            # compute) and re-reads them from disk — Tensor.to() alone was
+            # 75% of decode wall time in the 08-11 profile of Qwen3.5-0.8B.
+            # The budget must cover the FULL per-token working set (all
+            # layers + embed/norm/lm_head): a partial budget churns (store →
+            # evict → re-copy every token) and measured ~2x SLOWER than no
+            # cache at all. Budget = 50% of TOTAL RAM (≈ what FullRAM would
+            # use for the same model), floor 512 MB, bounded by the LRU.
+            self.dev_cache_budget = max(int(psutil.virtual_memory().total * 0.5), 512 * 1024**2)
 
         # Detect hybrid/stateful models (e.g. Qwen3.5 with linear_attention + full_attention)
         # layer_types is passed from executor.py which checks both full config and text_config
@@ -297,6 +308,11 @@ class LayerExecutor:
         batch_size, seq_length = input_ids.shape
 
         if self._is_hybrid:
+            # Full-attention KV length == global token position for hybrid
+            # models: position_ids/RoPE and the 4D causal mask offset both
+            # derive from it. (Linear-attention layers ignore the 4D mask —
+            # batch=1 short-circuits apply_mask_to_padding_states — and track
+            # state in the cache instead.)
             past_length = self.cache.get_seq_length(0)
         else:
             past_length = 0 if mode == "prefill" else self.kv_manager.get_seq_length(0)
@@ -307,7 +323,7 @@ class LayerExecutor:
         
         t0 = time.perf_counter()
         embed = self.components['embed']
-        embed_dict = self.loader.get_weights(self.embed_path)
+        embed_dict = {} if self.embed_path in self._dev_cache else self.loader.get_weights(self.embed_path)
         self.tracker.record_layer_load(time.perf_counter() - t0)
         embed_tensors, embed_dict = self._dev_tensors_for(self.embed_path, embed, embed_dict)
         self.assign_weights(embed, embed_dict, tensors=embed_tensors)
@@ -367,7 +383,13 @@ class LayerExecutor:
                 if next_idx < self.num_layers:
                     self.loader.prefetch_async(self.layer_paths[next_idx])
             
-            layer_dict = self.loader.get_weights(self.layer_paths[i])
+            # Device-cache hit skips the loader read entirely: the packed
+            # form is not needed when the dequantized device tensors are
+            # already resident.
+            if self.layer_paths[i] in self._dev_cache:
+                layer_dict = {}
+            else:
+                layer_dict = self.loader.get_weights(self.layer_paths[i])
             self.tracker.record_layer_load(time.perf_counter() - t0)
             tensors, layer_dict = self._dev_tensors_for(self.layer_paths[i], layer, layer_dict)
             self.assign_weights(layer, layer_dict, tensors=tensors)
@@ -415,7 +437,7 @@ class LayerExecutor:
         norm = self.components['norm']
         if norm is not None:
             t0 = time.perf_counter()
-            norm_dict = self.loader.get_weights(self.norm_path)
+            norm_dict = {} if self.norm_path in self._dev_cache else self.loader.get_weights(self.norm_path)
             self.tracker.record_layer_load(time.perf_counter() - t0)
             norm_tensors, norm_dict = self._dev_tensors_for(self.norm_path, norm, norm_dict)
             self.assign_weights(norm, norm_dict, tensors=norm_tensors)
@@ -425,7 +447,7 @@ class LayerExecutor:
 
         lm_head = self.components['lm_head']
         t0 = time.perf_counter()
-        lm_head_dict = self.loader.get_weights(self.lm_head_path)
+        lm_head_dict = {} if self.lm_head_path in self._dev_cache else self.loader.get_weights(self.lm_head_path)
         self.tracker.record_layer_load(time.perf_counter() - t0)
         lm_tensors, lm_head_dict = self._dev_tensors_for(self.lm_head_path, lm_head, lm_head_dict)
         self.assign_weights(lm_head, lm_head_dict, tensors=lm_tensors)

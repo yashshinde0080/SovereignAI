@@ -25,7 +25,9 @@ async def lan_auth_middleware(request: Request, call_next):
     if not sec.get("bind_localhost_only", True):
         token = sec.get("api_token") or ""
         if token:
-            auth = request.headers.get("authorization", "")
-            if not secrets.compare_digest(auth, f"Bearer {token}"):
+            # Scheme is case-insensitive per RFC 7235; only the credential is
+            # compared with compare_digest (timing-safe).
+            scheme, _, credential = request.headers.get("authorization", "").partition(" ")
+            if scheme.lower() != "bearer" or not secrets.compare_digest(credential, token):
                 raise HTTPException(status_code=401, detail="Invalid or missing API token")
     return await call_next(request)

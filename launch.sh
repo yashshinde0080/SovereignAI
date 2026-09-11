@@ -51,6 +51,11 @@ fi
 
 echo -e "${GREEN}✓${NC} Dependencies installed"
 
+# Resolve host:port from the settings DB (security.api_port / bind_localhost_only)
+API_ADDR="$(python -c "import sys; sys.path.insert(0, 'backend'); from main import get_server_config; h, p = get_server_config(); h = '127.0.0.1' if h == '0.0.0.0' else h; print(f'{h}:{p}')" 2>/dev/null || echo "127.0.0.1:8000")"
+API_PORT="${API_ADDR##*:}"
+echo -e "${GREEN}✓${NC} API will listen on $API_ADDR"
+
 # Create necessary directories (all runtime storage lives in workspace/)
 mkdir -p "$SCRIPT_DIR/workspace/sessions"
 mkdir -p "$SCRIPT_DIR/workspace/documents"
@@ -62,15 +67,15 @@ echo -e "${BLUE}Starting backend server...${NC}"
 
 cd "$SCRIPT_DIR/backend"
 
-# Check if port is in use
-if lsof -Pi :8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}Port 8000 is already in use. Stopping existing process...${NC}"
-    kill $(lsof -Pi :8000 -sTCP:LISTEN -t) 2>/dev/null || true
+# Check if the configured port is in use
+if lsof -Pi :$API_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo -e "${YELLOW}Port $API_PORT is already in use. Stopping existing process...${NC}"
+    kill $(lsof -Pi :$API_PORT -sTCP:LISTEN -t) 2>/dev/null || true
     sleep 1
 fi
 
-# Start uvicorn
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+# Start backend (honors settings DB: security.api_port, security.bind_localhost_only)
+python main.py &
 BACKEND_PID=$!
 
 echo -e "${GREEN}✓${NC} Backend started (PID: $BACKEND_PID)"
@@ -78,7 +83,7 @@ echo -e "${GREEN}✓${NC} Backend started (PID: $BACKEND_PID)"
 # Wait for backend to be ready
 echo -e "${YELLOW}Waiting for backend...${NC}"
 for i in {1..30}; do
-    if curl -s http://127.0.0.1:8000/health > /dev/null 2>&1; then
+    if curl -s "http://$API_ADDR/health" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} Backend is ready"
         break
     fi
@@ -90,8 +95,8 @@ echo ""
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
 echo -e "${GREEN}SovereignAI Edge is running!${NC}"
 echo ""
-echo -e "  API:  ${BLUE}http://127.0.0.1:8000${NC}"
-echo -e "  Docs: ${BLUE}http://127.0.0.1:8000/docs${NC}"
+echo -e "  API:  ${BLUE}http://$API_ADDR${NC}"
+echo -e "  Docs: ${BLUE}http://$API_ADDR/docs${NC}"
 echo ""
 echo -e "  CLI:  ${YELLOW}./sovereign --help${NC}   (or: cd backend/app && python -m cli.main --help)"
 echo ""

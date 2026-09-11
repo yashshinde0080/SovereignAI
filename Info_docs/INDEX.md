@@ -44,7 +44,6 @@ updated: 2026-08-12
 - [[tech-stack/Pydantic|Pydantic]] — Pydantic data validation (updated 2026-07-21)
 - [[tech-stack/Zustand|Zustand]] — Zustand state management (updated 2026-07-21)
 - [[tech-stack/Tailwind CSS|Tailwind CSS]] — Tailwind CSS styling (updated 2026-07-21)
-- [[tech-stack/Vite|Vite]] — Vite build tool (updated 2026-07-21)
 - [[tech-stack/Electron|Electron]] — Electron desktop wrapper (updated 2026-07-21)
 - [[tech-stack/Plugin System|Plugin System]] — Plugin architecture and sandbox (updated 2026-07-21)
 - [[tech-stack/Hugging Face|Hugging Face]] — Hugging Face integration (updated 2026-07-21)

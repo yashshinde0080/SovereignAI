@@ -111,6 +111,8 @@ Loads the entire model into active memory. Best for systems with high VRAM/RAM (
 Iteratively loads/unloads individual neural network layers from disk to RAM. Enables models larger than free RAM to still run. Sweet spot: **3–8B Q4 models on 8GB RAM**.
 
 > ⚠️ Large models (70B+) run but slowly. See [reviews/benchmark-2026-08-14.md](reviews/benchmark-2026-08-14.md) for honest numbers.
+>
+> **2026-09-11:** fixed the hybrid (Qwen3.5) LayerStream path — the cache used the transformers-4.x protocol and crashed on transformers 5.x, and the CPU device-cache was disabled (75% of decode spent in re-copying weights). Same model now runs at **1.30 tok/s** vs 0.48 before (2.7×), peak RAM 2.9 GB. The pure-PyTorch GatedDeltaNet fallback is the remaining floor: `fla`/`causal-conv1d` are CUDA-only, so 8 GB CPU boxes without them top out near the FullRAM fp32 control of ~2.2 tok/s.
 
 ![Dual Engine Comparison](./Info_docs/assets/dual_engine.png)
 
@@ -120,7 +122,7 @@ Iteratively loads/unloads individual neural network layers from disk to RAM. Ena
 |:------|:-------|:-----------|:------|
 | Qwen2-0.5B (int4) | FullRAM | 0.85 | Fast path |
 | Qwen2-0.5B (int4) | LayerStream | 8.0 | Post device-cache fix |
-| Qwen3.5-0.8B (int4) | LayerStream | 0.48 | Bounded by missing `causal-conv1d` kernels |
+| Qwen3.5-0.8B (int4) | LayerStream | 1.30 | Hybrid; transformers-5.x cache fix + CPU device cache (2026-09-11). Was 0.48. |
 
 ---
 
@@ -271,7 +273,7 @@ Point any OpenAI SDK at `base_url=http://127.0.0.1:8000` — no API key needed o
 
 | Area | Status |
 |:-----|:-------|
-| **LayerStream speed** | Sub-1 tok/s on CPU for large models. GPU blocked on Windows (no `causal-conv1d` wheel). |
+| **LayerStream speed** | Sub-1.5 tok/s on CPU for larger/hybrid models. `fla`/`causal-conv1d` fast kernels are CUDA-only — CPU uses the pure-PyTorch GatedDeltaNet fallback. |
 | **TurboQuant** | Parked. Default-off. 4/4 eval gates failed. See `reviews/eval_gate_*.json`. |
 | **FullRAM on low RAM** | Requires enough RAM for the entire model. Use `mode=auto` for automatic engine selection. |
 | **Model formats** | Primary: safetensors (transformers). GGUF fallback via llama-cpp-python. BitNet IQ2_BN via ik-llama-cpp-python. |
@@ -291,7 +293,7 @@ cd backend && python -m pytest
 cd frontend && node --test lib/maskedLm.test.ts
 ```
 
-**98 tests** across 13 files covering CLI, SSE streaming, think-strip, fuzzy model match, plugin sandbox, and OpenAI compat.
+**134 tests** across 17 files (129 fast + 5 slow) covering CLI, SSE streaming, think-strip, fuzzy model match, plugin sandbox, cloud engine, FullRAM executor, engine-factory mode resolution, auth middleware, and OpenAI compat.
 
 ---
 

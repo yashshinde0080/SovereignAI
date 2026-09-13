@@ -4,7 +4,6 @@ import { useEffect, useRef } from 'react';
 import { useStore } from '@/store';
 import { metricsWs } from '@/lib/websocket';
 import { api } from '@/lib/api';
-import type { SystemStatus } from '@/types';
 
 export function useMetrics() {
   const {

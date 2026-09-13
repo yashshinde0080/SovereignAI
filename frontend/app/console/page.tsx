@@ -140,7 +140,7 @@ function ConsoleContent() {
          
          {!activeIsGen && activeTask !== 'unknown' &&
             <div className="flex-1 flex flex-col justify-center items-center">
-                <h2>This model's task ({activeTask}) is not executable yet. Load a chat/instruct model instead.</h2>
+                <h2>This model&apos;s task ({activeTask}) is not executable yet. Load a chat/instruct model instead.</h2>
             </div>
          }
 

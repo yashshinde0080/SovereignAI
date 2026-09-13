@@ -37,7 +37,7 @@ interface ChatModuleProps {
   initialAsk?: string;
 }
 
-export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
+export function ChatModule({ model, initialAsk }: ChatModuleProps) {
   const autoAskSent = useRef(false);
   const { systemStatus } = useStore();
   // Cloud models are "<provider_id>/<model_id>" — show "Online · model" and
@@ -281,7 +281,7 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
                 title={`Ask the model about '${suggestion}'`}
               >
                 <Sparkles className="h-3 w-3" />
-                <span className="max-w-[220px] truncate font-medium">Ask about '{suggestion}'</span>
+                <span className="max-w-[220px] truncate font-medium">Ask about &apos;{suggestion}&apos;</span>
               </button>
               <button
                 onClick={() => setSuggestion(null)}

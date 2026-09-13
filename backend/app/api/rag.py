@@ -42,36 +42,45 @@ async def upload_document(
         raise HTTPException(status_code=413, detail="File too large. Max: 50MB")
     
     # Process based on file type
+    filename = (file.filename or "").lower()
+    text = ""
+    if filename.endswith('.txt'):
+        text = content.decode('utf-8', errors='replace')
+    elif filename.endswith('.pdf'):
+        pdf_plugin = request.app.state.plugin_manager.get_plugin('pdf_ingestion')
+        if pdf_plugin is None:
+            raise HTTPException(
+                status_code=503,
+                detail="PDF plugin not available (pypdf not installed). Upload a .txt file instead."
+            )
+        text = await pdf_plugin.extract_text(content)
+        if not text.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="No text could be extracted from this PDF (scanned/image-only PDFs are not supported)."
+            )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unhandled file type: {filename}")
+
     try:
-        if filename.endswith('.txt'):
-            text = content.decode('utf-8')
-        elif filename.endswith('.pdf'):
-            pdf_plugin = request.app.state.plugin_manager.get_plugin('pdf_ingestion')
-            if pdf_plugin:
-                text = await pdf_plugin.extract_text(content)
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="PDF plugin not available"
-                )
-        else:
-            raise HTTPException(status_code=400, detail=f"Unhandled file type: {filename}")
-        
         # Add to vector store
         doc_id = vector_store.ingest_text(
             text=text,
             filename=file.filename,
             metadata={"filename": file.filename}
         )
-        
-        return {
-            "status": "success",
-            "document_id": doc_id,
-            "filename": file.filename,
-            "chunks": len(vector_store.get_document_chunks(doc_id))
-        }
+    except RuntimeError as e:
+        # Vector store not initialized / embedder failed — say so plainly.
+        raise HTTPException(status_code=503, detail=f"Vector store unavailable: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "status": "success",
+        "document_id": doc_id,
+        "filename": file.filename,
+        "chunks": len(vector_store.get_document_chunks(doc_id))
+    }
 
 
 @router.post("/query", response_model=QueryResponse)
@@ -121,14 +130,14 @@ async def query_documents(request: Request, query: QueryRequest):
                 pass
                 
         response = await request.app.state.active_engine.generate(
-            prompt=prompt,
+            input_data=prompt,
             max_tokens=query.max_tokens
         )
         
         return QueryResponse(
             query=query.query,
             results=results,
-            generated_response=response["text"]
+            generated_response=response.get("output") or response.get("text") or ""
         )
     
     return QueryResponse(
@@ -136,6 +145,16 @@ async def query_documents(request: Request, query: QueryRequest):
         results=results,
         generated_response=None
     )
+
+
+@router.get("/stats")
+async def rag_stats(request: Request):
+    """Vector store health — FAISS vs metadata counts. in_sync=false means desync
+    (search would silently return nothing until the startup self-heal runs)."""
+    vector_store: VectorStoreManager = request.app.state.vector_store
+    stats = vector_store.get_stats()
+    stats["in_sync"] = stats["total_vectors"] == stats["total_embeddings"]
+    return stats
 
 
 @router.get("/documents", response_model=DocumentList)

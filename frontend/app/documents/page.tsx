@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -79,14 +79,14 @@ function DocumentsContent() {
     return () => clearTimeout(timer);
   }, [targetFile, documents]);
 
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
       const res = await api.listDocuments();
       setDocuments(res.documents || []);
     } catch (error) {
       toast({ title: 'Failed to load documents', description: errMsg(error), variant: 'destructive' });
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     // ponytail: loading only gates the initial mount, refreshes stay silent
@@ -95,7 +95,7 @@ function DocumentsContent() {
       await loadDocuments();
       setLoading(false);
     })();
-  }, []);
+  }, [loadDocuments]);
 
   const dropRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -144,7 +144,7 @@ function DocumentsContent() {
       el.removeEventListener('dragleave', onDragLeave);
       el.removeEventListener('drop', onDrop);
     };
-  }, []);
+  }, [loadDocuments, toast]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

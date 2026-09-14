@@ -204,7 +204,7 @@ No absolute paths. All runtime storage lives inside `./workspace/`:
 - `workspace/database/` — `sovereign.db` (models/sessions/docs) + `sovereign_settings.db` (settings/agents)
 - `workspace/offload_cache/` — LayerStream per-layer `.safetensors` chunks
 - `workspace/sessions/` — chat snapshots
-- `workspace/vectors/` + `workspace/vector_index/` — FAISS index
+- `workspace/data/vector_index/` — FAISS index (`index.faiss`) + `metadata.db` (live store; the old `workspace/vector_index/` was migrated here and deleted 2026-09-14, `workspace/vectors/` is obsolete)
 - `workspace/plugins/` — user Python scripts
 - `workspace/logs/` — `server_cli.log`
 

@@ -50,4 +50,9 @@
 - Backend RAG: new `/v1/rag/stats` health endpoint (FAISS vs metadata counts, `in_sync` flag); upload now distinguishes 503 (PDF plugin/vector store unavailable) from 400 (unhandled type); `query_documents` uses `input_data` kwarg + `output`/`text` fallback for the engine call. Deleted dead `fullram/kv_cache.py`.
 - Backend tests: new `test_vectorstore_sync.py` (167 lines) covering ingest/delete/re-ingest sync, cumulative rebuild, startup self-heal, and delete-all-then-ingest with a fake bag-of-words embedder (no model download).
 - Frontend: React hook dep-array lint fixes (`useCallback`, `useEffect` deps in documents/page.tsx, page.tsx); HTML-entity escaping of quotes/apostrophes (`&apos;s`, `&quot;`); `DocumentViewerModal` collapsed loading/error/chunks into one derived state; removed unused `taskType` props (`ChatModule`, `ClassificationModule`) and an unused `ScrollArea` import; `useMetrics` unused `SystemStatus` import dropped.
-- Docs: added `backend/backend.md` + `frontend/frontend.md` READMEs; `components/task/README.md` documents the six parked task modules (intentionally unrouted, not dead code). Commits 6605264, 8474652, b83eeaf, 55c4f3d.
+- Docs: added `backend/backend.md` + `frontend/frontend.md` READMEs;
+  `components/task/README.md` documents the six parked task modules
+  (intentionally unrouted, not dead code). Commits 6605264, 8474652, b83eeaf,
+  55c4f3d.
+
+

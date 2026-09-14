@@ -234,7 +234,7 @@ The old AGENTS.md claimed `debug_*.py` / `test_*.py` / `verify_*.py` / `reproduc
 
 ### 11. Stale spots in `Info_docs/`
 
-**Resolved 2026-09-11:** stale `Info_docs/tech-stack/Vite.md` was deleted (wikilinks in `INDEX.md`, `React.md`, `Tailwind CSS.md`, `Zustand.md`, `Sovereign.canvas` cleaned up), the root `readme.md` file-system-layout block now nests runtime dirs under `workspace/`, and `backend/__pycache__` artifacts of deleted debug scripts were purged. Remaining stale spots: `Docs/` (older duplicate wiki still references Vite) and `Info_docs/project/TRD.md` (still says React 18 + Vite).
+**Resolved 2026-09-14:** stale `Info_docs/tech-stack/Vite.md` was deleted (wikilinks in `INDEX.md`, `React.md`, `Tailwind CSS.md`, `Zustand.md`, `Sovereign.canvas` cleaned up); root `readme.md` file-system-layout block updated to `workspace/data/vector_index/` instead of `vectors/`; all paths now reflect current structure. Remaining stale spots: `Docs/` (older duplicate wiki still references Vite) and `Info_docs/project/TRD.md` (still says React 18 + Vite).
 
 ### 12. Cloud mode bypasses local model infrastructure
 

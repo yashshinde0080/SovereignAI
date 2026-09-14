@@ -157,6 +157,21 @@ async def rag_stats(request: Request):
     return stats
 
 
+@router.post("/rebuild")
+async def rebuild_index(request: Request):
+    """Manual vector-store rebuild from metadata (fixes FAISS/metadata desync
+    without a restart). Re-embeds all chunks and blocks the loop for its
+    duration — same as the delete path, which already rebuilds inline."""
+    vector_store: VectorStoreManager = request.app.state.vector_store
+    try:
+        vector_store.rebuild_index()  # ponytail: inline (sqlite thread affinity); to_thread trips check_same_thread
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Rebuild failed: {e}")
+    stats = vector_store.get_stats()
+    stats["in_sync"] = stats["total_vectors"] == stats["total_embeddings"]
+    return stats
+
+
 @router.get("/documents", response_model=DocumentList)
 async def list_documents(request: Request):
     """List indexed documents"""

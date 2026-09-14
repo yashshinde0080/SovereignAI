@@ -51,6 +51,7 @@ export function VisionModule({ taskType }: { taskType: string }) {
         <Card className="w-full flex border-dashed border-2 hover:bg-muted/50 transition-colors">
             <CardContent className="w-full flex flex-col items-center justify-center p-10 cursor-pointer text-muted-foreground" onClick={() => fileInputRef.current?.click()}>
                 {imagePreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- local object-URL preview, next/image adds nothing
                     <img src={imagePreview} alt="Preview" className="max-h-64 object-contain rounded-md shadow-sm" />
                 ) : (
                     <>

@@ -57,7 +57,7 @@ Query:
 - `IVF` — approximate search (larger datasets, requires training)
 - Auto-fallback: if not enough vectors for IVF training → Flat
 
-Saved to `workspace/vector_index/`.
+Saved to `workspace/data/vector_index/` (`index.faiss` + `metadata.db`).
 
 ## Retrieval
 

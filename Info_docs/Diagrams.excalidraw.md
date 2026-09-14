@@ -48,7 +48,7 @@ workspace/offload_cache/ — per-layer .safetensors chunks ^ZCyJvKKo
 
 workspace/sessions/ — chat snapshots ^EtkTBx8q
 
-workspace/vectors/ + workspace/vector_index/ — FAISS index ^CAzKs3Hq
+workspace/data/vector_index/ — FAISS index + metadata ^CAzKs3Hq
 
 workspace/plugins/ — user Python scripts ^9M0JDmcZ
 

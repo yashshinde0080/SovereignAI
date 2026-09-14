@@ -182,6 +182,14 @@ class ApiClient {
     return this.request(`/v1/rag/documents/${docId}`, { method: 'DELETE' });
   }
 
+  async getRagStats(): Promise<{ total_vectors: number; total_chunks: number; in_sync: boolean }> {
+    return this.request('/v1/rag/stats');
+  }
+
+  async rebuildRagIndex(): Promise<{ total_vectors: number; total_chunks: number; in_sync: boolean }> {
+    return this.request('/v1/rag/rebuild', { method: 'POST' });
+  }
+
   // Workspace Snapshots
   async saveWorkspace() {
     return this.request('/v1/workspace/save', { method: 'POST' });

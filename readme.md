@@ -138,7 +138,8 @@ SovereignAI/
 │   ├── database/     # SQLite (sovereign.db + sovereign_settings.db)
 │   ├── offload_cache/# LayerStream per-layer chunks
 │   ├── sessions/     # Chat snapshots
-│   ├── vectors/      # FAISS vector index
+│   ├── data/         # Vector data directory
+│   │   └── vector_index/  # FAISS vector index
 │   └── plugins/      # User Python plugins
 └── Info_docs/        # Obsidian wiki (31 pages)
 ```

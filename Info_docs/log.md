@@ -1,8 +1,10 @@
-## [2026-09-11] fix+perf | Hybrid LayerStream crash fix + CPU device cache + repo hygiene
-- Backend fix: `StatefulCache` implemented the transformers-4.x cache protocol; transformers 5.12.1 (installed vs pinned 4.45.2) reads `has_previous_state(layer_idx)` as a METHOD and state via `layers[i].conv_states/recurrent_states` — every hybrid (Qwen3.5) LayerStream request crashed with `TypeError: 'bool' object is not callable`. `StatefulCache` now implements the 5.x protocol (regression tests: `test_stateful_cache_protocol.py`)
-- Backend perf: LayerStream device-tensor cache was CUDA-only (`dev_cache_budget=0` on CPU) → 75% of decode wall time spent in `Tensor.to()` re-copying/re-casting all weights per token (cProfile, 08-11). CPU now gets a 50%-of-total-RAM budget that must cover the full per-token working set (a partial budget churns and measured 2× slower). Qwen3.5-0.8B hybrid: 0.48 → **1.30 tok/s** on the 8 GB dev box, peak RAM 2.9 GB; FullRAM fp32 control measured 2.25 tok/s (that's the CPU floor — `fla`/`causal-conv1d` are CUDA-only)
-- Backend tests: new `test_engine_factory_and_auth.py` (auto-mode resolution, cloud branch, LAN auth incl. RFC-7235 case-insensitive scheme fix in `security/middleware.py`); suite now 134 tests (129 fast + 5 slow), all passing
-- Repo hygiene: launch.bat/launch.sh now resolve host:port from the settings DB via `backend/main.py:get_server_config()` (were hardcoded 127.0.0.1:8000, bypassing `bind_localhost_only`); deleted root `__pycache__/proxy.cpython-314.pyc` + `backend/__pycache__` artifacts of deleted debug scripts; deleted stale `Info_docs/tech-stack/Vite.md` and cleaned its wikilinks (INDEX.md, React.md, Tailwind CSS.md, Zustand.md, Sovereign.canvas); readme benchmark table + test counts refreshed; AGENTS.md gotchas #2/#11 refreshed
+## [2026-09-14] doc | Update workspace paths in AGENTS.md, readme, and Diagrams
+ - AGENTS.md: workspace/vector_index/ → workspace/data/vector_index/ path correction; workspace/vectors/ marked as obsolete
+ - readme.md: workspace/vectors/ → workspace/data/vector_index/ in file-system layout
+ - Diagrams.excalidraw.md: vector index path updated to workspace/data/vector_index/
+ - Info_docs/working/10-rag-vector-store.md: path updated
+
+## [2026-09-13] fix+perf | Hybrid LayerStream crash fix + CPU device cache + repo hygiene
 ## [2026-09-01] doc | Added technical report
 - Docs: added `TECHNICAL_REPORT.md` (+759 lines) (c16147c)
 ## [2026-08-30] refactor | Plugin system removal + readme rework

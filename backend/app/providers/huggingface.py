@@ -577,7 +577,8 @@ class HuggingFaceProvider(BaseProvider):
         ignore_patterns = ["*.msgpack", "*.h5", "*.ot", "*.ckpt", ".git*"]
         total_bytes = 0
         for f in repo_info.siblings:
-            if not f.size: continue
+            if not f.size:
+                continue
             should_ignore = False
             for p in ignore_patterns:
                 if fnmatch.fnmatch(f.rfilename, p):

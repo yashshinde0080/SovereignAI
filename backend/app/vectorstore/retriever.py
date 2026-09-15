@@ -5,8 +5,7 @@ Handles score thresholds, document filtering, and context construction.
 """
 
 import logging
-import numpy as np
-from typing import List, Optional
+from typing import List
 
 from .config import VectorStoreConfig
 from .index_builder import FAISSIndexBuilder

@@ -1,10 +1,13 @@
 """LayerStream Execution Engine - TRUE Memory-Bounded Layer-by-Layer inference"""
 import asyncio
+import logging
 import time
 import os
 import gc
 import glob
-from typing import Dict, Any, AsyncGenerator, Optional
+from typing import Dict, Any, AsyncGenerator
+
+logger = logging.getLogger(__name__)
 
 import torch
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -105,7 +108,7 @@ class LayerStreamEngine(BaseEngine):
         os.makedirs(self.weights_dir, exist_ok=True)
         
         if not os.path.exists(os.path.join(self.weights_dir, "embed.safetensors")):
-            print(f"Components absents. Synchronizing AutoSplitter logic on cpu...")
+            logger.info("Components absents. Synchronizing AutoSplitter logic on cpu...")
             splitter = WeightSplitter(self.model_path, self.weights_dir, quant_method=self.quant_method)
             await asyncio.to_thread(splitter.split_and_save, torch.float16)
         else:
@@ -115,7 +118,8 @@ class LayerStreamEngine(BaseEngine):
             missing = [f for f in tokenizer_files if not os.path.exists(os.path.join(self.weights_dir, f))]
             if missing:
                 source_dir = self.model_path
-                if os.path.isfile(source_dir): source_dir = os.path.dirname(source_dir)
+                if os.path.isfile(source_dir):
+                    source_dir = os.path.dirname(source_dir)
                 import shutil
                 for tf in tokenizer_files:
                     src = os.path.join(source_dir, tf)
@@ -199,7 +203,7 @@ class LayerStreamEngine(BaseEngine):
         
         self.loaded = True
         self.stats["load_time"] = time.time() - start_time
-        print(f"Loaded {self.model_path} LayerStream in {self.stats['load_time']:.1f}s")
+        logger.info("Loaded %s LayerStream in %.1fs", self.model_path, self.stats['load_time'])
 
 
 

@@ -1,11 +1,14 @@
 import os
 import time
 import inspect
+import logging
 import torch
 import torch.nn as nn
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 import psutil
+
+logger = logging.getLogger(__name__)
 
 from .loader import LayerWeightLoader, dequantize_on_device
 from .kv_cache import KVCacheManager, HFProxyCache, StatefulCache
@@ -117,11 +120,11 @@ class LayerExecutor:
             self.cache = StatefulCache(config=config, num_layers=self.num_layers, layer_types=layer_types)
             self.kv_manager = None
             if turboquant_config is not None:
-                print("TurboQuant skipped: hybrid/stateful model uses StatefulCache instead")
+                logger.info("TurboQuant skipped: hybrid/stateful model uses StatefulCache instead")
             self._hf_cache_factory = lambda: self.cache
         elif turboquant_config is not None:
             from app.engines.shared.turboquant import TurboQuantKVCacheManager, TurboQuantHFProxyCache
-            tq_config = turboquant_config if hasattr(turboquant_config, 'bits_per_coord') else type('obj', (object,), {'bits_per_coord': 3.5, 'qjl_dim': 128, 'enable_qjl': True, 'device': device})()
+            # ponytail: dead `tq_config` fallback-object assignment removed; code below uses turboquant_config directly
             # Use config object
             from app.engines.shared.turboquant import TurboQuantConfig
             if isinstance(turboquant_config, dict):
@@ -319,7 +322,7 @@ class LayerExecutor:
             
         max_context = getattr(self.config, "max_position_embeddings", 4096)
         if past_length + seq_length > max_context:
-            raise ValueError(f"Context length limits exceeded. Try generating fewer tokens.")
+            raise ValueError("Context length limits exceeded. Try generating fewer tokens.")
         
         t0 = time.perf_counter()
         embed = self.components['embed']

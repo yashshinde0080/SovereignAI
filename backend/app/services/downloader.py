@@ -3,7 +3,7 @@ import asyncio
 import aiohttp
 import aiofiles
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any
+from typing import Optional, Callable, Dict
 import hashlib
 
 

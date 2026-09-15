@@ -30,7 +30,6 @@ do nothing at >= 3. The table below verifies this numerically.
 Run:  cd backend && ./.venv/Scripts/python.exe -m benchmarks.qjl_ablation
 """
 
-import math
 import statistics
 import torch
 

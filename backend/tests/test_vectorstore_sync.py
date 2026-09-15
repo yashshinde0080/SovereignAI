@@ -55,7 +55,16 @@ def store(tmp_path, monkeypatch):
 
 
 class _FakeEmbedder:
-    """Deterministic bag-of-words embedder — real model not needed for sync tests."""
+    """Deterministic bag-of-words embedder — real model not needed for sync tests.
+
+    Determinism requirements:
+    - zlib.crc32, NOT hash(): Python's str hash is salted per process
+      (PYTHONHASHSEED), which made word->slot placement random per pytest run
+      and turned low-overlap queries into coin flips (~1/6 flake).
+    - punctuation stripped: query "rockets" must match doc token "rockets." —
+      without this the self-heal test had zero real signal and passed only
+      via random hash collisions.
+    """
 
     def __init__(self, cfg):
         self.config = cfg
@@ -63,9 +72,13 @@ class _FakeEmbedder:
         self._vocab = {}
 
     def _vec(self, text):
+        import zlib
         v = np.zeros(self._dimension, dtype=np.float32)
         for w in text.lower().split():
-            h = hash(w) % self._dimension
+            w = w.strip(".,!?;:")
+            if not w:
+                continue
+            h = zlib.crc32(w.encode()) % self._dimension
             v[h] += 1.0
         n = np.linalg.norm(v)
         return v / n if n else v

@@ -175,7 +175,7 @@ def test_splitter_skips_small_tensors():
     big, small = torch.randn(32, 64), torch.randn(16)
     for qf in (_quantize_int8, _quantize_int4):
         q = qf({"big": big, "small": small})
-        assert f"big.scale" in q
+        assert "big.scale" in q
         assert q["small"].dtype == torch.float32
         assert "small.scale" not in q
 

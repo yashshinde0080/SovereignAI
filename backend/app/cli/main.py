@@ -16,7 +16,6 @@ from rich import box
 try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.history import FileHistory, History
-    from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.widgets import TextArea, Frame
     from typing import Iterable
 except ImportError:
@@ -469,7 +468,7 @@ def import_model(
     if not src.is_file():
         console.print(f"[red]Error:[/red] Not a file: {path}")
         raise typer.Exit(code=1)
-    if not src.suffix.lower() in (".gguf", ".gguf.enc"):
+    if src.suffix.lower() not in (".gguf", ".gguf.enc"):
         console.print(
             "[red]Error:[/red] Only .gguf (or encrypted .gguf.enc) files can be "
             "imported. Convert the model with llama.cpp/GGUF first."
@@ -945,7 +944,7 @@ def benchmark_turboquant(
     """Benchmark TurboQuant KV compression vs standard FP16 cache."""
     from app.engines.shared.turboquant import TurboQuantConfig, TurboQuantKVCacheManager
 
-    console.print(f"[bold]TurboQuant Benchmark[/bold]")
+    console.print("[bold]TurboQuant Benchmark[/bold]")
     console.print(f"  Model: {model}")
     console.print(f"  Bits: {bits}")
     console.print(f"  Context: {context_len}")
@@ -953,7 +952,6 @@ def benchmark_turboquant(
 
     # Synthetic benchmark: measure compression ratio and reconstruction error
     import torch
-    import numpy as np
 
     head_dim = 128
     num_heads = 32
@@ -973,7 +971,7 @@ def benchmark_turboquant(
     config = TurboQuantConfig(bits_per_coord=bits, device="cpu")
     tq_mgr = TurboQuantKVCacheManager(config, num_layers, num_heads, head_dim, "cpu")
 
-    console.print(f"\n[bold]Running TurboQuant compression...[/bold]")
+    console.print("\n[bold]Running TurboQuant compression...[/bold]")
     start = time.perf_counter()
     for layer in range(num_layers):
         tq_mgr.update(layer, k, v)
@@ -1010,7 +1008,7 @@ def benchmark_turboquant(
     )
 
     console.print(table)
-    console.print(f"\n[dim]Synthetic data only. Real accuracy depends on attention distribution. See reviews/autoplan-report-2026-08-09.md for eval-gate results.[/dim]")
+    console.print("\n[dim]Synthetic data only. Real accuracy depends on attention distribution. See reviews/autoplan-report-2026-08-09.md for eval-gate results.[/dim]")
 
 
 # ── cloud providers ──

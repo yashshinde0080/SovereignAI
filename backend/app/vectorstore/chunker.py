@@ -5,7 +5,6 @@ No naive split. Proper boundary detection.
 """
 
 import re
-import uuid
 import logging
 from typing import List
 

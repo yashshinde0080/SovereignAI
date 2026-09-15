@@ -241,7 +241,7 @@ async def update_agent(agent_id: str, agent: AgentConfig):
     success = service.update_agent(agent_id, agent)
     return SettingsUpdateResponse(
         success=success,
-        message=f"Agent updated" if success else "Update failed",
+        message="Agent updated" if success else "Update failed",
         updated_section="agents"
     )
 

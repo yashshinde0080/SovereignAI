@@ -1,18 +1,16 @@
 """Chat API Endpoints"""
-import asyncio
 import json
 import logging
 import uuid
 from typing import AsyncGenerator
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
 from app.schemas.chat import (
     ChatRequest, 
     ChatResponse, 
-    Message,
     StreamChunk
 )
 
@@ -115,7 +113,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     if tokenizer and hasattr(tokenizer, "apply_chat_template"):
         try:
             prompt = tokenizer.apply_chat_template(messages_dicts, tokenize=False, add_generation_prompt=True)
-        except Exception as e:
+        except Exception:
             # Fallback
             prompt = build_prompt(messages_dicts)
     else:
@@ -263,7 +261,7 @@ async def stream_response(
 
     if rag_metadata:
         meta_chunk = StreamChunk(
-            id=f"chunk-meta",
+            id="chunk-meta",
             choices=[{
                 "index": 0,
                 "delta": {"rag_metadata": rag_metadata},

@@ -1,10 +1,7 @@
 """RAG API Endpoints"""
-import os
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
-from typing import List
 
 from app.schemas.rag import (
-    DocumentUpload,
     QueryRequest,
     QueryResponse,
     DocumentList

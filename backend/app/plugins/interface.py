@@ -1,6 +1,6 @@
 """Plugin Interface"""
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 
 class PluginInterface(ABC):

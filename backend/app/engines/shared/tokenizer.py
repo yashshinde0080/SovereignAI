@@ -1,5 +1,5 @@
 """Tokenizer Implementation"""
-from typing import List, Optional
+from typing import List
 from pathlib import Path
 import json
 import re

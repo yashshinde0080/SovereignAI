@@ -1,5 +1,5 @@
 """System Schemas"""
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from pydantic import BaseModel
 
 

@@ -4,7 +4,6 @@ import time
 import os
 import logging
 from typing import Dict, Any, AsyncGenerator, Optional
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +126,7 @@ class FullRAMEngine(BaseEngine):
                             self.model_path, trust_remote_code=settings.trust_remote_code
                         )
                     except Exception:
-                        raise RuntimeError(f"Missing required processor for vision task")
+                        raise RuntimeError("Missing required processor for vision task")
             
             if input_modality == "audio":
                 try:
@@ -183,15 +182,15 @@ class FullRAMEngine(BaseEngine):
                 # Both backends failed — give a targeted error
                 if is_ik_only:
                     raise RuntimeError(
-                        f"This model uses IQ2_BN quantization which requires ik_llama.cpp (a fork), "
-                        f"not standard llama.cpp or Transformers. Use a standard GGUF quantization "
-                        f"(Q4_K_M, Q5_K_M, Q8_0) or a supported architecture."
+                        "This model uses IQ2_BN quantization which requires ik_llama.cpp (a fork), "
+                        "not standard llama.cpp or Transformers. Use a standard GGUF quantization "
+                        "(Q4_K_M, Q5_K_M, Q8_0) or a supported architecture."
                     )
                 raise RuntimeError(
-                    f"Model architecture not supported by PyTorch/Transformers or llama-cpp-python. "
-                    f"Use a GGUF model quantized from a standard architecture (Llama, Mistral, "
-                    f"Qwen2, Gemma, Phi-3, Falcon, DeepSeek, etc.). Check the error above for "
-                    f"the specific architecture name that failed."
+                    "Model architecture not supported by PyTorch/Transformers or llama-cpp-python. "
+                    "Use a GGUF model quantized from a standard architecture (Llama, Mistral, "
+                    "Qwen2, Gemma, Phi-3, Falcon, DeepSeek, etc.). Check the error above for "
+                    "the specific architecture name that failed."
                 )
             raise RuntimeError(f"Failed to load model dynamically: {e}")
     
@@ -387,9 +386,6 @@ class FullRAMEngine(BaseEngine):
         if not self.loaded:
             raise RuntimeError("Model not loaded")
 
-        task_type = self.task_metadata["task_type"]
-        modality = self.task_metadata["input_modality"]
-        
         if getattr(self, "is_llama_cpp", False):
             if isinstance(input_data, list) or (isinstance(input_data, dict) and "messages" in input_data):
                 msgs = input_data if isinstance(input_data, list) else input_data["messages"]

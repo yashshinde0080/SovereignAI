@@ -4,21 +4,19 @@ Single entry point for all vector operations.
 Document ingestion → Chunking → Embedding → Indexing → Search.
 """
 
-import os
-import uuid
 import hashlib
 import logging
 import numpy as np
 from typing import List, Optional
 
-from .config import VectorStoreConfig, load_vector_config
+from .config import load_vector_config
 from .chunker import DocumentChunker
 from .embedding_pipeline import EmbeddingPipeline
 from .index_builder import FAISSIndexBuilder
 from .store import VectorMetadataStore
 from .retriever import Retriever
 from app.schemas.vector_schemas import (
-    TextChunk, EmbeddingRecord, SearchQuery,
+    EmbeddingRecord, SearchQuery,
     SearchResult, RAGContext
 )
 
@@ -285,7 +283,6 @@ class VectorStoreManager:
 
         # Re-embed all chunks — single batch query instead of N separate queries
         all_embeddings = []
-        all_chunks = []
         new_embedding_records = []
 
         chunks_by_doc = self.metadata_store.get_chunks_by_documents(doc_ids)

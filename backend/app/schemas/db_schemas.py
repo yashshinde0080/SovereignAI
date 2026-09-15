@@ -3,9 +3,8 @@ Pydantic schemas for all database entities.
 No ambiguity. No loose dicts flying around.
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import datetime
+from pydantic import BaseModel
+from typing import Optional
 from enum import Enum
 
 

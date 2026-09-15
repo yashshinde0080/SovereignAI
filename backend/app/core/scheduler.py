@@ -1,6 +1,6 @@
 """Inference Scheduler"""
 import asyncio
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Optional, Callable
 from dataclasses import dataclass
 from enum import Enum
 from queue import PriorityQueue

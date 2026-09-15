@@ -1,12 +1,14 @@
 import os
 import gc
-import json
+import logging
 import torch
 from transformers import AutoModelForCausalLM
 from safetensors.torch import save_file
 
 from .introspection import ModelIntrospector
 from .quant_config import QuantConfig
+
+logger = logging.getLogger(__name__)
 
 
 # Tensors smaller than this are left in fp (buffers like inv_freq, tiny
@@ -92,7 +94,7 @@ class WeightSplitter:
         """
         import psutil
         from app.config import settings
-        print(f"Loading full model '{self.model_id}' to CPU for splitting...")
+        logger.info("Loading full model '%s' to CPU for splitting...", self.model_id)
 
         # Preflight: ensure enough RAM for model loading (2x model size as safety margin)
         avail = psutil.virtual_memory().available
@@ -152,18 +154,18 @@ class WeightSplitter:
                 return _quantize_int4(sd)
             return sd
 
-        print("Saving embed...")
+        logger.info("Saving embed...")
         save_file(_maybe_quant(components['embed'].state_dict()), os.path.join(self.output_dir, "embed.safetensors"))
         
-        print(f"Saving {len(components['layers'])} layers...")
+        logger.info("Saving %d layers...", len(components['layers']))
         for i, layer in enumerate(components['layers']):
             save_file(_maybe_quant(layer.state_dict()), os.path.join(self.output_dir, f"layer_{i}.safetensors"))
 
         if components['norm'] is not None:
-            print("Saving final norm...")
+            logger.info("Saving final norm...")
             save_file(_maybe_quant(components['norm'].state_dict()), os.path.join(self.output_dir, "norm.safetensors"))
 
-        print("Saving lm_head...")
+        logger.info("Saving lm_head...")
         save_file(_maybe_quant(components['lm_head'].state_dict()), os.path.join(self.output_dir, "lm_head.safetensors"))
         
         # Save config
@@ -189,4 +191,4 @@ class WeightSplitter:
         # Clean up full model from RAM
         del model
         gc.collect()
-        print(f"Splitting complete. Files saved to {self.output_dir}/")
+        logger.info("Splitting complete. Files saved to %s/", self.output_dir)

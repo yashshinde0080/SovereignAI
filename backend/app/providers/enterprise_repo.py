@@ -5,15 +5,12 @@ Handles models from private/enterprise repositories.
 Supports custom authentication and private model hosting.
 """
 
-import asyncio
 import aiohttp
 import aiofiles
 import hashlib
-import json
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from urllib.parse import urljoin
 
 from app.providers.base import (
     BaseProvider,

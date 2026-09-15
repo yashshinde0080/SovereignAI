@@ -1,7 +1,6 @@
 import sqlite3
 import json
 import os
-from pathlib import Path
 from typing import Optional
 from .schemas import FullSettings, AgentConfig
 from .defaults import DEFAULT_AGENTS

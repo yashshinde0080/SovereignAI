@@ -1,14 +1,11 @@
 """Model Management Service"""
 import os
 import json
-import hashlib
 import asyncio
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-import aiohttp
-import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +170,8 @@ class ModelManager:
                                     metadata = json.load(f)
                                 metadata["id"] = model_id # Force prefix
                                 metadata["path"] = str(cache_model_dir)
-                            except: pass
+                            except (OSError, json.JSONDecodeError, ValueError):
+                                pass
                             
                         if not metadata:
                             # Create minimal metadata
@@ -274,7 +272,6 @@ class ModelManager:
     
     async def load_model(self, model_id: str, mode: str = "auto") -> Dict[str, Any]:
         """Unified load logic with hardware check"""
-        from app.core.engine_factory import EngineFactory
 
         logger.info("LOAD: Request for model %s (mode=%s)", model_id, mode)
 

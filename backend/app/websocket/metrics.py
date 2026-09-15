@@ -1,8 +1,8 @@
 """WebSocket Metrics Streaming"""
 import asyncio
 import subprocess
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Set, Dict, Any
+from fastapi import APIRouter, WebSocket
+from typing import Set, Dict
 import psutil
 
 router = APIRouter()
@@ -129,9 +129,7 @@ async def metrics_websocket(websocket: WebSocket):
 
             await websocket.send_json(metrics)
 
-    except WebSocketDisconnect:
-        clients.remove(websocket)
-    except Exception:
+    except Exception:  # includes WebSocketDisconnect
         clients.discard(websocket)
 
 
@@ -142,3 +140,7 @@ async def broadcast_metrics(metrics: dict):
             await client.send_json(metrics)
         except Exception:
             clients.discard(client)
+            try:
+                await client.close()
+            except Exception:
+                pass  # ponytail: socket already dead, nothing to close

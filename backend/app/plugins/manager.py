@@ -3,7 +3,6 @@ import importlib
 import importlib.util
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import asyncio
 
 from app.config import settings
 from app.plugins.interface import PluginInterface

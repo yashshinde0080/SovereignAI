@@ -14,7 +14,6 @@ except ImportError:
     resource = None
 from typing import Any, Dict
 from concurrent.futures import ThreadPoolExecutor
-import threading
 
 from app.plugins.interface import PluginInterface
 

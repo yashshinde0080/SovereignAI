@@ -17,7 +17,9 @@ Audit scope: `backend/` (app, tests, benchmarks). Results from actually running 
 | 9 | Silent `except Exception: pass` | ✅ Partial (kept where probe-and-fallback is correct) |
 | 10 | Doc debt (Docs/, TRD.md) | ⏸ Open (out of backend scope) |
 
-**Verification:** `ruff check app tests benchmarks` → clean · `pytest -m "not slow"` → 139 passed · `pytest -m slow` → 5 passed · compileall clean · signing self-check passes.
+**Verification:** `ruff check app tests benchmarks` → clean · `pytest -m "not slow"` → 144 passed · `pytest -m slow` → 5 passed · compileall clean · signing self-check passes.
+
+**CI:** ✅ `.github/workflows/backend.yml` — ruff + fast pytest on push/PR touching `backend/` (path-filtered). The "CI is the missing half" gap is closed; the vectorstore flake now fails loudly instead of recurring silently.
 
 ---
 

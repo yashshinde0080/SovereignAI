@@ -55,4 +55,13 @@
   (intentionally unrouted, not dead code). Commits 6605264, 8474652, b83eeaf,
   55c4f3d.
 
+## [2026-09-15] refactor+test | Print→logger, ruff lint, USB signing, test fixes, cleanup
+- Backend: replaced `print()` with `logger` across API, engines, providers, core; WS metrics now `discard()` + close dead sockets, bare except fixed in model_manager
+- Backend: added `ruff` config to `backend/pyproject.toml` + `TODO.md` audit summary (WS metrics, bare except, USB signing, print removal, linter)
+- Backend: USB bundle signing implemented via ed25519 (`app/providers/usb_bundle.py`) with verification on parse; added `tests/usb_bundle_signing_check.py` self-check
+- Backend: added `tests/test_app_smoke.py` proving TestClient works without lifespan; fixed `_FakeEmbedder` in `test_vectorstore_sync.py` to use `zlib.crc32` + punctuation stripping for deterministic hashing; updated `test_layerstream_loader.py` assertion
+- Backend: import cleanup + dead-code removal across benchmarks, engines, CLI, vectorstore, plugins; removed `ARCHITECTURE_DEEP_DIVE.md` and `TODOS.md`
+- Config: `.gitignore` updated to ignore `opencode.json`
+- Commits: e5142b0, 594b92c, 03f9bf0, 07d4494, 4e6f3cd, 1cddf17
+
 

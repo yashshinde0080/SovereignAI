@@ -144,4 +144,6 @@ opencode.jsonc
 .agents/
 .vscode/
 
+graphify-out/
+
 opencode.json

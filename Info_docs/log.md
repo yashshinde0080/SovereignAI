@@ -64,4 +64,10 @@
 - Config: `.gitignore` updated to ignore `opencode.json`
 - Commits: e5142b0, 594b92c, 03f9bf0, 07d4494, 4e6f3cd, 1cddf17
 
+## [2026-09-16] test+ci+chore | Fast HTTP chat e2e, GitHub Actions CI, start-script rework
+- Backend: added `tests/test_chat_api_http.py` (156 lines, 5 tests) driving `POST /v1/chat/completions` through the real HTTP stack — routing, SSE framing, error paths — with a fake engine on `app.state` (no model, fast loop); complements the `@slow` real-model e2e
+- CI: added `.github/workflows/backend.yml` — ruff + fast pytest (`-m "not slow"`) on push/PR touching `backend/**`, path-filtered; un-ignored `.github/` in `.gitignore` (previously ignored, so CI never existed); TODO.md fast-suite count 139 → 144
+- Chore: deleted `start-desktop.bat` and `start-web.bat` (absolute-path uvicorn launchers); added new per-app one-click launchers `start_backend.bat`, `start_electron.bat`, `start_web.bat`; `.gitignore` +`graphify-out/`
+- Commits: 1d7e3fd, 1439822, ef2f36f, fa063e3
+
 

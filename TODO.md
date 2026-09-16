@@ -56,7 +56,8 @@ Audit scope: `backend/` (app, tests, benchmarks). Results from actually running 
 
 - Added `backend/tests/test_app_smoke.py` (imports app, serves `/`).
 - **Gotcha:** do NOT use `with TestClient(app)` in tests — the context manager runs the real lifespan which touches `workspace/` DBs and pollutes other tests. Plain `TestClient(app)` = routes without lifespan.
-- Still uncovered: RAG (`vectorstore/` business logic beyond sync tests), `hardware_detector`, `settings/`, `websocket/`, `providers/`. Chat e2e over TestClient is now possible but not written (needs engine fakes wired into app.state).
+- ✅ Chat HTTP e2e added: `backend/tests/test_chat_api_http.py` — fake engine wired into `app.state`, 5 fast tests covering OpenAI response shape, SSE framing/`[DONE]`, system-prompt injection, 400-no-engine, and engine-crash-mid-stream. Complements `test_chat_api_e2e.py` (@slow real model).
+- Still uncovered: RAG (`vectorstore/` business logic beyond sync tests), `hardware_detector`, `settings/`, `websocket/`, `providers/`.
 
 ## 6. ✅ ruff added and enforced
 

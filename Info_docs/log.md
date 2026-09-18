@@ -70,4 +70,9 @@
 - Chore: deleted `start-desktop.bat` and `start-web.bat` (absolute-path uvicorn launchers); added new per-app one-click launchers `start_backend.bat`, `start_electron.bat`, `start_web.bat`; `.gitignore` +`graphify-out/`
 - Commits: 1d7e3fd, 1439822, ef2f36f, fa063e3
 
+## [2026-09-18] patch+doc | RAG prompt fix + line-based architecture in readme
+- Backend RAG: patched prompt in RAG to fix retrieval behavior — updated prompt template for better context injection
+- Docs: updated readme.md with line-based architecture diagram for clearer system overview
+- Commits: a557067, 7eb3844
+
 

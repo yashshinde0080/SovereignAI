@@ -2,9 +2,9 @@
 
 # 🛡️ SovereignAI Edge
 
-**The Ultimate Portable, 100% Offline AI Platform.**
+**The Ultimate Portable AI Platform.**
 
-Run large language models locally on consumer hardware or directly from USB — no cloud, no telemetry, no compromise.
+Run large language models locally on consumer hardware or directly from USB — offline by default, optional cloud mode when you want it.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-yellow.svg)](https://www.python.org/)
@@ -15,7 +15,7 @@ Run large language models locally on consumer hardware or directly from USB — 
 
 ---
 
-**[Quick Start](#-quick-start)** · **[Architecture](#%EF%B8%8F-system-architecture)** · **[Performance](#-performance-the-dual-engine-advantage)** · **[API](#-openai-compatible-api)** · **[Contributing](#-contributing)**
+**[Quick Start](#-quick-start)** · **[Architecture](#%EF%B8%8F-system-architecture)** · **[Performance](#-performance-the-multi-engine-advantage)** · **[API](#-openai-compatible-api)** · **[Contributing](#-contributing)**
 
 ![SovereignAI Edge — Hero](./Info_docs/assets/hero.png)
 
@@ -29,14 +29,14 @@ Run large language models locally on consumer hardware or directly from USB — 
 <tr>
 <td width="50%">
 
-### 🧠 Dual Inference Engines
-**FullRAM** loads entire models for blazing speed. **LayerStream** swaps layers from disk — run 3–8B models on just 8GB RAM.
+### 🧠 Three Inference Engines
+**FullRAM** loads entire models for blazing speed. **LayerStream** swaps layers from disk — run 3–8B models on 8GB RAM. **CloudAPI** proxies to OpenAI/Anthropic/Google/custom endpoints (keys encrypted at rest).
 
 </td>
 <td width="50%">
 
-### 🔒 100% Offline & Private
-Zero data leaves your machine. All prompts, documents, and history stay in local encrypted SQLite. No telemetry.
+### 🔒 Offline & Private by Default
+Offline mode: zero data leaves your machine. Prompts, documents, and history stay in local SQLite. No telemetry. Cloud mode is opt-in per provider.
 
 </td>
 </tr>
@@ -61,48 +61,53 @@ Modern **React Web UI**, **Electron Desktop App**, or powerful **CLI** — pick 
 ## 🏗️ System Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│                 Client Layer                    │
-│  ┌──────────────┐  ┌────────────────────────┐   │
-│  │  React Web   │  │  Electron Desktop App  │   │
-│  │  (Next.js)   │  │  (Chromium wrapper)    │   │
-│  └──────┬───────┘  └──────────┬─────────────┘   │
-│         └──────────┬──────────┘                 │
-│                    │ REST / WebSocket           │
-├────────────────────┼────────────────────────────┤
-│               Backend Core                      │
-│  ┌─────────────────┴──────────────────────┐     │
-│  │         FastAPI Gateway (/v1/*)        │     │
-│  │  Chat · Models · RAG · Benchmark       │     │
-│  └─────────────────┬──────────────────────┘     │
-│                    │                            │
-│  ┌─────────────────┴──────────────────────┐     │
-│  │       Engine Selection (auto mode)     │     │
-│  │   Hardware profile → llmfit scoring    │     │
-│  └──────┬──────────────────────┬──────────┘     │
-│         │                      │                │
-│  ┌──────▼──────┐      ┌────────▼───────┐        │
-│  │  FullRAM    │      │  LayerStream   │        │
-│  │  (PyTorch + │      │  (raw PyTorch  │        │
-│  │transformers)│      │  layer-by-layer│        │
-│  └─────────────┘      └────────────────┘        │
-│                                                 │
-│  ┌──────────────────────────────────────┐       │
-│  │   Storage: workspace/{models,db,...} │       │
-│  └──────────────────────────────────────┘       │
-└─────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                    Client Layer                        │
+│   ┌──────────────┐    ┌────────────────────────┐       │
+│   │  React Web   │    │  Electron Desktop App  │       │
+│   │  (Next.js)   │    │   (Chromium wrapper)   │       │
+│   └──────┬───────┘    └──────────┬─────────────┘       │
+│          └──────────┬────────────┘                     │
+│                     │ REST / WebSocket                 │
+├─────────────────────┼──────────────────────────────────┤
+│                  Backend Core                          │
+│   ┌─────────────────┴──────────────────────┐           │
+│   │        FastAPI Gateway (/v1/*)         │           │
+│   │  Chat · Models · RAG · Cloud · Bench   │           │
+│   └─────────────────┬──────────────────────┘           │
+│                     │                                  │
+│   ┌─────────────────┴──────────────────────┐           │
+│   │      Engine Selection (mode: auto)     │           │
+│   │    Hardware profile → llmfit scoring   │           │
+│   └──────┬─────────────────┬───────────────┘           │
+│          │                 │                           │
+│   ┌──────▼──────┐   ┌──────▼───────┐                   │
+│   │   FullRAM   │   │  LayerStream │                   │
+│   │ (PyTorch +  │   │ (raw PyTorch │                   │
+│   │transformers)│   │ layer-by-    │                   │
+│   └─────────────┘   │ layer, 8GB)  │                   │
+│                     └──────────────┘                   │
+│   ┌────────────────────────────────────────┐           │
+│   │ CloudAPI (OpenAI / Anthropic / Google  │           │
+│   │      / Mistral / custom endpoints)     │           │
+│   └────────────────────────────────────────┘           │
+│                                                        │
+│   ┌────────────────────────────────────────┐           │
+│   │  Storage: workspace/{models,db,...}    │           │
+│   └────────────────────────────────────────┘           │
+└────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
 
 1. **Client** sends chat/message via REST or WebSocket to `127.0.0.1:8000`
 2. **FastAPI Gateway** injects system prompt, optional RAG context, and applies chat template
-3. **Engine** generates or streams tokens (SSE batching at ~96 chars/frame)
+3. **Engine** generates or streams tokens (SSE batching at ~96 chars/frame) — `mode=auto` picks FullRAM/LayerStream via llmfit memory scoring; `mode=cloud` routes to a provider API and skips local memory checks
 4. **Response** returned as OpenAI-compatible JSON or Server-Sent Events
 
 ---
 
-## ⚡ Performance: The Dual-Engine Advantage
+## ⚡ Performance: The Multi-Engine Advantage
 
 ### FullRAM Engine
 Loads the entire model into active memory. Best for systems with high VRAM/RAM (NVIDIA RTX, Apple Silicon). Uses `transformers.AutoModelForCausalLM` with GGUF fallback via `llama-cpp-python`.
@@ -110,7 +115,7 @@ Loads the entire model into active memory. Best for systems with high VRAM/RAM (
 ### LayerStream Engine
 Iteratively loads/unloads individual neural network layers from disk to RAM. Enables models larger than free RAM to still run. Sweet spot: **3–8B Q4 models on 8GB RAM**.
 
-> ⚠️ Large models (70B+) run but slowly. See [reviews/benchmark-2026-08-14.md](reviews/benchmark-2026-08-14.md) for honest numbers.
+> ⚠️ Large models (70B+) run but slowly. See [reviews/benchmark-2026-08-14.md](reviews/benchmark-2026-08-14.md) for honest numbers. Numbers below are local-engine only; cloud latency depends on the provider.
 >
 > **2026-09-11:** fixed the hybrid (Qwen3.5) LayerStream path — the cache used the transformers-4.x protocol and crashed on transformers 5.x, and the CPU device-cache was disabled (75% of decode spent in re-copying weights). Same model now runs at **1.30 tok/s** vs 0.48 before (2.7×), peak RAM 2.9 GB. The pure-PyTorch GatedDeltaNet fallback is the remaining floor: `fla`/`causal-conv1d` are CUDA-only, so 8 GB CPU boxes without them top out near the FullRAM fp32 control of ~2.2 tok/s.
 
@@ -123,6 +128,9 @@ Iteratively loads/unloads individual neural network layers from disk to RAM. Ena
 | Qwen2-0.5B (int4) | FullRAM | 0.85 | Fast path |
 | Qwen2-0.5B (int4) | LayerStream | 8.0 | Post device-cache fix |
 | Qwen3.5-0.8B (int4) | LayerStream | 1.30 | Hybrid; transformers-5.x cache fix + CPU device cache (2026-09-11). Was 0.48. |
+
+### CloudAPI Engine
+No local weights loaded — requests proxy to the configured provider (OpenAI, Anthropic, Google, Mistral, or any OpenAI-compatible endpoint: Together, Groq, vLLM, Ollama). API keys are Fernet-encrypted at rest and masked in all API responses.
 
 ---
 
@@ -187,9 +195,6 @@ $ sovereign chat
 </td>
 </tr>
 </table>
-
-> 📸 **Contributors:** Replace the placeholder images above with actual screenshots.
-> Capture `web-ui-preview.png` and `electron-preview.png` into `Info_docs/assets/`.
 
 ---
 
@@ -268,6 +273,15 @@ curl http://127.0.0.1:8000/v1/chat/completions \
 
 Point any OpenAI SDK at `base_url=http://127.0.0.1:8000` — no API key needed on localhost.
 
+**Cloud mode:** add a provider once, then switch:
+
+```bash
+sovereign cloud add --name "OpenAI" --type openai --key "sk-..."
+curl -X POST "http://127.0.0.1:8000/v1/chat/mode/switch?mode=cloud"
+```
+
+Provider CRUD + connectivity test also via REST under `/v1/cloud/*`.
+
 ---
 
 ## ⚠️ Known Limitations
@@ -302,7 +316,7 @@ cd frontend && node --test lib/maskedLm.test.ts
 
 ![Privacy — Zero data leaves your machine](./Info_docs/assets/privacy.png)
 
-SovereignAI Edge ensures that **zero bytes** leave your local machine. All prompts, documents, and chat histories are stored in your local encrypted SQLite instance.
+In offline mode (the default), **zero bytes** leave your local machine. All prompts, documents, and chat histories are stored in your local SQLite instance. Cloud mode sends requests only to the provider you configure.
 
 ---
 

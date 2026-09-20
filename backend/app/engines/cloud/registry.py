@@ -159,7 +159,13 @@ class CloudProviderRegistry:
             ),
         )
         conn.commit()
-        return self.get_provider(provider_id)
+        # Same masked shape as add_provider()/list_providers() — the HTTP layer
+        # serializes this straight into CloudProviderOut, which requires
+        # api_key_masked and must never see the decrypted key.
+        row = conn.execute(
+            "SELECT * FROM cloud_providers WHERE id = ?", (provider_id,)
+        ).fetchone()
+        return self._row_to_dict(row, with_key=False) if row else None
 
     def delete_provider(self, provider_id: str) -> bool:
         conn = self._get_connection()

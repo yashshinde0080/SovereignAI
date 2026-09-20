@@ -6,6 +6,7 @@ against a fake aiohttp session returning canned provider responses.
 
 import asyncio
 import json
+import sqlite3
 
 import pytest
 from fastapi import HTTPException
@@ -13,9 +14,41 @@ from fastapi import HTTPException
 from app.engines.cloud import providers
 from app.engines.cloud.registry import CloudProviderRegistry
 from app.engines.cloud.engine import CloudAPIEngine
+from app.security.encryption import ModelEncryption
 
 
 # ── registry ──
+
+def test_undecryptable_key_degrades_gracefully(tmp_path):
+    """Regression: a key encrypted under an older/unavailable encryption key
+    used to raise InvalidToken and 500 every /v1/cloud/* endpoint. It must
+    degrade to a masked/empty key instead (user re-saves the key)."""
+    db = tmp_path / "settings.db"
+    reg = CloudProviderRegistry(str(db))
+    p = reg.add_provider(name="Old", provider_type="openai", api_key="sk-old-key-1234567890")
+
+    # Simulate the key becoming undecryptable (machine-key scheme change).
+    conn = sqlite3.connect(str(db))
+    conn.execute("UPDATE cloud_providers SET api_key_encrypted = 'gAAAAABbogusbogusbogus' WHERE id = ?", (p["id"],))
+    conn.commit()
+    conn.close()
+
+    # list_providers: no raise, masked value for the dead key
+    listed = reg.list_providers()
+    assert listed[0]["api_key_masked"] == "****"
+    # server-side paths: no raise, unusable key surfaced as empty
+    assert reg.get_provider(p["id"])["api_key"] == ""
+    assert reg.get_enabled_providers()[0]["api_key"] == ""
+
+
+def test_persisted_key_is_stable_across_instances():
+    """Regression: the old machine key (hostname + MAC) changed whenever the
+    active network adapter changed, orphaning every stored API key. The key
+    now persists in workspace/database/.secret_key, so instances share it."""
+    e1, e2 = ModelEncryption(), ModelEncryption()
+    token = e1.fernet.encrypt(b"sovereign")
+    assert e2.fernet.decrypt(token) == b"sovereign"
+
 
 def test_registry_crud_and_encryption(tmp_path):
     db = tmp_path / "settings.db"

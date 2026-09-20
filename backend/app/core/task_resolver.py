@@ -14,7 +14,7 @@ class TaskResolver:
         except Exception:
             try:
                 config = AutoConfig.from_pretrained(model_path, trust_remote_code=settings.trust_remote_code)
-            except Exception as e:
+            except Exception:
                 # Provide a safe default for raw GGUF / unconfigured models
                 return {
                     "model_path": model_path,

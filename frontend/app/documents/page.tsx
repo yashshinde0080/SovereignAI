@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import type { QueryResult, SearchResult } from '@/types';
 import { Upload, Trash2, Search, FileText, UploadCloud, MessageSquare } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -46,14 +47,22 @@ export default function DocumentsPage() {
   );
 }
 
+interface RagStats {
+  total_vectors: number;
+  total_chunks: number;
+  in_sync: boolean;
+}
+
 function DocumentsContent() {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [ragStats, setRagStats] = useState<RagStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [query, setQuery] = useState('');
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [querying, setQuerying] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const highlightRef = useRef<HTMLTableRowElement | null>(null);
   const { toast } = useToast();
@@ -79,14 +88,18 @@ function DocumentsContent() {
     return () => clearTimeout(timer);
   }, [targetFile, documents]);
 
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
-      const res = await api.listDocuments();
+      const [res, stats] = await Promise.all([
+        api.listDocuments(),
+        api.getRagStats().catch(() => null), // stats are a nicety; don't fail the page
+      ]);
       setDocuments(res.documents || []);
+      setRagStats(stats);
     } catch (error) {
       toast({ title: 'Failed to load documents', description: errMsg(error), variant: 'destructive' });
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     // ponytail: loading only gates the initial mount, refreshes stay silent
@@ -95,7 +108,7 @@ function DocumentsContent() {
       await loadDocuments();
       setLoading(false);
     })();
-  }, []);
+  }, [loadDocuments]);
 
   const dropRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -144,7 +157,7 @@ function DocumentsContent() {
       el.removeEventListener('dragleave', onDragLeave);
       el.removeEventListener('drop', onDrop);
     };
-  }, []);
+  }, [loadDocuments, toast]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -181,6 +194,25 @@ function DocumentsContent() {
     }
   };
 
+  const handleRebuild = async () => {
+    if (rebuilding) return;
+    setRebuilding(true);
+    try {
+      const stats = await api.rebuildRagIndex();
+      setRagStats(stats);
+      await loadDocuments();
+      toast({
+        title: stats.in_sync ? 'Index rebuilt' : 'Rebuild finished — still desynced',
+        description: `${stats.total_vectors} vectors / ${stats.total_chunks} chunks`,
+        variant: stats.in_sync ? 'default' : 'destructive',
+      });
+    } catch (error) {
+      toast({ title: 'Rebuild failed', description: errMsg(error), variant: 'destructive' });
+    } finally {
+      setRebuilding(false);
+    }
+  };
+
   const handleQuery = async () => {
     if (!query.trim()) return;
 
@@ -212,14 +244,31 @@ function DocumentsContent() {
             accept=".txt,.pdf"
             onChange={handleUpload}
           />
-          <label htmlFor="file-upload">
-            <Button asChild disabled={uploading}>
-              <span>
-                <Upload className="h-4 w-4 mr-2" />
-                {uploading ? 'Uploading...' : 'Upload Document'}
-              </span>
-            </Button>
-          </label>
+          <div className="flex items-center gap-3">
+            {ragStats && (
+              <Badge
+                variant={ragStats.in_sync ? 'secondary' : 'destructive'}
+                title={
+                  ragStats.in_sync
+                    ? `FAISS vectors match metadata chunks (${ragStats.total_chunks}).`
+                    : `Index desync: ${ragStats.total_vectors} FAISS vectors vs ${ragStats.total_chunks} metadata chunks — search may return no sources. Click to rebuild.`
+                }
+                {...(!ragStats.in_sync
+                  ? { role: 'button' as const, tabIndex: 0, onClick: handleRebuild, onKeyDown: (e) => e.key === 'Enter' && handleRebuild() }
+                  : {})}
+              >
+                {rebuilding ? 'Rebuilding...' : ragStats.in_sync ? 'Index in sync' : 'Index desync — click to rebuild'}
+              </Badge>
+            )}
+            <label htmlFor="file-upload">
+              <Button asChild disabled={uploading}>
+                <span>
+                  <Upload className="h-4 w-4 mr-2" />
+                  {uploading ? 'Uploading...' : 'Upload Document'}
+                </span>
+              </Button>
+            </label>
+          </div>
         </div>
       </div>
 

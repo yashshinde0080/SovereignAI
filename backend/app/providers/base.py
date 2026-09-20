@@ -6,7 +6,7 @@ Abstract base class defining the interface all model providers must implement.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, AsyncIterator, Callable
+from typing import Optional, List, Dict, Any, Callable
 from pathlib import Path
 from datetime import datetime
 from enum import Enum

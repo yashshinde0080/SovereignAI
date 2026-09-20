@@ -7,7 +7,6 @@ Initialize once. Use everywhere.
 import os
 import logging
 import toml
-from typing import Optional
 
 from .connection import ConnectionPool
 from .migrations import MigrationRunner

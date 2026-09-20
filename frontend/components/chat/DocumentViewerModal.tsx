@@ -22,36 +22,32 @@ interface DocumentViewerModalProps {
 }
 
 export function DocumentViewerModal({ source, open, onOpenChange }: DocumentViewerModalProps) {
-  const [chunks, setChunks] = useState<Chunk[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // One settled-fetch state instead of loading/error/chunks — everything derives from it.
+  const [view, setView] = useState<{ docId: string; chunks: Chunk[]; error: string | null } | null>(null);
+
+  // Legacy sources (pre-document_id) can't be fetched — derived, not stored in state.
+  const legacyNoPreview = open && !!source && !source.document_id;
+  const docId = open && source?.document_id ? source.document_id : null;
+  const settled = docId && view?.docId === docId ? view : null;
+  const loading = !!docId && !settled;
+  const chunks = settled?.chunks ?? [];
+  const error = settled?.error ?? null;
 
   useEffect(() => {
-    if (!open || !source) return;
-    // Legacy sources (pre-document_id) can't be fetched — show a helpful hint.
-    if (!source.document_id) {
-      setChunks([]);
-      setError(`No stored preview for "${source.filename}". Open it in Documents instead.`);
-      return;
-    }
+    if (!docId) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     api
-      .getDocumentChunks(source.document_id)
+      .getDocumentChunks(docId)
       .then((res) => {
-        if (!cancelled) setChunks(res.chunks || []);
+        if (!cancelled) setView({ docId, chunks: res.chunks || [], error: null });
       })
       .catch((e) => {
-        if (!cancelled) setError(errMsg(e));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setView({ docId, chunks: [], error: errMsg(e) });
       });
     return () => {
       cancelled = true;
     };
-  }, [open, source]);
+  }, [docId]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -62,7 +58,9 @@ export function DocumentViewerModal({ source, open, onOpenChange }: DocumentView
             <span className="truncate">{source?.filename ?? 'Document'}</span>
           </DialogTitle>
           <DialogDescription>
-            {loading
+            {legacyNoPreview
+              ? 'Source document'
+              : loading
               ? 'Loading chunks...'
               : chunks.length > 0
                 ? `${chunks.length} chunk${chunks.length !== 1 ? 's' : ''} in the RAG index`
@@ -71,7 +69,11 @@ export function DocumentViewerModal({ source, open, onOpenChange }: DocumentView
         </DialogHeader>
 
         <div className="flex-1 min-h-0">
-          {loading ? (
+          {legacyNoPreview ? (
+            <div className="px-6 py-8 text-sm text-destructive">
+              No stored preview for &quot;{source?.filename}&quot;. Open it in Documents instead.
+            </div>
+          ) : loading ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin mr-2" />
               Loading document chunks...

@@ -8,7 +8,10 @@ prefers safetensors whenever it is present.
 """
 from pathlib import Path
 
+import logging
 import torch
+
+logger = logging.getLogger(__name__)
 
 
 def ensure_safetensors(model_path: str) -> None:
@@ -34,7 +37,7 @@ def ensure_safetensors(model_path: str) -> None:
 
     try:
         from safetensors.torch import save_file
-        print(f"[safetensors] Converting {bin_files[0].name} for torch<2.6 compatibility...")
+        logger.info("[safetensors] Converting %s for torch<2.6 compatibility...", bin_files[0].name)
         state_dict = torch.load(bin_files[0], map_location="cpu", weights_only=True)
         # Clone to break shared-memory aliasing (weight tying, e.g. BERT's
         # cls.predictions.decoder.weight == bert.embeddings.word_embeddings.weight)
@@ -43,8 +46,8 @@ def ensure_safetensors(model_path: str) -> None:
         state_dict = {k: v.clone().contiguous() for k, v in state_dict.items()}
         save_file(state_dict, model_dir / "model.safetensors")
     except Exception as e:
-        print(f"[safetensors] Conversion failed, leaving original weights. "
-              f"Model may not load on torch < 2.6. Error: {e}")
+        logger.warning("[safetensors] Conversion failed, leaving original weights. "
+                       "Model may not load on torch < 2.6. Error: %s", e)
 
 
 if __name__ == "__main__":

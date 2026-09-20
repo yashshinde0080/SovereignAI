@@ -1,21 +1,19 @@
 """Models API Endpoints"""
 import logging
-import time
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request, BackgroundTasks
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 from app.schemas.models import (
     ModelInfo,
-    ModelList,
     PullRequest,
     PullStatus,
     LoadRequest,
     RecommendRequest,
     RecommendResult,
 )
+from app.services.model_manager import ModelManager  # noqa: E402  (annotation type; avoids import cycle at module load)
 
 
 def _to_epoch(created_at) -> int:
@@ -259,6 +257,7 @@ async def get_current_model(request: Request):
         "loaded": True,
         "model": app.state.active_model,
         "mode": app.state.active_mode,
+        "experimental": getattr(engine, "experimental", False),
         "task_type": task_info.get("task_type", "unknown"),
         "input_modality": task_info.get("input_modality", "text"),
         "is_generative": task_info.get("is_generative", False),

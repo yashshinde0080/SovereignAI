@@ -5,7 +5,6 @@ Manages models stored on the local filesystem.
 Used for pre-downloaded models and offline operation.
 """
 
-import os
 import json
 import hashlib
 import aiofiles
@@ -28,7 +27,6 @@ from app.providers.base import (
 from app.providers.exceptions import (
     ModelNotFoundError,
     DownloadError,
-    ValidationError,
     StorageError
 )
 

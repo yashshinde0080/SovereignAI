@@ -8,7 +8,6 @@ Usage:
     catalog.load_directory(Path("workspace/plugins/user/models"))
     catalog.register_with_llmfit()  # makes scores available via llmfit
 """
-import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import json

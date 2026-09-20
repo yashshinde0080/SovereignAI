@@ -16,10 +16,10 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useChat } from '@/hooks/useChat';
-import { Switch } from '@/components/ui/switch';
+import { useStore } from '@/store';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
-import { Download, Trash2, FileText, X, Sparkles, Brain, Square } from 'lucide-react';
+import { Download, Trash2, FileText, X, Sparkles, Square, Cloud } from 'lucide-react';
 import { errMsg } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -37,13 +37,20 @@ interface ChatModuleProps {
   initialAsk?: string;
 }
 
-export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
+export function ChatModule({ model, initialAsk }: ChatModuleProps) {
   const autoAskSent = useRef(false);
+  const { systemStatus } = useStore();
+  // Cloud models are "<provider_id>/<model_id>" — show "Online · model" and
+  // hide the internal provider id from the chat UI.
+  const isCloud = systemStatus?.current_mode === 'cloud';
+  const providerId = model.includes('/') ? model.split('/')[0] : '';
+  const cloudLabel = isCloud
+    ? `Online · ${model.includes('/') ? model.split('/').slice(1).join('/') : model}`
+    : model;
+  const displayModel = cloudLabel;
   const {
     messages,
     isLoading,
-    enableThinking,
-    setEnableThinking,
     sendMessage,
     editAndResend,
     regenerate,
@@ -54,6 +61,18 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [docs, setDocs] = useState<RAGDoc[]>([]);
   const [suggestion, setSuggestion] = useState<string | null>(null);
+  const [prefillText, setPrefillText] = useState<string | undefined>(undefined);
+  const [providerName, setProviderName] = useState<string | null>(null);
+
+  // Listen for send events from empty-state suggestion cards (one-click send)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      if (text) sendMessage(text);
+    };
+    window.addEventListener('chat:send', handler);
+    return () => window.removeEventListener('chat:send', handler);
+  }, [sendMessage]);
 
   // The RAG index is global and chat queries it (use_rag: true), so the chips
   // mirror the full index. Load on mount, silently refresh after uploads.
@@ -107,6 +126,7 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
   };
 
   const handleSend = (text: string) => {
+    setPrefillText(undefined);
     if (editingIndex !== null) {
       editAndResend(editingIndex, text);
       setEditingIndex(null);
@@ -114,6 +134,24 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
       sendMessage(text);
     }
   };
+
+  useEffect(() => {
+    if (!model.includes('/')) return;
+    let cancelled = false;
+    api
+      .listCloudProviders()
+      .then((res) => {
+        if (cancelled) return;
+        const p = (res.providers || []).find((x) => x.id === providerId);
+        if (p) setProviderName(p.name);
+      })
+      .catch(() => {
+        if (!cancelled) setProviderName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [model, providerId]);
 
   const handleClear = () => {
     clearMessages();
@@ -142,7 +180,8 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
     <div className="flex flex-col h-full bg-background rounded-b-2xl">
       {/* Chat action bar */}
       {messages.length > 0 && (
-        <div className="flex items-center gap-1.5 px-4 pt-2.5 justify-end">
+        <div className="flex items-center gap-1 px-4 py-2 border-b border-border/40">
+          <span className="text-[11px] text-muted-foreground mr-auto">{messages.length} message{messages.length !== 1 ? 's' : ''}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -196,32 +235,30 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
           editingIndex={editingIndex}
           onEditMessage={handleEditMessage}
           onRegenerate={handleRegenerate}
+          modelName={displayModel}
         />
       </div>
 
       <div className="p-4 mx-auto w-full max-w-4xl bg-gradient-to-t from-background via-background to-transparent pt-6">
         {/* RAG documents attached to this chat — removable chips */}
         {docs.length > 0 && (
-          <div className="mb-2 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mr-1">
-              In chat
-            </span>
+          <div className="mb-1.5 flex flex-wrap items-center gap-1">
             {docs.map((doc) => (
               <span
                 key={doc.id}
-                className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 pl-2.5 pr-1 py-1 text-xs text-primary hover:bg-primary/15 transition-colors"
+                className="inline-flex items-center gap-1 rounded-full bg-primary/8 border border-primary/15 pl-2 pr-1 py-0.5 text-[11px] text-primary/80 hover:bg-primary/12 transition-colors"
                 title={`${doc.filename} — ${doc.chunks} chunk${doc.chunks !== 1 ? 's' : ''}`}
               >
                 <FileText className="h-3 w-3" />
-                <span className="max-w-[180px] truncate font-medium">{doc.filename}</span>
+                <span className="max-w-[160px] truncate font-medium">{doc.filename}</span>
                 <button
                   onClick={() => handleDeleteDoc(doc.id, doc.filename)}
                   disabled={isLoading}
-                  className="rounded-full p-0.5 text-primary/60 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
+                  className="rounded-full p-0.5 text-primary/50 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
                   title={`Remove ${doc.filename}`}
                   aria-label={`Remove ${doc.filename}`}
                 >
-                  <X className="h-3 w-3" />
+                  <X className="h-2.5 w-2.5" />
                 </button>
               </span>
             ))}
@@ -244,7 +281,7 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
                 title={`Ask the model about '${suggestion}'`}
               >
                 <Sparkles className="h-3 w-3" />
-                <span className="max-w-[220px] truncate font-medium">Ask about '{suggestion}'</span>
+                <span className="max-w-[220px] truncate font-medium">Ask about &apos;{suggestion}&apos;</span>
               </button>
               <button
                 onClick={() => setSuggestion(null)}
@@ -257,47 +294,38 @@ export function ChatModule({ taskType, model, initialAsk }: ChatModuleProps) {
             </motion.div>
           )}
         </AnimatePresence>
-        {/* Thinking toggle — reasoning models (Qwen3.5 etc.) emit a
-            <think> trace when enabled; the backend strips it from content
-            and streams it separately so it renders in a collapsible block. */}
-        <div className="mb-2 flex items-center justify-end gap-2 px-1">
-          <label
-            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
-            title="Let reasoning models think out loud before answering"
-          >
-            <Brain className="h-3.5 w-3.5" />
-            Thinking
-          </label>
-          <Switch
-            checked={enableThinking}
-            onCheckedChange={setEnableThinking}
-            aria-label="Toggle thinking mode"
-          />
+        <div className="flex items-center justify-between gap-2 mb-1.5 px-1">
+          {isLoading && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={stop}
+              className="h-7 px-2.5 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+              title="Stop generating"
+            >
+              <Square className="h-3 w-3 mr-1 fill-current" />
+              Stop
+            </Button>
+          )}
         </div>
-        {isLoading && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={stop}
-            className="w-full mb-2 text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
-            title="Stop generating"
-          >
-            <Square className="h-3.5 w-3.5 mr-1.5 fill-current" />
-            Stop generating
-          </Button>
-        )}
         <PromptInput
           onSend={handleSend}
           disabled={isLoading}
-          externalValue={editingIndex !== null ? messages[editingIndex]?.content : undefined}
+          externalValue={editingIndex !== null ? messages[editingIndex]?.content : prefillText}
           editing={editingIndex !== null}
-          onCancelEdit={() => setEditingIndex(null)}
+          onCancelEdit={() => { setEditingIndex(null); setPrefillText(undefined); }}
           onDocumentAdded={refreshDocs}
           onUploadSuggestion={handleUploadSuggestion}
         />
-        <div className="text-center mt-3 text-xs text-muted-foreground font-medium">
-          Task: {taskType === 'unknown' ? 'Generative Chat' : taskType.replace(/_/g, ' ')} | AI can make mistakes. Verify important information.
-
+        <div className="text-center mt-2 text-[11px] text-muted-foreground/60">
+          {isCloud && providerName ? (
+            <span className="inline-flex items-center gap-1">
+              <Cloud className="h-3 w-3" />
+              Answering via {providerName}
+            </span>
+          ) : (
+            'AI can make mistakes. Verify important information.'
+          )}
         </div>
       </div>
     </div>

@@ -21,7 +21,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_REPO_ROOT / "llama-cpp-tq"))
 
-from turboquant.polar_quant import PolarQuant
 from turboquant.turboquant import TurboQuant, TurboQuantMSE
 
 from app.engines.shared.turboquant import (
@@ -126,7 +125,7 @@ def main():
     vm = ref_polar_nmse(v_np, 3, with_qjl=False, norm_correct=False)
     print(f"{'ref PolarQuant 3-bit (no nc)':<28} {km:>10.5f} {vm:>10.5f}")
 
-    print(f"\nReference (report): affine 4-bit K 0.0050 / V 0.026; affine 3-bit K 0.0228 / V 0.092.")
+    print("\nReference (report): affine 4-bit K 0.0050 / V 0.026; affine 3-bit K 0.0228 / V 0.092.")
 
 
 if __name__ == "__main__":

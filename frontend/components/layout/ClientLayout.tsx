@@ -31,7 +31,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen as boolean} onOpenChange={setSettingsOpen as (open: boolean) => void} />
     </div>
   );
 }

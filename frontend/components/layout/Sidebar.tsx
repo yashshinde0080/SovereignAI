@@ -9,7 +9,6 @@ import {
   Settings,
   Activity,
   FileText,
-  Puzzle,
   Home,
   Gauge,
   Save
@@ -24,7 +23,6 @@ const navItems = [
   { href: '/benchmark', icon: Gauge, label: 'Benchmark' },
   { href: '/system', icon: Activity, label: 'System' },
   { href: '/workspace', icon: Save, label: 'Workspace' },
-  { href: '/plugins', icon: Puzzle, label: 'Plugins' },
 ];
 
 export function Sidebar() {

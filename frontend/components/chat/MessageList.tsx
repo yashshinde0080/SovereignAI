@@ -3,7 +3,7 @@
 import { memo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Message, RagSource } from '@/types';
-import { User, Bot, Copy, Check, Pencil, RefreshCw, FileText, Brain, ChevronDown } from 'lucide-react';
+import { User, Bot, Copy, Check, Pencil, RefreshCw, FileText, Code, Lightbulb, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,6 +15,7 @@ interface MessageListProps {
   onRegenerate?: () => void;
   editingIndex?: number | null;
   isLoading?: boolean;
+  modelName?: string;
 }
 
 const CodeBlock = ({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
@@ -30,19 +31,19 @@ const CodeBlock = ({ inline, className, children }: { inline?: boolean; classNam
 
   if (isBlock) {
     return (
-      <div className="relative group my-4 rounded-lg overflow-hidden border border-border/50 bg-zinc-950">
-        <div className="flex items-center justify-between px-4 py-2 bg-zinc-900 border-b border-white/10">
-          <span className="text-xs font-mono text-zinc-400">{match[1]}</span>
+      <div className="relative group my-3 rounded-lg overflow-hidden border border-border/50 bg-zinc-950">
+        <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900/80 border-b border-white/5">
+          <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">{match[1]}</span>
           <button
             onClick={copyToClipboard}
-            className="text-zinc-400 hover:text-white transition-colors"
+            className="flex items-center gap-1 text-[11px] font-mono text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
             title="Copy code"
           >
-            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+            {copied ? <><Check className="h-3 w-3 text-green-400" /><span className="text-green-400">Copied</span></> : <><Copy className="h-3 w-3" /><span className="opacity-0 group-hover:opacity-100 transition-opacity">Copy</span></>}
           </button>
         </div>
-        <div className="p-4 overflow-x-auto">
-          <code className={cn("text-sm text-zinc-100 font-mono", className)}>
+        <div className="p-3 overflow-x-auto">
+          <code className={cn("text-[13px] text-zinc-200 font-mono leading-relaxed", className)}>
             {children}
           </code>
         </div>
@@ -54,69 +55,6 @@ const CodeBlock = ({ inline, className, children }: { inline?: boolean; classNam
     <code className={cn("bg-muted/50 rounded-md px-1.5 py-0.5 text-sm font-mono text-primary", className)}>
       {children}
     </code>
-  );
-};
-
-// Collapsible reasoning block for assistant messages with a <think> trace.
-// Auto-opens while the reasoning is still streaming (live); collapsed once the
-// answer starts. The user's own toggle wins either way.
-const ThinkingBlock = ({ reasoning, live }: { reasoning: string; live?: boolean }) => {
-  const [open, setOpen] = useState(live);
-  const [copied, setCopied] = useState(false);
-
-  const copyReasoning = () => {
-    navigator.clipboard.writeText(reasoning);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="mb-3 rounded-lg border border-border/50 bg-muted/40 overflow-hidden">
-      <div className="flex items-center gap-1 px-2 py-1.5">
-        <button
-          onClick={() => setOpen(!open)}
-          className="flex flex-1 min-w-0 items-center gap-2 px-1 py-0.5 text-left text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-          title={open ? 'Hide reasoning' : 'Show reasoning'}
-          aria-expanded={open}
-        >
-          <Brain className={cn('h-3.5 w-3.5 shrink-0', live && 'animate-pulse')} />
-          <span className="font-semibold tracking-wide">{live ? 'Thinking…' : 'Thinking'}</span>
-        </button>
-        <button
-          onClick={copyReasoning}
-          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-          title={copied ? 'Copied!' : 'Copy reasoning'}
-          aria-label="Copy reasoning"
-        >
-          {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          onClick={() => setOpen(!open)}
-          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-          title={open ? 'Hide reasoning' : 'Show reasoning'}
-          aria-label={open ? 'Hide reasoning' : 'Show reasoning'}
-        >
-          <ChevronDown
-            className={cn('h-3.5 w-3.5 transition-transform duration-200', open && 'rotate-180')}
-          />
-        </button>
-      </div>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="overflow-hidden"
-          >
-            <pre className="whitespace-pre-wrap px-3 pb-3 text-[12.5px] leading-relaxed font-mono text-muted-foreground/90 border-t border-border/40">
-              {reasoning}
-            </pre>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   );
 };
 
@@ -156,6 +94,7 @@ const MessageItem = memo(function MessageItem({
   isEditing,
   isLast,
   isLoading,
+  modelName,
   onEditMessage,
   onRegenerate,
   onViewSource,
@@ -165,6 +104,7 @@ const MessageItem = memo(function MessageItem({
   isEditing: boolean;
   isLast: boolean;
   isLoading: boolean;
+  modelName?: string;
   onEditMessage?: (index: number) => void;
   onRegenerate?: () => void;
   onViewSource: (source: RagSource) => void;
@@ -175,19 +115,26 @@ const MessageItem = memo(function MessageItem({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
       className={cn(
-        'flex gap-4 w-full',
-        message.role === 'user' ? 'justify-end md:pl-20' : 'justify-start md:pr-20'
+        'flex gap-3 md:gap-4 w-full',
+        message.role === 'user' ? 'justify-end' : 'justify-start'
       )}
     >
       {message.role === 'assistant' && (
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 border border-primary/20 shadow-sm mt-1">
-          <Bot className="h-5 w-5 text-primary" />
+        <div className="flex flex-col items-center gap-1 flex-shrink-0 mt-1">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 shadow-sm">
+            <Bot className="h-5 w-5 text-primary" />
+          </div>
+          {(modelName || message.model) && (
+            <span className="text-[9px] font-medium text-muted-foreground/60 max-w-[52px] truncate text-center leading-tight" title={message.model || modelName}>
+              {message.model || modelName}
+            </span>
+          )}
         </div>
       )}
 
       <div
         className={cn(
-          'rounded-2xl px-5 py-3.5 shadow-sm text-[15px] leading-relaxed relative group transition-shadow duration-300',
+          'rounded-2xl px-4 py-3 shadow-sm text-[15px] leading-relaxed relative group transition-shadow duration-300',
           message.role === 'user'
             ? 'bg-primary text-primary-foreground rounded-tr-sm'
             : 'bg-card border border-border/50 text-foreground rounded-tl-sm w-full prose prose-sm md:prose-base prose-zinc dark:prose-invert max-w-none',
@@ -226,24 +173,10 @@ const MessageItem = memo(function MessageItem({
           <p className="whitespace-pre-wrap">{message.content}</p>
         ) : (
           <>
-          {message.reasoning && (
-            <ThinkingBlock
-              reasoning={message.reasoning}
-              live={isLoading && isLast && !message.content.trim()}
-            />
-          )}
-          {!message.content.trim() && !message.reasoning &&
+          {!message.content.trim() &&
             isLoading && isLast && (
               <p className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse">
-                <Brain className="h-4 w-4" />
                 Thinking…
-              </p>
-            )}
-          {message.reasoning && !message.content.trim() &&
-            !(isLoading && isLast) && (
-              <p className="text-sm text-muted-foreground">
-                The model stopped thinking before producing an answer — try
-                asking again, or turn thinking off for a quicker reply.
               </p>
             )}
           <ReactMarkdown
@@ -273,7 +206,7 @@ const MessageItem = memo(function MessageItem({
               <button
                 key={source.filename}
                 onClick={() => onViewSource(source)}
-                className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 pl-2 pr-2.5 py-0.5 text-xs text-primary hover:bg-primary/20 hover:border-primary/40 transition-colors"
+                className="inline-flex items-center gap-1 rounded-full bg-primary/10 border border-primary/20 pl-2 pr-2.5 py-0.5 text-xs text-primary hover:bg-primary/20 hover:border-primary/40 transition-colors cursor-pointer"
                 title={`View ${source.filename}`}
               >
                 <FileText className="h-3 w-3 shrink-0" />
@@ -289,7 +222,7 @@ const MessageItem = memo(function MessageItem({
           <button
             onClick={onRegenerate}
             disabled={isLoading}
-            className="absolute bottom-2 right-9 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-0 group-hover:opacity-100 focus:opacity-100"
+            className="absolute bottom-2 right-9 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors disabled:opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer"
             title="Regenerate response"
             aria-label="Regenerate response"
           >
@@ -307,43 +240,67 @@ const MessageItem = memo(function MessageItem({
   );
 });
 
-export function MessageList({ messages, onEditMessage, onRegenerate, editingIndex, isLoading }: MessageListProps) {
+export function MessageList({ messages, onEditMessage, onRegenerate, editingIndex, isLoading, modelName }: MessageListProps) {
   const [viewSource, setViewSource] = useState<RagSource | null>(null);
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+      <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground px-4">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="bg-primary/5 p-6 rounded-full mb-6 relative overflow-hidden group"
+          transition={{ duration: 0.4 }}
+          className="bg-primary/5 p-5 rounded-2xl mb-5 border border-primary/10"
         >
-          <div className="absolute inset-0 bg-primary/10 group-hover:bg-primary/20 transition-colors rounded-full animate-pulse" />
-          <Bot className="h-16 w-16 text-primary relative z-10" />
+          <Bot className="h-12 w-12 text-primary" />
         </motion.div>
         <motion.h3
-          initial={{ y: 10, opacity: 0 }}
+          initial={{ y: 8, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2, duration: 0.4 }}
-          className="text-xl font-medium text-foreground mb-2"
+          transition={{ delay: 0.1, duration: 0.3 }}
+          className="text-lg font-semibold text-foreground mb-1"
         >
           How can I help you today?
         </motion.h3>
         <motion.p
-          initial={{ y: 10, opacity: 0 }}
+          initial={{ y: 8, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3, duration: 0.4 }}
-          className="text-sm max-w-sm"
+          transition={{ delay: 0.15, duration: 0.3 }}
+          className="text-sm mb-6"
         >
-          Engage in a conversation with your downloaded AI model.
+          Ask anything — or try a quick start below.
         </motion.p>
+        <motion.div
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.25, duration: 0.35 }}
+          className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 max-w-xl w-full"
+        >
+          {[
+            { icon: Code, label: 'Explain this code', prompt: 'Explain the following code to me in simple terms:\n```\n// paste code here\n```' },
+            { icon: Lightbulb, label: 'Brainstorm ideas', prompt: 'Give me 5 creative ideas for ' },
+            { icon: MessageSquare, label: 'Summarize text', prompt: 'Summarize the following in 3 bullet points:\n' },
+          ].map((s) => (
+            <button
+              key={s.label}
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('chat:send', { detail: s.prompt }));
+              }}
+              className="flex items-start gap-2.5 p-3 rounded-xl border border-border/60 bg-card hover:bg-accent/50 hover:border-primary/30 transition-all text-left group cursor-pointer"
+            >
+              <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/15 transition-colors mt-0.5">
+                <s.icon className="h-4 w-4" />
+              </div>
+              <span className="text-sm font-medium text-foreground">{s.label}</span>
+            </button>
+          ))}
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-2">
+    <div className="space-y-4 pb-2">
       <DocumentViewerModal
         source={viewSource}
         open={viewSource !== null}
@@ -358,6 +315,7 @@ export function MessageList({ messages, onEditMessage, onRegenerate, editingInde
             isEditing={index === editingIndex}
             isLast={index === messages.length - 1}
             isLoading={!!isLoading}
+            modelName={modelName}
             onEditMessage={onEditMessage}
             onRegenerate={onRegenerate}
             onViewSource={setViewSource}

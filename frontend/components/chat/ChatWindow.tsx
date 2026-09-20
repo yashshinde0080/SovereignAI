@@ -13,9 +13,10 @@ interface ChatWindowProps {
   editingIndex?: number | null;
   onEditMessage?: (index: number) => void;
   onRegenerate?: () => void;
+  modelName?: string;
 }
 
-export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, onRegenerate }: ChatWindowProps) {
+export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, onRegenerate, modelName }: ChatWindowProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const lastScrollTop = useRef(0);
@@ -134,7 +135,7 @@ export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, o
       <ScrollArea
         viewportRef={viewportRef}
         type="always"
-        className="h-full w-full px-4 md:px-8 py-4"
+        className="h-full w-full px-4 md:px-6 py-3"
         scrollBarClassName="w-1.5"
         thumbClassName="bg-brand/70 hover:bg-brand active:bg-brand-accent transition-colors"
       >
@@ -145,13 +146,14 @@ export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, o
             onRegenerate={onRegenerate}
             editingIndex={editingIndex}
             isLoading={isLoading}
+            modelName={modelName}
           />
           {isLoading && (
-            <div className="flex items-center gap-3 text-muted-foreground mt-4 mb-8">
-              <div className="flex gap-1.5 px-3 py-2.5 bg-muted/50 rounded-2xl w-fit">
-                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                <span className="w-1.5 h-1.5 bg-primary/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+            <div className="flex items-center gap-3 text-muted-foreground mt-3 mb-6">
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-muted/40 rounded-xl">
+                <span className="w-1.5 h-1.5 bg-foreground/30 rounded-full animate-pulse" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-1.5 h-1.5 bg-foreground/30 rounded-full animate-pulse" style={{ animationDelay: '200ms' }}></span>
+                <span className="w-1.5 h-1.5 bg-foreground/30 rounded-full animate-pulse" style={{ animationDelay: '400ms' }}></span>
               </div>
             </div>
           )}

@@ -6,7 +6,7 @@ Handles batching. Handles memory.
 
 import logging
 import numpy as np
-from typing import List, Optional
+from typing import List
 
 from .config import VectorStoreConfig
 

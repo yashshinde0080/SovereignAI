@@ -2,27 +2,55 @@
 import os
 import platform
 import subprocess
+import json
 from typing import Dict, Any, Optional
 import psutil
 
 
 class HardwareDetector:
     """Detect system hardware capabilities"""
-    
+
+    def __init__(self):
+        self._hw_cache: Optional[Dict[str, Any]] = None
+
     def detect(self) -> Dict[str, Any]:
-        """Detect and return hardware profile"""
-        return {
+        """Detect and return hardware profile (cached after first call)."""
+        if self._hw_cache is not None:
+            return self._hw_cache
+        gpu_name, gpu_vram = self._query_gpu()
+        profile = {
             "cpu_name": self._get_cpu_name(),
             "cpu_cores": psutil.cpu_count(logical=False) or 1,
             "cpu_threads": psutil.cpu_count(logical=True) or 1,
             "has_avx2": self._check_avx2(),
             "has_avx512": self._check_avx512(),
             "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
-            "gpu_name": self._get_gpu_name(),
-            "gpu_vram_gb": self._get_gpu_vram(),
+            "gpu_name": gpu_name,
+            "gpu_vram_gb": gpu_vram,
             "disk_type": self._detect_disk_type(),
-            "disk_speed_mb_s": self._benchmark_disk_speed()
+            "disk_speed_mb_s": self._cached_disk_speed()
         }
+        self._hw_cache = profile
+        return profile
+
+    def _query_gpu(self) -> tuple[Optional[str], Optional[float]]:
+        """Single nvidia-smi call for both name and VRAM."""
+        try:
+            result = subprocess.run(
+                ["nvidia-smi",
+                 "--query-gpu=name,memory.total",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode == 0:
+                parts = result.stdout.strip().split(",")
+                if len(parts) >= 2:
+                    return parts[0].strip(), round(float(parts[1].strip()) / 1024, 2)
+                elif parts:
+                    return parts[0].strip(), None
+        except Exception:
+            pass
+        return None, None
     
     def _get_cpu_name(self) -> str:
         """Get CPU name"""
@@ -69,32 +97,6 @@ class HardwareDetector:
             pass
         return False
     
-    def _get_gpu_name(self) -> Optional[str]:
-        """Get GPU name"""
-        try:
-            result = subprocess.run(
-                ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-        except Exception:
-            pass
-        return None
-    
-    def _get_gpu_vram(self) -> Optional[float]:
-        """Get GPU VRAM in GB"""
-        try:
-            result = subprocess.run(
-                ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                return round(float(result.stdout.strip()) / 1024, 2)
-        except Exception:
-            pass
-        return None
-    
     def _detect_disk_type(self) -> str:
         """Detect disk type (SSD/HDD)"""
         try:
@@ -109,22 +111,50 @@ class HardwareDetector:
             pass
         return "Unknown"
     
+    def _cached_disk_speed(self) -> float:
+        """Disk benchmark, cached to DB after first run."""
+        cache_key = "hardware_disk_speed"
+        cache_file = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "..", "workspace", ".hw_cache.json"
+        )
+        try:
+            if os.path.exists(cache_file):
+                with open(cache_file) as f:
+                    cached = json.load(f)
+                if cache_key in cached:
+                    return cached[cache_key]
+        except Exception:
+            pass
+
+        speed = self._benchmark_disk_speed()
+
+        try:
+            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+            cached = {}
+            if os.path.exists(cache_file):
+                with open(cache_file) as f:
+                    cached = json.load(f)
+            cached[cache_key] = speed
+            with open(cache_file, "w") as f:
+                json.dump(cached, f)
+        except Exception:
+            pass
+        return speed
+
     def _benchmark_disk_speed(self) -> float:
-        """Quick disk speed benchmark"""
+        """Quick disk speed benchmark (10MB write test)."""
         import tempfile
         import time
-        
+
         try:
-            # Write test
             data = b"x" * (10 * 1024 * 1024)  # 10MB
-            
             with tempfile.NamedTemporaryFile(delete=True) as f:
                 start = time.perf_counter()
                 f.write(data)
                 f.flush()
                 os.fsync(f.fileno())
                 elapsed = time.perf_counter() - start
-                
             speed = (10 / elapsed) if elapsed > 0 else 0
             return round(speed, 2)
         except Exception:

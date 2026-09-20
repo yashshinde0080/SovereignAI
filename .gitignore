@@ -132,9 +132,7 @@ Info_docs/.obsidian
 .mcp.json
 crush.json
 .playwright-mcp
-graphify-out
-.github
-.plugins/understand-anything
+graphify-out.plugins/understand-anything
 .plugins/
 .ua
 .gstack
@@ -142,3 +140,10 @@ opencode.jsonc
 .zed/
 .codex
 .omp/
+
+.agents/
+.vscode/
+
+graphify-out/
+
+opencode.json

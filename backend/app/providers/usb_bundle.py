@@ -5,18 +5,16 @@ Handles model bundles from USB drives and portable storage.
 Supports encrypted and signed model packages for secure offline distribution.
 """
 
-import asyncio
 import aiofiles
 import hashlib
 import json
+import logging
 import zipfile
 import tarfile
 import shutil
 import struct
-import tempfile
 from pathlib import Path
-from typing import Optional, List, Dict, Any, BinaryIO, Tuple
-from datetime import datetime
+from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 import os
 
@@ -29,11 +27,13 @@ from app.providers.base import (
     DownloadProgress,
     ProgressCallback
 )
+
+logger = logging.getLogger(__name__)
+
 from app.providers.exceptions import (
     ModelNotFoundError,
     DownloadError,
-    ValidationError,
-    StorageError
+    ValidationError
 )
 
 
@@ -107,6 +107,31 @@ class USBBundleProvider(BaseProvider):
         self._bundles.clear()
         self._initialized = False
     
+    # ── Bundle signing (ed25519, 64-byte sigs match the bundle format) ─────
+    # ponytail: keys derive deterministically from encryption_key/verify_key
+    # (same trust root as bundle encryption). Per-bundle key rotation and a
+    # separate signing key UI can come when enterprise distribution needs it.
+    def _sign_key(self):
+        """ed25519 private key for signing; None when no key configured."""
+        if not self.encryption_key:
+            return None
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        digest = hashlib.sha256(("sovereign-sign:" + self.encryption_key).encode()).digest()
+        return Ed25519PrivateKey.from_private_bytes(digest)
+    
+    def _verify_key(self):
+        """ed25519 public key for verification; None when no key configured."""
+        raw = self.verify_key or self.encryption_key
+        if not raw:
+            return None
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        digest = hashlib.sha256(("sovereign-sign:" + raw).encode()).digest()
+        return Ed25519PrivateKey.from_private_bytes(digest).public_key()
+    
+    def _sign_payload(self, metadata_bytes: bytes, checksum_bytes: bytes) -> bytes:
+        """Signed region: metadata + checksum (checksum binds the model data)."""
+        return metadata_bytes + checksum_bytes
+    
     def add_scan_path(self, path: Path):
         """Add a path to scan for bundles"""
         path = Path(path)
@@ -141,7 +166,7 @@ class USBBundleProvider(BaseProvider):
                             if bundle_info:
                                 self._bundles[bundle_info.model_id] = bundle_info
                         except Exception as e:
-                            print(f"Warning: Failed to parse bundle {bundle_path}: {e}")
+                            logger.warning("Failed to parse bundle %s: %s", bundle_path, e)
             
             # Also scan for unpacked bundle directories
             for subdir in scan_path.iterdir():
@@ -153,7 +178,7 @@ class USBBundleProvider(BaseProvider):
                             if bundle_info:
                                 self._bundles[bundle_info.model_id] = bundle_info
                         except Exception as e:
-                            print(f"Warning: Failed to parse directory bundle {subdir}: {e}")
+                            logger.warning("Failed to parse directory bundle %s: %s", subdir, e)
     
     async def _parse_bundle(self, bundle_path: Path) -> Optional[BundleInfo]:
         """Parse bundle file and extract metadata"""
@@ -169,7 +194,7 @@ class USBBundleProvider(BaseProvider):
             elif suffix_lower == ".bundle":
                 return await self._parse_generic_bundle(bundle_path)
         except Exception as e:
-            print(f"Warning: Failed to parse bundle {bundle_path}: {e}")
+            logger.warning("Failed to parse bundle %s: %s", bundle_path, e)
         
         return None
     
@@ -267,7 +292,7 @@ class USBBundleProvider(BaseProvider):
             
             version = struct.unpack('B', await f.read(1))[0]
             if version > self.SOVEREIGN_VERSION:
-                print(f"Warning: Unsupported sovereign bundle version: {version}")
+                logger.warning("Unsupported sovereign bundle version: %s", version)
                 return None
             
             flags = struct.unpack('B', await f.read(1))[0]
@@ -283,6 +308,16 @@ class USBBundleProvider(BaseProvider):
             signature = None
             if is_signed:
                 signature = await f.read(64)
+                # Verify before the bundle is ever listed — every consumer
+                # (list_bundles, extract) routes through this parse.
+                key = self._verify_key()
+                if key is None:
+                    return None  # signed bundle but no verification key configured
+                from cryptography.exceptions import InvalidSignature
+                try:
+                    key.verify(signature, self._sign_payload(metadata_bytes, bytes.fromhex(checksum)))
+                except InvalidSignature:
+                    return None  # bad signature — refuse the bundle
             
             return BundleInfo(
                 path=bundle_path,
@@ -324,10 +359,15 @@ class USBBundleProvider(BaseProvider):
             async with aiofiles.open(checksum_path, 'r') as f:
                 checksum = (await f.read()).strip().split()[0]
         
-        # Calculate total size
-        total_size = sum(
-            f.stat().st_size for f in dir_path.rglob("*") if f.is_file()
-        )
+        # Calculate total size — os.scandir is faster than rglob
+        total_size = 0
+        for entry in os.scandir(dir_path):
+            if entry.is_file(follow_symlinks=False):
+                total_size += entry.stat().st_size
+            elif entry.is_dir(follow_symlinks=False):
+                for sub in os.scandir(entry):
+                    if sub.is_file(follow_symlinks=False):
+                        total_size += sub.stat().st_size
         
         return BundleInfo(
             path=dir_path,
@@ -959,10 +999,16 @@ class USBBundleProvider(BaseProvider):
             await f.write(metadata_bytes)
             await f.write(checksum_bytes)
             
-            # Signature placeholder (if signing)
+            # Signature (if signing)
             if sign:
-                # TODO: Implement actual signing
-                await f.write(b'\x00' * 64)
+                key = self._sign_key()
+                if key is None:
+                    raise ValidationError(
+                        message="Signing requires encryption_key to be configured",
+                        model_id=metadata.get("id"),
+                        provider=self.provider_id
+                    )
+                await f.write(key.sign(self._sign_payload(metadata_bytes, checksum_bytes)))
             
             # Write model data
             async with aiofiles.open(model_path, 'rb') as model_file:

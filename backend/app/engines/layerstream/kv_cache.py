@@ -3,17 +3,38 @@ from typing import Optional, Tuple, List
 from transformers.cache_utils import DynamicCache
 
 
+class _HybridLinearLayer:
+    """Per-layer state slot for a linear_attention (GatedDeltaNet) layer.
+
+    Mirrors transformers 5.x ``LinearAttentionLayer``: the model reads
+    ``cache.layers[i].conv_states`` / ``.recurrent_states`` directly and
+    checks the ``has_previous_state`` flag before reusing them.
+    """
+
+    __slots__ = ("conv_states", "recurrent_states", "has_previous_state")
+
+    def __init__(self):
+        self.conv_states: Optional[torch.Tensor] = None
+        self.recurrent_states: Optional[torch.Tensor] = None
+        self.has_previous_state = False
+
+
 class StatefulCache:
     """Cache for stateful/hybrid models with both full_attention and linear_attention layers.
 
-    Supports:
-    - Standard K/V cache (full_attention): key_cache/value_cache
-    - Stateful cache (linear_attention/GatedDeltaNet): conv_states/recurrent_states
-    - .update() protocol used by Qwen3_5Attention and similar
-    - Direct list access used by Qwen3_5GatedDeltaNet and similar
+    Implements the transformers 5.x hybrid cache protocol used by Qwen3_5:
 
-    ponytail: cache lives on GPU (where layers run), no CPU offloading.
-    Add device management if GPU memory pressure becomes a problem.
+    - full_attention layers call ``cache.update(k, v, layer_idx)`` (standard
+      DynamicCache-style K/V append)
+    - linear_attention layers call ``cache.has_previous_state(layer_idx)``,
+      read ``cache.layers[layer_idx].conv_states / .recurrent_states``, and
+      write via ``cache.update_conv_state(...)`` / ``cache.update_recurrent_state(...)``
+
+    (transformers 4.x treated ``has_previous_state`` as a property and kept
+    conv/recurrent state in flat lists — both old shapes stay supported.)
+
+    ponytail: cache lives on the compute device (where layers run), no CPU
+    offloading. Add device management if memory pressure becomes a problem.
     """
     def __init__(self, config=None, num_layers: int = 0, layer_types: list = None):
         if layer_types is None and config is not None:
@@ -28,11 +49,17 @@ class StatefulCache:
         self.last_linear_layer = max(linear_indices) if linear_indices else -1
         self.transformer_layers = [i for i, t in enumerate(layer_types) if t == 'full_attention']
 
+        # transformers 5.x: the model indexes state through ``cache.layers[i]``
+        self.layers = [_HybridLinearLayer() for _ in range(self.num_layers)]
+
+        # Flat views kept for the 4.x access pattern and our own bookkeeping
         self.key_cache = [None] * self.num_layers
         self.value_cache = [None] * self.num_layers
         self.conv_states = [None] * self.num_layers
         self.recurrent_states = [None] * self.num_layers
         self._seq_length = 0
+
+    # ── full_attention (standard DynamicCache-style protocol) ──
 
     def update(self, key_states, value_states, layer_idx, cache_kwargs=None):
         if self.key_cache[layer_idx] is None:
@@ -43,11 +70,33 @@ class StatefulCache:
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-    @property
-    def has_previous_state(self):
-        if self.last_linear_layer >= 0:
-            return self.conv_states[self.last_linear_layer] is not None
-        return any(k is not None for k in self.key_cache)
+    # ── linear_attention (transformers 5.x hybrid protocol) ──
+
+    def has_previous_state(self, layer_idx: int = None) -> bool:
+        """Method form (5.x): state of one linear layer; None = last linear layer.
+        Property form (4.x) also resolves correctly against this method."""
+        if layer_idx is None:
+            layer_idx = self.last_linear_layer
+            if layer_idx < 0:
+                return False
+        if self.layers[layer_idx] is not None and self.layers[layer_idx].has_previous_state:
+            return True
+        # 4.x flat-list fallback
+        return self.conv_states[layer_idx] is not None
+
+    def update_conv_state(self, conv_states: torch.Tensor, layer_idx: int, **kwargs) -> torch.Tensor:
+        slot = self.layers[layer_idx]
+        slot.conv_states = conv_states
+        slot.has_previous_state = True
+        self.conv_states[layer_idx] = conv_states
+        return conv_states
+
+    def update_recurrent_state(self, recurrent_states: torch.Tensor, layer_idx: int, **kwargs) -> torch.Tensor:
+        slot = self.layers[layer_idx]
+        slot.recurrent_states = recurrent_states
+        slot.has_previous_state = True
+        self.recurrent_states[layer_idx] = recurrent_states
+        return recurrent_states
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         if self.transformer_layers and layer_idx not in self.transformer_layers:
@@ -59,7 +108,17 @@ class StatefulCache:
                 return k.shape[2]
         return self._seq_length
 
+    def get_mask_sizes(self, query_length: int, layer_idx: int = 0) -> Tuple[int, int]:
+        """(kv_length, kv_max_len) for mask builders — full-attention layers
+        must report real KV sizes so mask construction passes; linear layers
+        are reported as "no cache" so builders skip them entirely."""
+        if layer_idx in self.transformer_layers:
+            kv_len = self.get_seq_length(layer_idx)
+            return kv_len, kv_len + query_length
+        return 0, 0
+
     def clear(self):
+        self.layers = [_HybridLinearLayer() for _ in range(self.num_layers)]
         self.key_cache = [None] * self.num_layers
         self.value_cache = [None] * self.num_layers
         self.conv_states = [None] * self.num_layers

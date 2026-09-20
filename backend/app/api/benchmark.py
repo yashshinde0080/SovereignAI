@@ -1,10 +1,12 @@
 """Benchmark API Endpoints"""
-import asyncio
+import logging
 import time
 from fastapi import APIRouter, HTTPException, Request
 
 from app.schemas.benchmark import BenchmarkRequest, BenchmarkResult
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -29,7 +31,7 @@ async def run_benchmark(request: Request, bench_request: BenchmarkRequest):
     except ImportError:
         pass  # fall through to legacy
     except Exception as e:
-        print(f"llmfit bench failed, falling back: {e}")
+        logger.warning("llmfit bench failed, falling back: %s", e)
 
     # Legacy in-process benchmark
     return await _legacy_benchmark(app, bench_request)
@@ -110,7 +112,7 @@ async def _legacy_benchmark(app, bench_request: BenchmarkRequest) -> BenchmarkRe
 
         start_time = time.perf_counter()
         response = await engine.generate(
-            prompt=prompt,
+            input_data=prompt,
             max_tokens=bench_request.max_tokens,
         )
         elapsed = time.perf_counter() - start_time

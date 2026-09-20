@@ -17,10 +17,6 @@ class ChatRequest(BaseModel):
     top_p: float = Field(default=0.9, ge=0, le=1)
     stream: bool = False
     use_rag: bool = False
-    # enable_thinking: for reasoning models (e.g. Qwen3.5) this is passed to
-    # the chat template — True turns on <think>...</think> reasoning output,
-    # False disables it. None leaves the template default.
-    enable_thinking: Optional[bool] = None
 
 
 class Choice(BaseModel):

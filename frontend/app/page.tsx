@@ -33,7 +33,7 @@ export default function HomePage() {
     };
 
     fetchData();
-  }, []);
+  }, [setHardware, setSystemStatus]);
 
   if (loading) {
     return (

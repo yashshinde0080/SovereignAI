@@ -6,7 +6,6 @@ Every model that enters the system is tracked here.
 import sqlite3
 import logging
 from typing import Optional, List
-from datetime import datetime
 
 from .connection import ConnectionPool
 from app.schemas.db_schemas import ModelRecord, ModelStatus, QuantType

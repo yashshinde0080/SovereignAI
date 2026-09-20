@@ -4,7 +4,6 @@ import time
 import os
 import logging
 from typing import Dict, Any, AsyncGenerator, Optional
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +39,14 @@ class _IkModelWrapper:
 class FullRAMEngine(BaseEngine):
     """Full RAM inference engine - loads entire model into memory dynamically"""
     
-    def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any):
+    def __init__(self, model_path: str, hardware: Dict[str, Any], memory_manager: Any, task_metadata: Optional[Dict[str, Any]] = None):
         super().__init__(model_path, hardware, memory_manager)
         self.mode = "fullram"
+        self.experimental = False
         self.processor = None
         self.tokenizer = None
         self.model = None
-        self.task_metadata = {}
+        self.task_metadata = task_metadata or {}
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
     
     async def load(self):
@@ -54,8 +54,9 @@ class FullRAMEngine(BaseEngine):
         start_time = time.time()
         
         try:
-            # 1. Resolve task
-            self.task_metadata = TaskResolver.resolve(self.model_path)
+            # 1. Resolve task (use pre-resolved metadata from EngineFactory when available)
+            if not self.task_metadata:
+                self.task_metadata = TaskResolver.resolve(self.model_path)
             task_type = self.task_metadata["task_type"]
             input_modality = self.task_metadata["input_modality"]
             is_generative = self.task_metadata["is_generative"]
@@ -76,7 +77,9 @@ class FullRAMEngine(BaseEngine):
                 model_kwargs["dtype"] = torch.float16
             else:
                 model_kwargs["device_map"] = "cpu"
-                model_kwargs["dtype"] = torch.float32
+                # ponytail: float16 on CPU halves load time vs float32.
+                # transformers dequantizes to compute dtype on-the-fly.
+                model_kwargs["dtype"] = torch.float16
                 
             if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
                 model_dir = os.path.dirname(self.model_path)
@@ -123,7 +126,7 @@ class FullRAMEngine(BaseEngine):
                             self.model_path, trust_remote_code=settings.trust_remote_code
                         )
                     except Exception:
-                        raise RuntimeError(f"Missing required processor for vision task")
+                        raise RuntimeError("Missing required processor for vision task")
             
             if input_modality == "audio":
                 try:
@@ -179,15 +182,15 @@ class FullRAMEngine(BaseEngine):
                 # Both backends failed — give a targeted error
                 if is_ik_only:
                     raise RuntimeError(
-                        f"This model uses IQ2_BN quantization which requires ik_llama.cpp (a fork), "
-                        f"not standard llama.cpp or Transformers. Use a standard GGUF quantization "
-                        f"(Q4_K_M, Q5_K_M, Q8_0) or a supported architecture."
+                        "This model uses IQ2_BN quantization which requires ik_llama.cpp (a fork), "
+                        "not standard llama.cpp or Transformers. Use a standard GGUF quantization "
+                        "(Q4_K_M, Q5_K_M, Q8_0) or a supported architecture."
                     )
                 raise RuntimeError(
-                    f"Model architecture not supported by PyTorch/Transformers or llama-cpp-python. "
-                    f"Use a GGUF model quantized from a standard architecture (Llama, Mistral, "
-                    f"Qwen2, Gemma, Phi-3, Falcon, DeepSeek, etc.). Check the error above for "
-                    f"the specific architecture name that failed."
+                    "Model architecture not supported by PyTorch/Transformers or llama-cpp-python. "
+                    "Use a GGUF model quantized from a standard architecture (Llama, Mistral, "
+                    "Qwen2, Gemma, Phi-3, Falcon, DeepSeek, etc.). Check the error above for "
+                    "the specific architecture name that failed."
                 )
             raise RuntimeError(f"Failed to load model dynamically: {e}")
     
@@ -196,18 +199,18 @@ class FullRAMEngine(BaseEngine):
         if self.model:
             del self.model
             self.model = None
-        
+
         if self.tokenizer:
             del self.tokenizer
             self.tokenizer = None
-            
+
         if self.processor:
             del self.processor
             self.processor = None
-            
+
         if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            
+            await asyncio.to_thread(torch.cuda.empty_cache)
+
         self.loaded = False
     
     async def generate(self, input_data: Any, **kwargs) -> Dict[str, Any]:
@@ -383,9 +386,6 @@ class FullRAMEngine(BaseEngine):
         if not self.loaded:
             raise RuntimeError("Model not loaded")
 
-        task_type = self.task_metadata["task_type"]
-        modality = self.task_metadata["input_modality"]
-        
         if getattr(self, "is_llama_cpp", False):
             if isinstance(input_data, list) or (isinstance(input_data, dict) and "messages" in input_data):
                 msgs = input_data if isinstance(input_data, list) else input_data["messages"]

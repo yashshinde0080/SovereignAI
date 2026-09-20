@@ -8,14 +8,19 @@ get_provider() decrypts for server-side use and must never be returned to
 clients.
 """
 
+import logging
 import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from cryptography.fernet import InvalidToken
+
 from app.config import settings
 from app.security.encryption import ModelEncryption
+
+logger = logging.getLogger(__name__)
 
 
 class CloudProviderRegistry:
@@ -61,7 +66,15 @@ class CloudProviderRegistry:
         return self._encryption.fernet.encrypt(api_key.encode()).decode()
 
     def _decrypt(self, encrypted: str) -> str:
-        return self._encryption.fernet.decrypt(encrypted.encode()).decode()
+        try:
+            return self._encryption.fernet.decrypt(encrypted.encode()).decode()
+        except InvalidToken:
+            # Key stored under an older/unavailable encryption key (e.g. the
+            # pre-fix machine-key scheme). One bad row must not 500 every
+            # /v1/cloud/* endpoint — return empty; the caller shows **** and
+            # the user re-saves the key.
+            logger.warning("Stored cloud API key cannot be decrypted (key changed or corrupted). Re-save the API key for this provider.")
+            return ""
 
     @staticmethod
     def _mask(api_key: str) -> str:

@@ -1,6 +1,6 @@
 """Base Engine Interface"""
 from abc import ABC, abstractmethod
-from typing import Dict, Any, AsyncGenerator, Optional
+from typing import Dict, Any, AsyncGenerator
 
 
 class BaseEngine(ABC):

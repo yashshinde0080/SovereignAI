@@ -1,6 +1,6 @@
 """Shared Inference Utilities"""
 import numpy as np
-from typing import Optional, Tuple
+from typing import Optional
 
 
 def softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:

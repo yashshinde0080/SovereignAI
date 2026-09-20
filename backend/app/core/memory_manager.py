@@ -13,6 +13,14 @@ class MemoryManager:
 
     def __init__(self, max_usage_percent: float = 0.75):
         self.max_usage_percent = max_usage_percent
+        self._llmfit_hw = None  # cached hardware probe — hardware doesn't change mid-session
+
+    def _get_llmfit_hw(self):
+        """Lazy-init cached llmfit hardware probe."""
+        if self._llmfit_hw is None:
+            from llmfit.hardware import probe_hardware
+            self._llmfit_hw = probe_hardware()
+        return self._llmfit_hw
 
     def suggest_mode(self, model_size_bytes: int, model_metadata: Optional[Dict[str, Any]] = None) -> str:
         """Suggest execution mode based on memory, VRAM, and optional llmfit score.
@@ -26,14 +34,13 @@ class MemoryManager:
         if model_metadata and (model_metadata.get("name") or model_metadata.get("id")):
             try:
                 from llmfit import score_model_fit
-                from llmfit.hardware import probe_hardware
 
                 model_name = (
                     model_metadata.get("name")
                     or model_metadata.get("id")
                     or ""
                 )
-                hw = probe_hardware()
+                hw = self._get_llmfit_hw()
                 fit = score_model_fit(model_name, hw)
                 if fit.fit_score > 0.85 and fit.ram_required_gb < hw.ram_total_gb * 0.7:
                     return "fullram"
@@ -44,18 +51,38 @@ class MemoryManager:
             except (ImportError, Exception):
                 pass
 
-        # Legacy threshold-based selection
+        # Legacy threshold-based selection.
+        #
+        # FullRAM residency: transformers materializes weights in the compute
+        # dtype (fp32 on CPU, fp16 on CUDA), so RAM usage is a multiple of the
+        # on-disk size. Measured 2026-08-16 (benchmark_fullram.py): a 469 MB
+        # Q4_K_M GGUF -> ~2 GB RSS delta (~4x) on BOTH the cpu and cuda paths
+        # (the GGUF dequant happens on CPU before any device transfer). GGUF is
+        # detected from registry metadata (quant_method == "gguf" / family ==
+        # "gguf"); full fp16/fp32 repos materialize at ~1-2x. The 1.15 headroom
+        # covers tokenizer + runtime overhead. This is what makes "auto" mean
+        # FullRAM for models that actually fit, and LayerStream otherwise.
+        is_gguf = bool(
+            model_metadata
+            and (
+                model_metadata.get("quant_method") == "gguf"
+                or model_metadata.get("family") == "gguf"
+            )
+        )
+        ram_residency = 4.0 if is_gguf else 2.0
+        vram_residency = 2.0 if is_gguf else 1.0  # fp16 storage on device
+
         if torch.cuda.is_available():
             try:
                 free_vram, _ = torch.cuda.mem_get_info()
-                if model_size_bytes * 1.1 < free_vram:
+                if model_size_bytes * vram_residency * 1.15 < free_vram:
                     return "fullram"
             except Exception:
                 pass
 
         available_ram = psutil.virtual_memory().available
 
-        if model_size_bytes * 1.1 < available_ram:
+        if model_size_bytes * ram_residency * 1.15 < available_ram:
             return "fullram"
         elif model_size_bytes * 0.1 < available_ram:
             return "layerstream"

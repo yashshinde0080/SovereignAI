@@ -4,21 +4,19 @@ Single entry point for all vector operations.
 Document ingestion → Chunking → Embedding → Indexing → Search.
 """
 
-import os
-import uuid
 import hashlib
 import logging
 import numpy as np
 from typing import List, Optional
 
-from .config import VectorStoreConfig, load_vector_config
+from .config import load_vector_config
 from .chunker import DocumentChunker
 from .embedding_pipeline import EmbeddingPipeline
 from .index_builder import FAISSIndexBuilder
 from .store import VectorMetadataStore
 from .retriever import Retriever
 from app.schemas.vector_schemas import (
-    TextChunk, EmbeddingRecord, SearchQuery,
+    EmbeddingRecord, SearchQuery,
     SearchResult, RAGContext
 )
 
@@ -78,6 +76,25 @@ class VectorStoreManager:
         if not loaded:
             logger.info("No existing index. Will create on first ingest.")
 
+        # Self-heal FAISS/metadata desync (stale vectors from deletes, or a
+        # crash between metadata write and index save). Metadata is the source
+        # of truth: on mismatch, rebuild the index from it. Left unsynced, the
+        # next ingest reuses already-occupied vector positions and every
+        # search silently returns nothing ("can't access sources").
+        index_vectors = self.index_builder.total_vectors
+        metadata_vectors = self.metadata_store.get_total_embeddings()
+        if index_vectors != metadata_vectors:
+            logger.warning(
+                "FAISS/metadata desync: index has %d vectors, "
+                "metadata has %d embeddings. Rebuilding from metadata.",
+                index_vectors, metadata_vectors,
+            )
+            try:
+                self.rebuild_index()
+            except Exception as e:
+                logger.error("Rebuild failed (%s); resetting index to match metadata.", e)
+                self.index_builder.reset()
+
         self._initialized = True
         logger.info(
             f"Vector store initialized. "
@@ -103,6 +120,16 @@ class VectorStoreManager:
         # Generate document ID
         if document_id is None:
             document_id = self._generate_document_id(text, filename)
+
+        # Deterministic ID + INSERT OR REPLACE means a re-upload of the same
+        # content would keep metadata flat while FAISS appends duplicate
+        # vectors — desync. Skip instead.
+        if self.metadata_store.get_chunks_by_document(document_id):
+            logger.info(
+                f"Document {filename} already indexed (id={document_id}); "
+                f"skipping duplicate ingest."
+            )
+            return document_id
 
         logger.info(
             f"Ingesting document: {filename} (id={document_id})"
@@ -228,13 +255,12 @@ class VectorStoreManager:
     def delete_document(self, document_id: str):
         """
         Delete a document and its vectors.
-        WARNING: Requires index rebuild for consistency.
+        Rebuilds the index so FAISS positions stay in sync with metadata —
+        otherwise stale vectors shift every future lookup off-by-N.
         """
         self.metadata_store.delete_document_data(document_id)
-        logger.warning(
-            f"Document {document_id} deleted from metadata. "
-            f"FAISS index rebuild recommended."
-        )
+        self.rebuild_index()
+        logger.info(f"Document {document_id} deleted, index rebuilt.")
 
     def rebuild_index(self):
         """
@@ -255,13 +281,15 @@ class VectorStoreManager:
         self.index_builder.reset()
         self.index_builder.create_index()
 
-        # Re-embed all chunks
+        # Re-embed all chunks — single batch query instead of N separate queries
         all_embeddings = []
-        all_chunks = []
         new_embedding_records = []
 
+        chunks_by_doc = self.metadata_store.get_chunks_by_documents(doc_ids)
+        vector_offset = 0  # cumulative vector count — NOT len(all_embeddings)
+
         for doc_id in doc_ids:
-            chunks_data = self.metadata_store.get_chunks_by_document(doc_id)
+            chunks_data = chunks_by_doc.get(doc_id, [])
             texts = [c["content"] for c in chunks_data]
 
             if not texts:
@@ -270,7 +298,7 @@ class VectorStoreManager:
             embeddings = self.embedding_pipeline.embed_texts(texts)
 
             for i, chunk_data in enumerate(chunks_data):
-                vector_index = len(all_embeddings) + i
+                vector_index = vector_offset + i
                 norm = float(np.linalg.norm(embeddings[i]))
                 new_embedding_records.append(EmbeddingRecord(
                     embedding_id=f"{chunk_data['chunk_id']}_emb",
@@ -282,6 +310,7 @@ class VectorStoreManager:
                 ))
 
             all_embeddings.append(embeddings)
+            vector_offset += embeddings.shape[0]
 
         if not all_embeddings:
             logger.info("No embeddings to rebuild")
@@ -353,9 +382,14 @@ class VectorStoreManager:
             raise RuntimeError("Vector store not initialized")
             
         doc_ids = self.metadata_store.get_document_ids()
+        if not doc_ids:
+            return []
+
+        # Single batch query instead of N separate get_chunks_by_document calls
+        chunks_by_doc = self.metadata_store.get_chunks_by_documents(doc_ids)
         result = []
         for doc_id in doc_ids:
-            chunks = self.metadata_store.get_chunks_by_document(doc_id)
+            chunks = chunks_by_doc.get(doc_id, [])
             if not chunks:
                 continue
             first_chunk = chunks[0]

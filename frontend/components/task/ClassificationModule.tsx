@@ -10,7 +10,7 @@ import { Loader2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 
-export function ClassificationModule({ taskType }: { taskType: string }) {
+export function ClassificationModule() {
   const [input, setInput] = useState('');
   const [result, setResult] = useState<TaskResult | null>(null);
   const [loading, setLoading] = useState(false);

@@ -10,10 +10,10 @@ export interface RagSource {
 export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
-  /** Model's internal reasoning (e.g. Qwen3.5 <think> blocks), shown in a collapsible block. */
-  reasoning?: string;
   /** RAG sources cited by an assistant reply (from stream rag_metadata). */
   sources?: RagSource[];
+  /** Which model answered this message (from stream model_name delta). */
+  model?: string;
 }
 
 export interface Model {
@@ -27,17 +27,6 @@ export interface Model {
   downloaded: boolean;
   modes_supported: string[];
   created_at?: string;
-}
-
-export interface Plugin {
-  id: string;
-  name: string;
-  version: string;
-  description: string;
-  author: string;
-  enabled: boolean;
-  builtin: boolean;
-  actions: string[];
 }
 
 export interface SystemStatus {
@@ -145,6 +134,8 @@ export interface CurrentModel {
   model: string;
   task_type: string;
   mode: string;
+  /** True when the active engine is experimental (LayerStream). */
+  experimental?: boolean;
   is_generative: boolean;
 }
 
@@ -184,6 +175,29 @@ export interface DownloadStatus {
   downloaded_gb?: number;
   total_gb?: number;
   error?: string;
+}
+
+export type CloudProviderType = "openai" | "anthropic" | "google" | "mistral" | "custom";
+
+export interface CloudProvider {
+  id: string;
+  name: string;
+  provider_type: CloudProviderType;
+  /** Masked key ("sk-…xxxx") — the backend never returns the raw key. */
+  api_key_masked: string;
+  base_url?: string | null;
+  is_enabled: boolean;
+  rate_limit_rpm: number;
+}
+
+export interface CloudModel {
+  /** "<provider_id>/<model_id>" e.g. "prov_abc123/gpt-4o" */
+  id: string;
+  name: string;
+  provider_id: string;
+  provider_type: string;
+  context_window?: number | null;
+  supports_streaming: boolean;
 }
 
 export interface SettingsMap {

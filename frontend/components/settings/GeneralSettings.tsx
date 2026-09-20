@@ -132,7 +132,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
             <SelectContent className="bg-slate-900 border-slate-700">
               <SelectItem value="auto">Auto</SelectItem>
               <SelectItem value="fullram">Full RAM</SelectItem>
-              <SelectItem value="layerstream">Layer Stream</SelectItem>
+              <SelectItem value="layerstream">Layer Stream (Experimental)</SelectItem>
             </SelectContent>
           </Select>
         </div>

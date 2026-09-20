@@ -9,7 +9,6 @@ from .schemas import (
     SecuritySettings,
     ParentalControlsSettings,
     ProjectSettings,
-    FullSettings,
 )
 
 

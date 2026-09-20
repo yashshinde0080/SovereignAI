@@ -7,7 +7,6 @@ No amateur YOLO connections.
 import sqlite3
 import os
 import threading
-from typing import Optional
 
 
 class ConnectionPool:

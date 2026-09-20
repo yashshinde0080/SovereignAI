@@ -22,4 +22,3 @@ Unlike Redux or MobX, Zustand requires no boilerplate, no provider components, a
 ## Related
 - [[React]]
 - [[Technical Architecture]]
-- [[Vite]]

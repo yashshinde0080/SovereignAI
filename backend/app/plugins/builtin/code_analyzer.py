@@ -1,7 +1,6 @@
 """Code Analyzer Plugin"""
 from typing import Dict, Any, List
 import ast
-import re
 
 
 class CodeAnalyzerPlugin:
@@ -76,8 +75,8 @@ class CodeAnalyzerPlugin:
             "classes": classes,
             "imports": imports,
             "total_lines": len(lines),
-            "code_lines": len([l for l in lines if l.strip() and not l.strip().startswith("#")]),
-            "comment_lines": len([l for l in lines if l.strip().startswith("#")])
+            "code_lines": len([ln for ln in lines if ln.strip() and not ln.strip().startswith("#")]),
+            "comment_lines": len([ln for ln in lines if ln.strip().startswith("#")])
         }
     
     async def get_functions(self, code: str) -> List[Dict[str, Any]]:
@@ -95,9 +94,9 @@ class CodeAnalyzerPlugin:
         lines = code.split("\n")
         return {
             "total": len(lines),
-            "code": len([l for l in lines if l.strip() and not l.strip().startswith("#")]),
-            "comments": len([l for l in lines if l.strip().startswith("#")]),
-            "blank": len([l for l in lines if not l.strip()])
+            "code": len([ln for ln in lines if ln.strip() and not ln.strip().startswith("#")]),
+            "comments": len([ln for ln in lines if ln.strip().startswith("#")]),
+            "blank": len([ln for ln in lines if not ln.strip()])
         }
     
     def get_info(self) -> Dict[str, Any]:

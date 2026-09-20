@@ -1,13 +1,14 @@
 # Repository Guidelines
 
-> SovereignAI Edge — portable, 100% offline AI platform running LLMs locally on consumer hardware or USB drives.
+> SovereignAI Edge — portable AI platform running LLMs locally on consumer hardware or USB drives, with optional online mode for cloud APIs.
 
 ## Project Overview
 
-SovereignAI Edge runs large language models fully offline on consumer hardware. Two inference engines back a unified FastAPI gateway:
+SovereignAI Edge runs large language models on consumer hardware. Three inference engines back a unified FastAPI gateway:
 
 - **FullRAM** — fast path, loads the entire model into RAM/VRAM via `transformers.AutoModelForCausalLM`. `llama-cpp-python` / `ik-llama-cpp-python` are fallbacks only, for architectures transformers cannot load (e.g. BitNet IQ2_BN GGUF).
 - **LayerStream** — low-RAM path, swaps layer weights from disk per forward pass via raw PyTorch + safetensors. Enables 3–8B Q4 models on ~8GB RAM (the "70B on 8GB" claim was retracted in `reviews/benchmark-2026-08-14.md`; after the 08-17 device-cache fix: 8.0 tok/s on Qwen2-0.5B int4, 0.48 tok/s on Qwen3.5-0.8B hybrid — the latter still bounded by missing `causal-conv1d` kernels).
+- **CloudAPI** — online mode, proxies requests to external providers (OpenAI, Anthropic, Google, Mistral, custom/self-hosted endpoints). No local model weights loaded. Encrypted API key storage via Fernet. Supports streaming SSE from all provider types.
 
 Three UIs: React Web (Next.js 16 + React 19), Electron 28 desktop wrapper, Python CLI (typer). All paths relative — no absolute paths anywhere, runs from USB.
 
@@ -23,26 +24,27 @@ Client (React / Electron / CLI)
             → EngineFactory.create_engine()
                 → TaskResolver.resolve() (AutoConfig introspection)
                 → MemoryManager.suggest_mode() (llmfit scoring > threshold)
-            → FullRAMEngine or LayerStreamEngine
+            → FullRAMEngine or LayerStreamEngine or CloudAPIEngine
   → PyTorch + transformers (FullRAM)
     / raw PyTorch layer-by-layer (LayerStream)
       llama-cpp-python only as GGUF fallback
+    / provider HTTP API (CloudAPI: OpenAI, Anthropic, Google, custom)
   → File I/O: ./workspace/{models,database,offload_cache,...}
 ```
 
 ### Data flow (chat request)
 
-1. `backend/app/main.py:lifespan()` startup — inits DB, vector store, hardware profile, model manager, settings service, plugin manager; auto-loads `startup_model` from settings DB (`general.startup_model`, `general.default_mode`).
+1. `backend/app/main.py:lifespan()` startup — inits DB, vector store, hardware profile, model manager, settings service, plugin manager, cloud provider registry; auto-loads `startup_model` from settings DB (`general.startup_model`, `general.default_mode`).
 2. `POST /v1/chat/completions` → `app/api/chat.py:chat_completions()` — injects system prompt (`SettingsService.get_system_prompt()`), optional RAG via `vector_store.build_context(top_k=5)`, `apply_chat_template` with `enable_thinking` toggle.
-3. Streaming: `stream_response()` async generator — SSE batching (~96 chars/frame), `_split_think` / `_trim_tag_prefix` for `<think>` reasoning separation, `is_disconnected()` check. Non-streaming: `engine.generate()`.
-4. `POST /v1/chat/execute` delegates task-based input to `engine.generate()`. `POST /v1/chat/mode/switch?mode=` reloads model.
+3. Streaming: `stream_response()` async generator — SSE batching (~96 chars/frame), `_split_think` / `_trim_tag_prefix` for `<think>` reasoning separation, `is_disconnected()` check. Non-streaming: `engine.generate()`. Same path works for all engines — CloudAPIEngine streams SSE from provider APIs.
+4. `POST /v1/chat/execute` delegates task-based input to `engine.generate()`. `POST /v1/chat/mode/switch?mode=cloud` switches to a cloud provider model.
 
 ### Engine selection (in `ModelManager`, not in engines)
 
 `ModelManager._load_model_locked()` → `EngineFactory.create_engine()`:
 1. `TaskResolver.resolve()` — `AutoConfig.from_pretrained` introspection → `is_generative`, `task_type` (causal_lm, seq2seq_lm, masked_lm, classification, vision2seq). GGUF fallback → causal_lm+generative.
-2. Mode resolution — `auto` mode: `MemoryManager.suggest_mode()` via `llmfit.score_model_fit` (fit>0.85 + RAM<70% → fullram; >0.6 → layerstream; else insufficient) with threshold fallback (CUDA VRAM 1.1x → fullram; RAM 1.1x → fullram; 0.1x → layerstream). Non-generative + layerstream-suggested → forced fullram.
-3. `FullRAMEngine` or `LayerStreamEngine` instantiated → `engine.load()` → `app.state.{active_engine, active_model, active_mode}` updated.
+2. Mode resolution — `auto` mode: `MemoryManager.suggest_mode()` via `llmfit.score_model_fit` (fit>0.85 + RAM<70% → fullram; >0.6 → layerstream; else insufficient) with threshold fallback (CUDA VRAM 1.1x → fullram; RAM 1.1x → fullram; 0.1x → layerstream). Non-generative + layerstream-suggested → forced fullram. `mode=cloud` skips local memory checks entirely.
+3. `FullRAMEngine`, `LayerStreamEngine`, or `CloudAPIEngine` instantiated → `engine.load()` → `app.state.{active_engine, active_model, active_mode}` updated.
 
 ### BaseEngine ABC (`backend/app/engines/base.py`)
 
@@ -54,15 +56,16 @@ Client (React / Electron / CLI)
 |---|---|
 | `backend/app/main.py` | FastAPI app + `lifespan()` startup/teardown |
 | `backend/main.py` | Server entry — reads host/port from `sovereign_settings.db` (`security.api_port`, `security.bind_localhost_only`), `uvicorn.run('app.main:app')` |
-| `backend/app/api/` | REST endpoints: `chat.py`, `models.py`, `system.py`, `benchmark.py`, `rag.py`, `plugins.py`, `workspace.py`, `settings.py`; `router.py` mounts all under `/v1/*` |
-| `backend/app/engines/` | `base.py` ABC; `fullram/executor.py`; `layerstream/` (executor, layer_executor, loader, splitter, sampler, kv_cache, introspection, quant_config, benchmark, scheduler, prefetch, memory) |
+| `backend/app/api/` | REST endpoints: `chat.py`, `models.py`, `system.py`, `benchmark.py`, `rag.py`, `plugins.py`, `workspace.py`, `settings.py`, `cloud.py`; `router.py` mounts all under `/v1/*` |
+| `backend/app/engines/` | `base.py` ABC; `fullram/executor.py`; `layerstream/` (executor, layer_executor, loader, splitter, sampler, kv_cache, introspection, quant_config, benchmark, scheduler, prefetch, memory); `cloud/` (engine, registry, providers) |
+| `backend/app/engines/cloud/` | `engine.py` (CloudAPIEngine — BaseEngine impl); `registry.py` (provider CRUD + encrypted key storage); `providers.py` (OpenAI/Anthropic/Google/custom API translation) |
 | `backend/app/engines/shared/` | `safetensors.py` (.bin→.safetensors converter, CVE-2025-32434), `turboquant/` (KV-cache compression, **default OFF**, eval gate fails) |
 | `backend/app/core/` | `engine_factory.py`, `memory_manager.py`, `hardware_detector.py`, `hardware_llmfit.py`, `task_resolver.py`, `task_router.py` |
 | `backend/app/database/` | `manager.py` (DatabaseManager), `connection.py` (ConnectionPool WAL) |
 | `backend/app/vectorstore/` | FAISS RAG: `manager.py`, retriever, embedder, chunker |
 | `backend/app/plugins/` | `interface.py` (PluginInterface ABC), `manager.py` (importlib load), `sandbox.py` (timeout-only) |
 | `backend/app/providers/` | HuggingFace, Local, EnterpriseRepo, USBBundle providers |
-| `backend/app/cli/main.py` | typer CLI — `run`, `chat`, `serve`, `pull`, `import`, `benchmark`, `list`, `system` |
+| `backend/app/cli/main.py` | typer CLI — `run`, `chat`, `serve`, `pull`, `import`, `benchmark`, `list`, `system`, `cloud` |
 | `backend/app/settings/` | `service.py`, `router.py`, `database.py` (SettingsDatabase), `schemas.py`, `defaults.py` |
 | `backend/app/security/` | `middleware.py` (Bearer, opt-in), `encryption.py` (Fernet+PBKDF2HMAC) |
 | `backend/app/websocket/metrics.py` | `/ws/metrics` 1s metrics broadcast |
@@ -88,6 +91,7 @@ Client (React / Electron / CLI)
 | Run only real-engine round-trip | `cd backend && python -m pytest -m slow` |
 | Install deps | `pip install -r backend/requirements.txt` |
 | CLI | `./sovereign` (Unix) / `sovereign.bat` (Win), or `cd backend/app && python -m cli.main` |
+| CLI cloud commands | `sovereign cloud add --name "OpenAI" --type openai --key "sk-..."` / `sovereign cloud list` / `sovereign cloud remove <id>` / `sovereign cloud test <id>` / `sovereign cloud models` |
 | Benchmarks (not pytest) | `cd backend && python -m benchmarks.accuracy_eval --smoke` · `python benchmark_layerstream.py` |
 
 **Package manager:** `uv` canonical for backend (`uv.lock` present). Launch scripts use pip+venv (`.venv`) installing from `requirements.txt` as fallback.
@@ -122,16 +126,18 @@ Separate Next.js 14 app. Same npm scripts as frontend, different `package.json`.
 
 - **Dependency injection:** FastAPI `app.state.*`. `lifespan()` initializes all services and attaches them: `db`, `vector_store`, `hardware_profile`, `model_manager`, `settings_service`, `plugin_manager`, `active_engine`, `active_model`, `active_mode`.
 - **Async patterns:** Coroutines for IO-bound engine methods (`load`, `generate`). Async generators for SSE streaming (`generate_stream`, `stream_response`). `asyncio.to_thread` for blocking PyTorch `model.generate()`. `ThreadPoolExecutor` for disk prefetch in LayerStream loader. `asyncio.Lock` for model load serialization.
-- **Engine interface:** All engines implement `BaseEngine` ABC (5 abstract methods). Never bypass — `ModelManager` routes all load/unload/generate through the active engine reference.
+- **Engine interface:** All engines implement `BaseEngine` ABC (5 abstract methods). Never bypass — `ModelManager` routes all load/unload/generate through the active engine reference. CloudAPIEngine returns zero for `get_memory_usage()` (no local memory used).
+- **Cloud mode:** `mode="cloud"` bypasses `TaskResolver` and `MemoryManager` (no local model to inspect or fit-check). `EngineFactory.create_engine()` receives `{provider_id}/{model_id}` as `model_path` and looks up provider config from `CloudProviderRegistry`. API keys are Fernet-encrypted at rest, never returned in GET responses, never logged.
 - **Model loading:** `ModelManager._load_model_locked()` — `_fuzzy_match_model()` resolves display names to base (not split), `split:` prefix handling, disk-full preflight check, mode mismatch resolution (split+fullram redirects to base path).
 - **Config:** `pydantic-settings` `BaseSettings` (env prefix `SOVEREIGN_`, reads `.env` if present). All paths relative via `Path(__file__).parent...` for USB portability. `HF_HOME` forced to `workspace/hf_cache`.
 - **Database:** Two SQLite DBs (WAL mode, thread-local connections, `synchronous=NORMAL`, `mmap_size=256MB`):
   - `workspace/database/sovereign.db` — models, sessions, documents, hardware_profiles, plugins, benchmark_results, audit_log, schema_version (via `DatabaseManager` + async `ModelRegistry` / aiosqlite).
   - `workspace/database/sovereign_settings.db` — settings (JSON-blob per section), agents, audit_log (via `SettingsDatabase`).
-- **Encryption:** `ModelEncryption` — Fernet + PBKDF2HMAC (480k iters), machine-salt from `platform.node()` + `uuid.getnode()`. Chunked encrypted file format (`SOVEREIGN_ENC_v1` header).
+- **Encryption:** `ModelEncryption` — Fernet + PBKDF2HMAC (480k iters), machine-salt from `platform.node()` + `uuid.getnode()`. Chunked encrypted file format (`SOVEREIGN_ENC_v1` header). API keys for cloud providers use the same Fernet encryption, stored in `cloud_providers` table in `sovereign_settings.db`.
 - **Auth:** `lan_auth_middleware` Bearer token via `secrets.compare_digest`. **Opt-in only** — enforced when `security.bind_localhost_only=false` AND `api_token` configured. Localhost stays auth-free for Electron/CLI loopback.
+- **Cloud providers:** `CloudProviderRegistry` (in `engines/cloud/registry.py`) manages encrypted API keys in `cloud_providers` table. Provider types: `openai`, `anthropic`, `google`, `mistral`, `custom`. OpenAI-compatible providers (Together, Groq, vLLM, Ollama) use `custom` type with a base URL. `CloudAPIEngine` translates between provider-specific API formats and the SovereignAI SSE chunk format. GET endpoints always return masked keys (`****sk-...xxxx`).
 - **Plugins:** `PluginInterface` ABC — `async initialize()`, `async cleanup()`, `get_actions()`, `async execute(action, params)`. Dynamically imported via `importlib.util`. `PluginSandbox` = **timeout-only (30s)** — no FS/network/memory isolation on Windows (documented gap in `test_plugin_sandbox.py` docstring).
-- **LayerStream internals:** `WeightSplitter` splits to `embed/layer_N/norm/lm_head.safetensors` with quant (`none`/`int8`/`int4`). `LayerWeightLoader` = `ThreadPoolExecutor(prefetch_depth=3)` + LRU byte-budget cache (pinned paths exempt: embed/norm/lm_head). `LayerExecutor.execute_forward(prefill/decode)` — layer-by-layer, dequantize int8/int4 on device, cached attention mask, pre-computed RoPE. `Sampler.sample` — non-destructive Top-K + Top-P + multinomial. Hybrid models (Qwen3.5) → `StatefulCache`; standard → `KVCacheManager` + `HFProxyCache`.
+- **LayerStream internals:** `WeightSplitter` splits to `embed/layer_N/norm/lm_head.safetensors` with quant (`none`/`int8`/`int4`). `LayerWeightLoader` = `ThreadPoolExecutor(prefetch_depth=3)` + LRU byte-budget cache (pinned paths exempt: embed/norm/lm_head). `LayerExecutor.execute_forward(prefill/decode)` — layer-by-layer, dequantize int8/int4 on device, cached attention mask, pre-computed RoPE. `Sampler.sample` — non-destructive Top-K + Top-P + multinomial. Hybrid models (Qwen3.5) → `StatefulCache`; standard → `KVCacheManager` + `HFProxyCache`. `StatefulCache` implements the **transformers 5.x hybrid protocol** (`has_previous_state(layer_idx)` method, per-layer `layers[i].conv_states`/`.recurrent_states`, `update_conv_state`/`update_recurrent_state`) — the old 4.x property + flat-list shape crashes with `TypeError: 'bool' object is not callable` (fixed 2026-09-11). LayerStream device-cache budget: CUDA = 50% free VRAM; **CPU = 50% of total RAM (floor 512 MB), and it must cover the full per-token working set** — a partial budget churns (store→evict→re-copy every layer per token) and measured ~2× slower than no cache. With the cache resident, Qwen3.5-0.8B hybrid went 0.48 → 1.30 tok/s on the 8 GB dev box; `fla`/`causal-conv1d` are CUDA-only, so CPU uses the pure-PyTorch GatedDeltaNet fallback (FullRAM fp32 control: ~2.2 tok/s on the same box).
 - **Frontend shadcn:** `components.json` (new-york style, lucide icons, `cssVariables=true`). Components in `components/ui/`, `cn()` from `lib/utils.ts`. Tailwind v4 `@theme inline` CSS-variable pattern in `app/globals.css` (oklch tokens, `--brand #3C3489`, `--brand-accent #1D9E75`).
 - **State:** Zustand v5.
 - **Naming:** Backend `snake_case` modules/classes. Frontend `camelCase` functions, `PascalCase` components. CLI `kebab-case` commands (typer).
@@ -141,13 +147,15 @@ Separate Next.js 14 app. Same npm scripts as frontend, different `package.json`.
 | File | Role |
 |---|---|
 | `backend/main.py` | Server entry — `get_server_config()` reads SQLite settings, `uvicorn.run()` |
-| `backend/app/main.py` | FastAPI app + `lifespan()` — DB, vector store, hardware detect, model manager, settings, plugin init |
+| `backend/app/main.py` | FastAPI app + `lifespan()` — DB, vector store, hardware detect, model manager, settings, plugin init, cloud provider registry init |
 | `backend/app/config.py` | `Settings(BaseSettings)` — env `SOVEREIGN_`, relative paths, `HF_HOME`, `turboquant_enabled=False` |
-| `backend/app/api/router.py` | Mounts 8 subrouters under `/v1` (chat, models, system, benchmark, rag, plugins, workspace, settings) |
-| `backend/app/api/chat.py` | `/v1/chat/completions` (OpenAI-compatible), `/execute`, `/mode/switch` — `stream_response()` SSE, `_split_think` |
+| `backend/app/api/router.py` | Mounts 9 subrouters under `/v1` (chat, models, system, benchmark, rag, plugins, workspace, settings, cloud) |
+| `backend/app/api/chat.py` | `/v1/chat/completions` (OpenAI-compatible), `/execute`, `/mode/switch?mode=cloud` — `stream_response()` SSE, `_split_think`. Works with all engines including CloudAPIEngine. |
+| `backend/app/api/cloud.py` | `/v1/cloud/*` — provider CRUD, model list refresh, connectivity test. Keys encrypted at rest, masked in responses. |
 | `backend/app/engines/base.py` | `BaseEngine` ABC — 5 abstract methods |
 | `backend/app/engines/fullram/executor.py` | `FullRAMEngine` — `AutoModelForCausalLM`, `TextIteratorStreamer` thread, GGUF `gguf_file=` kwarg, `ik_llama_cpp`/`llama_cpp` fallback |
 | `backend/app/engines/layerstream/executor.py` | `LayerStreamEngine` — `_gen_loop` thread, prefill→decode, rolling-window `_stream_delta` |
+| `backend/app/engines/cloud/engine.py` | `CloudAPIEngine` — proxies to provider APIs, OpenAI/Anthropic/Google/custom translation, streaming SSE |
 | `backend/app/engines/layerstream/loader.py` | `LayerWeightLoader` — ThreadPoolExecutor prefetch, LRU budget cache, int8/int4 dequant |
 | `backend/app/engines/layerstream/splitter.py` | `WeightSplitter` — splits model to safetensors + `quant_config.json` |
 | `backend/app/core/engine_factory.py` | `EngineFactory.create_engine()` — size compute, `TaskResolver`, `MemoryManager.suggest_mode()` |
@@ -157,7 +165,8 @@ Separate Next.js 14 app. Same npm scripts as frontend, different `package.json`.
 | `backend/app/services/model_manager.py` | `ModelManager` — `_load_lock`, fuzzy match, split handling, download |
 | `backend/app/settings/service.py` | `SettingsService` — per-section CRUD, bcrypt password, system prompt builder |
 | `backend/app/settings/database.py` | `SettingsDatabase` — `sovereign_settings.db` (settings/agents/audit_log) |
-| `backend/app/cli/main.py` | typer CLI — `chat`, `run`, `serve`, `pull`, `import`, `benchmark` |
+| `backend/app/cli/main.py` | typer CLI — `chat`, `run`, `serve`, `pull`, `import`, `benchmark`, `cloud` |
+| `backend/app/engines/cloud/registry.py` | `CloudProviderRegistry` — encrypted API key storage in `sovereign_settings.db` |
 | `backend/app/security/encryption.py` | `ModelEncryption` — Fernet+PBKDF2HMAC machine-key |
 | `backend/app/security/middleware.py` | `lan_auth_middleware` — opt-in Bearer |
 | `frontend/app/globals.css` | Tailwind v4 `@theme inline` entry — CSS vars, dark mode |
@@ -180,9 +189,9 @@ Separate Next.js 14 app. Same npm scripts as frontend, different `package.json`.
 
 `backend/app/engines/layerstream/` holds one `LayerStreamEngine` (`executor.py`). All legacy duplicates (`eviction.py`, `layer_by_layer_inference.py`, `ManualStreamEngine`) were deleted. The routed engine is `executor.py:LayerStreamEngine`.
 
-### 2. Test suite is real (13 files, ~106+ tests)
+### 2. Test suite is real (17 files, ~134 tests)
 
-`backend/tests/` has 13 files covering CLI, SSE, stream batching, think-strip, fuzzy model match, split-auto mode, layerstream loader, turboquant (~60+ tests), OpenAI compat, plugin sandbox. Fast loop: `python -m pytest -m "not slow"` (~25-50s). The sole `@slow` test (`test_layerstream_roundtrip.py`) runs a real synthesized 2-layer Llama offline. No `conftest.py` anywhere — all fixtures inline per-file.
+`backend/tests/` has 17 files covering CLI, SSE, stream batching, think-strip, fuzzy model match, split-auto mode, layerstream loader, turboquant, OpenAI compat, plugin sandbox, cloud engine (`test_cloud.py` + `mock_cloud_server.py`), FullRAM executor (`test_fullram_executor.py`), and engine-factory/auth (`test_engine_factory_and_auth.py`). Fast loop: `python -m pytest -m "not slow"` (~30-60s). `@slow` tests (`test_layerstream_roundtrip.py`, `test_fullram_executor.py`) run real synthesized models offline. No `conftest.py` anywhere — all fixtures inline per-file.
 
 ### 3. Engine selection is in `ModelManager`, not in engines
 
@@ -195,7 +204,7 @@ No absolute paths. All runtime storage lives inside `./workspace/`:
 - `workspace/database/` — `sovereign.db` (models/sessions/docs) + `sovereign_settings.db` (settings/agents)
 - `workspace/offload_cache/` — LayerStream per-layer `.safetensors` chunks
 - `workspace/sessions/` — chat snapshots
-- `workspace/vectors/` + `workspace/vector_index/` — FAISS index
+- `workspace/data/vector_index/` — FAISS index (`index.faiss`) + `metadata.db` (live store; the old `workspace/vector_index/` was migrated here and deleted 2026-09-14, `workspace/vectors/` is obsolete)
 - `workspace/plugins/` — user Python scripts
 - `workspace/logs/` — `server_cli.log`
 
@@ -225,14 +234,18 @@ The old AGENTS.md claimed `debug_*.py` / `test_*.py` / `verify_*.py` / `reproduc
 
 ### 11. Stale spots in `Info_docs/`
 
-`Info_docs/tech-stack/Vite.md` is stale — the codebase is Next.js 16 (static export), not Vite. The root `readme.md` file-system-layout block lists some root dirs (`models/`, `database/`) that are actually runtime subdirs under `workspace/`.
+**Resolved 2026-09-14:** stale `Info_docs/tech-stack/Vite.md` was deleted (wikilinks in `INDEX.md`, `React.md`, `Tailwind CSS.md`, `Zustand.md`, `Sovereign.canvas` cleaned up); root `readme.md` file-system-layout block updated to `workspace/data/vector_index/` instead of `vectors/`; all paths now reflect current structure. Remaining stale spots: `Docs/` (older duplicate wiki still references Vite) and `Info_docs/project/TRD.md` (still says React 18 + Vite).
+
+### 12. Cloud mode bypasses local model infrastructure
+
+`mode="cloud"` skips `TaskResolver` and `MemoryManager` entirely — there is no local model to introspect or fit-check. `EngineFactory.create_engine()` receives `{provider_id}/{model_id}` as `model_path` and looks up provider config from `CloudProviderRegistry`. Cloud models don't appear in `scan_installed()` (no local files); they come from the `cloud_providers` table in `sovereign_settings.db`. API keys are Fernet-encrypted at rest, never returned in GET responses (masked only), never logged. The `cloud_providers` table lives alongside the existing settings JSON blobs in `sovereign_settings.db`, NOT in `sovereign.db`.
 
 ## Testing & QA
 
 - **Framework:** pytest >=8.0 + pytest-asyncio >=0.23.0 (declared as **runtime** deps, not dev-only). Config in `backend/pyproject.toml`: `asyncio_mode="auto"` (no per-test `@pytest.mark.asyncio` needed), one marker `slow`.
 - **No conftest.py** — all fixtures inline per-file. Each test stubs its own collaborators (`_FakeEngine`, `_FakeFactory`, `_AppState`). To add a test, follow the existing fake-engine pattern.
 - **Default `python -m pytest` runs `@slow`** — no `addopts` deselects slow. Use `-m "not slow"` for the fast loop.
-- **Coverage gaps** (confirmed in `reviews/autoplan-report-2026-08-12.md` and test docstrings): FullRAM engine (zero tests), LayerStream executor (only the single `@slow` synthetic round-trip), plugin sandbox (timeout-only, no FS/network/memory isolation on Windows), RAG (zero), chat e2e (TestClient broken by starlette/httpx incompatibility), `hardware_detector` / `engine_factory` / `settings` / `security` / `websocket` / `providers` untested.
+- **Coverage gaps** (confirmed in `reviews/autoplan-report-2026-08-12.md` and test docstrings): LayerStream executor (only the `@slow` synthetic round-trip + benchmark), plugin sandbox (timeout-only, no FS/network/memory isolation on Windows), RAG (zero), chat e2e (TestClient broken by starlette/httpx incompatibility), `hardware_detector` / `settings` / `websocket` / `providers` untested. (Cloud engine, FullRAM executor, engine-factory mode resolution, and auth middleware now have tests; see `test_cloud.py`, `test_fullram_executor.py`, `test_engine_factory_and_auth.py` before assuming gaps.)
 - **Benchmarks** (not pytest, not collected): `benchmarks/accuracy_eval.py` (eval gate), `benchmark_layerstream.py` (real t/s + peak RAM), `benchmarks/layerstream_phase_a.py` (LRU/prefetch), `benchmarks/qjl_ablation.py`, `benchmarks/kv_structure_probe.py`, `benchmarks/reference_polar_probe.py`.
 
 ## Key Dependencies

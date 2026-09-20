@@ -1,5 +1,4 @@
 """Main FastAPI Application"""
-import asyncio
 import logging
 import os
 import sys
@@ -8,7 +7,6 @@ from enum import IntEnum
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -79,6 +77,10 @@ async def lifespan(app: FastAPI):
     _patch_gguf_quant_types()
     logger.info("Starting %s v%s", settings.app_name, settings.app_version)
 
+    # Seed cpu_percent so non-blocking calls (interval=None) return real values
+    import psutil as _psutil
+    _psutil.cpu_percent(interval=None)
+
     # Initialize database
     from app.database.manager import DatabaseManager
     app.state.db = DatabaseManager()
@@ -100,6 +102,10 @@ async def lifespan(app: FastAPI):
     # Initialize settings service
     from app.settings.service import SettingsService
     app.state.settings_service = SettingsService()
+
+    # Cloud provider registry (sovereign_settings.db, Fernet-encrypted keys)
+    from app.engines.cloud.registry import CloudProviderRegistry
+    app.state.cloud_provider_registry = CloudProviderRegistry()
 
     # Load startup model if configured
     try:
@@ -133,6 +139,8 @@ async def lifespan(app: FastAPI):
         app.state.db.shutdown()
     if hasattr(app.state, 'vector_store'):
         app.state.vector_store.shutdown()
+    if hasattr(app.state, 'cloud_provider_registry'):
+        app.state.cloud_provider_registry.close()
 
 
 app = FastAPI(

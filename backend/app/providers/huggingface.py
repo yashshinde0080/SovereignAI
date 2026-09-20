@@ -577,7 +577,8 @@ class HuggingFaceProvider(BaseProvider):
         ignore_patterns = ["*.msgpack", "*.h5", "*.ot", "*.ckpt", ".git*"]
         total_bytes = 0
         for f in repo_info.siblings:
-            if not f.size: continue
+            if not f.size:
+                continue
             should_ignore = False
             for p in ignore_patterns:
                 if fnmatch.fnmatch(f.rfilename, p):
@@ -624,14 +625,12 @@ class HuggingFaceProvider(BaseProvider):
             
             while not stop_polling:
                 try:
-                    # Calculate finished local files and partially downloaded ones
-                    local_bytes = sum(f.stat().st_size for f in repo_dir.rglob('*') if f.is_file())
-                    
+                    # Use the byte counter from ProgressTracker — avoids rglob
+                    # which re-walks the entire directory tree every tick.
                     with tqdm_lock:
                         active_downloading = global_download_state["bytes"]
                     
-                    calculated_bytes = max(local_bytes, active_downloading)
-                    calculated_bytes = min(total_bytes, calculated_bytes)
+                    calculated_bytes = min(total_bytes, active_downloading)
                     
                     if calculated_bytes > progress.bytes_downloaded:
                         progress.bytes_downloaded = calculated_bytes

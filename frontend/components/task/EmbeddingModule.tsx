@@ -7,7 +7,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
 import type { TaskResult } from '@/types';
 import { Loader2, Fingerprint } from 'lucide-react';
-import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function EmbeddingModule() {
   const [input, setInput] = useState('');

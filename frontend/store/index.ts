@@ -12,13 +12,13 @@ interface Store {
   // New Universal Task State
   currentModel: string;
   taskType: string;
-  executionMode: "fullram" | "layerstream" | "auto";
+  executionMode: "fullram" | "layerstream" | "auto" | "cloud";
   inputSchema: Record<string, unknown>;
   isGenerative: boolean;
 
   setCurrentModel: (model: string) => void;
   setTaskType: (task: string) => void;
-  setExecutionMode: (mode: "fullram" | "layerstream" | "auto") => void;
+  setExecutionMode: (mode: "fullram" | "layerstream" | "auto" | "cloud") => void;
   setIsGenerative: (isGen: boolean) => void;
 
   // Metrics
@@ -32,8 +32,8 @@ interface Store {
   setHistory: (history: HistoryPoint[] | ((prev: HistoryPoint[]) => HistoryPoint[])) => void;
 
   // UI State
-  settingsOpen: boolean;
-  setSettingsOpen: (open: boolean) => void;
+  settingsOpen: boolean | string;
+  setSettingsOpen: (open: boolean | string) => void;
 }
 
 
@@ -67,5 +67,5 @@ export const useStore = create<Store>((set) => ({
   })),
 
   settingsOpen: false,
-  setSettingsOpen: (open) => set({ settingsOpen: open }),
+  setSettingsOpen: (open: boolean | string) => set({ settingsOpen: open }),
 }));

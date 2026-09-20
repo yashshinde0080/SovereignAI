@@ -49,34 +49,40 @@ if not exist "%VENV_DIR%\.installed" (
 
 echo [OK] Dependencies installed
 
+:: Resolve host:port from the settings DB (security.api_port / bind_localhost_only)
+set "API_ADDR=127.0.0.1:8000"
+for /f "usebackq tokens=*" %%i in (`python -c "import sys; sys.path.insert(0, 'backend'); from main import get_server_config; h, p = get_server_config(); h = '127.0.0.1' if h == '0.0.0.0' else h; print(f'{h}:{p}')" 2^>nul`) do set "API_ADDR=%%i"
+for /f "tokens=2 delims=:" %%p in ("!API_ADDR!") do set "API_PORT=%%p"
+echo [OK] API will listen on !API_ADDR!
+
 :: Create necessary directories (all runtime storage lives in workspace/)
 if not exist "%SCRIPT_DIR%workspace\sessions" mkdir "%SCRIPT_DIR%workspace\sessions"
 if not exist "%SCRIPT_DIR%workspace\documents" mkdir "%SCRIPT_DIR%workspace\documents"
 if not exist "%SCRIPT_DIR%workspace\logs" mkdir "%SCRIPT_DIR%workspace\logs"
 if not exist "%SCRIPT_DIR%workspace\plugins" mkdir "%SCRIPT_DIR%workspace\plugins"
 
-:: Check if port 8000 is in use
-netstat -ano | findstr :8000 >nul 2>&1
+:: Check if the configured port is already in use
+netstat -ano | findstr :%API_PORT% >nul 2>&1
 if %errorlevel% equ 0 (
-    echo [WARN] Port 8000 is already in use
-    for /f "tokens=5" %%a in ('netstat -ano ^| findstr :8000 ^| findstr LISTENING') do (
+    echo [WARN] Port %API_PORT% is already in use
+    for /f "tokens=5" %%a in ('netstat -ano ^| findstr :%API_PORT% ^| findstr LISTENING') do (
         echo [INFO] Stopping existing process %%a...
         taskkill /F /PID %%a >nul 2>&1
     )
     timeout /t 2 >nul
 )
 
-:: Start backend
+:: Start backend (honors settings DB: security.api_port, security.bind_localhost_only)
 echo [INFO] Starting backend server...
 cd /d "%SCRIPT_DIR%backend"
 
-start /b python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+start /b python main.py
 
 :: Wait for backend
 echo [INFO] Waiting for backend...
 :wait_loop
 timeout /t 1 >nul
-curl -s http://127.0.0.1:8000/health >nul 2>&1
+curl -s http://!API_ADDR!/health >nul 2>&1
 if %errorlevel% neq 0 goto wait_loop
 
 echo [OK] Backend is ready
@@ -85,8 +91,8 @@ echo.
 echo ═══════════════════════════════════════
 echo SovereignAI Edge is running!
 echo.
-echo   API:  http://127.0.0.1:8000
-echo   Docs: http://127.0.0.1:8000/docs
+echo   API:  http://!API_ADDR!
+echo   Docs: http://!API_ADDR!/docs
 echo.
 echo   CLI:  sovereign --help   (or: cd backend\app ^&^& python -m cli.main --help)
 echo.

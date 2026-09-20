@@ -153,7 +153,8 @@ export default function BenchmarkPage() {
         </CardContent>
       </Card>
 
-      {/* Mode Comparison */}
+      {/* Mode Comparison — only applies to local engines, not online/cloud models */}
+      {systemStatus.current_mode !== 'cloud' && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -203,6 +204,7 @@ export default function BenchmarkPage() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {error && (
         <Alert variant="destructive">

@@ -51,6 +51,39 @@ class _FakeEngine:
         return {"ram_used_gb": 1.0}
 
 
+class _RecordingEngine(_FakeEngine):
+    """Records input_data so tests can inspect the rendered prompt."""
+
+    def __init__(self):
+        self.last_input = None
+
+    async def generate(self, input_data=None, **kwargs):
+        self.last_input = input_data
+        return await super().generate(input_data=input_data, **kwargs)
+
+
+class _FakeVectorStore:
+    """Returns one canned search hit for every build_context call."""
+
+    def build_context(self, query_text, top_k=5, max_tokens=2048, score_threshold=0.0):
+        from app.schemas.vector_schemas import RAGContext, SearchResult
+
+        hit = SearchResult(
+            chunk_id="doc_abc_chunk_000000",
+            document_id="doc_abc",
+            content="The launch code is HORSE BATTERY.",
+            score=0.9,
+            chunk_index=0,
+            metadata={"filename": "secrets.pdf"},
+        )
+        return RAGContext(
+            query=query_text,
+            results=[hit],
+            total_tokens=10,
+            context_text="[Source: secrets.pdf]\nThe launch code is HORSE BATTERY.",
+        )
+
+
 class _AppState:
     """Fake app.state: only the fields chat_completions touches."""
 
@@ -189,3 +222,31 @@ def test_no_model_loaded_is_400():
     assert "error" in detail
     assert "message" in detail["error"]
     assert "type" in detail["error"]
+
+
+def test_rag_context_is_injected_with_usage_instruction():
+    """use_rag=true must put retrieved chunks INTO the prompt with an explicit
+    'use this' instruction — context alone (or a distrust-only header) makes
+    small models answer "I cannot see or access the file" (regression fixed
+    2026-09-18)."""
+    app_state = _AppState()
+    engine = _RecordingEngine()
+    app_state.active_engine = engine
+    app_state.vector_store = _FakeVectorStore()
+
+    _run(chat_completions(_make_request(app_state), ChatRequest(
+        messages=[{"role": "user", "content": "what is the launch code?"}],
+        stream=False,
+        use_rag=True,
+    )))
+
+    prompt = engine.last_input
+    # Retrieved chunk content actually reached the model
+    assert "[Source: secrets.pdf]" in prompt
+    assert "HORSE BATTERY" in prompt
+    # Prompt instructs the model to use it (the actual bug fix)
+    assert "Use these excerpts" in prompt
+    # User's question rides along with the context
+    assert "User question: what is the launch code?" in prompt
+    # Anti-denial instruction present (tells the model the excerpts ARE the docs)
+    assert "Never say you cannot access" in prompt

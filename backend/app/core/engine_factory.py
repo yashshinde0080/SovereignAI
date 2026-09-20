@@ -12,10 +12,15 @@ from app.engines.layerstream.executor import LayerStreamEngine
 
 class EngineFactory:
     """Factory for creating inference engines"""
-    
+
+    # ponytail: single MemoryManager per session — hardware doesn't change
+    _shared_memory_manager: Optional[MemoryManager] = None
+
     def __init__(self, hardware_profile: Dict[str, Any]):
         self.hardware = hardware_profile
-        self.memory_manager = MemoryManager()
+        if EngineFactory._shared_memory_manager is None:
+            EngineFactory._shared_memory_manager = MemoryManager()
+        self.memory_manager = EngineFactory._shared_memory_manager
     
     async def create_engine(
         self,
@@ -24,42 +29,82 @@ class EngineFactory:
         model_metadata: Optional[Dict[str, Any]] = None,
     ) -> BaseEngine:
         """Create appropriate engine"""
-        
+
+        # Cloud mode has no local files — model_path is "{provider_id}/{model_id}".
+        # Resolve the provider from the registry and return early (before any
+        # filesystem path handling mangles the provider/model id).
+        if mode == "cloud":
+            parts = str(model_path).split("/", 1)
+            if len(parts) != 2 or not parts[0] or not parts[1]:
+                raise ValueError(
+                    f"Cloud model must be '<provider_id>/<model_id>', got: {model_path}"
+                )
+            provider_id, model_id = parts
+            from app.engines.cloud import registry as cloud_registry
+            # ponytail: fresh registry per load — one sqlite conn, GC'd after.
+            provider = cloud_registry.CloudProviderRegistry().get_provider(provider_id)
+            if provider is None:
+                raise ValueError(f"Provider '{provider_id}' not found")
+            from app.engines.cloud.engine import CloudAPIEngine
+            return CloudAPIEngine(
+                model_path=str(model_path),
+                hardware=self.hardware,
+                memory_manager=self.memory_manager,
+                provider=provider,
+                model_id=model_id,
+            )
+
         model_path = Path(model_path)
         engine_model_path_str = str(model_path)
+
+        # Use size_gb from registry metadata when available — avoids an O(n)
+        # rglob scan across the entire model directory.
         model_size = 0
-        
+        if model_metadata and model_metadata.get("size_gb"):
+            try:
+                model_size = int(float(model_metadata["size_gb"]) * (1024**3))
+            except (TypeError, ValueError):
+                pass
+
         # If directory, determine model size correctly and ensure we pass the correct directory
         if model_path.is_dir():
              # If config.json exists, this is a standard HuggingFace repo
              if (model_path / "config.json").exists():
                  engine_model_path_str = str(model_path)
-                 model_size = sum(f.stat().st_size for f in model_path.rglob("*") if f.is_file())
+                 if not model_size:
+                     # ponytail: os.scandir 2-level is faster than rglob for shallow HF repos
+                     for entry in os.scandir(model_path):
+                         if entry.is_file(follow_symlinks=False):
+                             model_size += entry.stat().st_size
+                         elif entry.is_dir(follow_symlinks=False):
+                             for sub in os.scandir(entry):
+                                 if sub.is_file(follow_symlinks=False):
+                                     model_size += sub.stat().st_size
              else:
                  # Try to find GGUF or SafeTensors as fallback for size calculations
                  gguf_files = list(model_path.glob("*.gguf")) + list(model_path.glob("*.gguf.enc"))
                  if gguf_files:
-                     # Currently FullRAMEngine uses AutoModelForCausalLM which prefers directories
-                     # Depending on the engine, GGUF might require a specific loader
-                     # But for HF transformers, passing the directory is usually better if possible
                      engine_model_path_str = str(gguf_files[0])
-                     model_size = gguf_files[0].stat().st_size
+                     if not model_size:
+                         model_size = gguf_files[0].stat().st_size
                  else:
                      st_files = list(model_path.glob("*.safetensors")) + list(model_path.glob("*.safetensors.enc"))
                      if st_files:
-                         # Even if safetensors exist without config.json, passing directory is safer for HF
                          engine_model_path_str = str(model_path)
-                         model_size = sum(f.stat().st_size for f in st_files)
-                     else:
-                         # No recognized models found
-                         pass
+                         if not model_size:
+                             model_size = sum(f.stat().st_size for f in st_files)
         else:
-            model_size = model_path.stat().st_size if model_path.exists() and model_path.is_file() else 0
+            if not model_size:
+                model_size = model_path.stat().st_size if model_path.exists() and model_path.is_file() else 0
             engine_model_path_str = str(model_path)
             
         # 1. Resolve task to determine if streaming is possible
+        # For GGUF files, resolve from the parent dir (config.json lives there)
         from app.core.task_resolver import TaskResolver
-        task_metadata = TaskResolver.resolve(engine_model_path_str)
+        resolve_path = engine_model_path_str
+        if engine_model_path_str.endswith(('.gguf', '.gguf.enc')):
+            resolve_path = str(model_path.parent)
+        task_metadata = TaskResolver.resolve(resolve_path)
         is_generative = task_metadata.get("is_generative", False)
 
         # Determine mode
@@ -97,7 +142,8 @@ class EngineFactory:
             engine = FullRAMEngine(
                 model_path=engine_model_path_str,
                 hardware=self.hardware,
-                memory_manager=self.memory_manager
+                memory_manager=self.memory_manager,
+                task_metadata=task_metadata,
             )
         elif mode == "layerstream":
             engine = LayerStreamEngine(

@@ -6,9 +6,12 @@ the same Dict[str, Any] format as HardwareDetector.detect().
 llmfit detects RAM, CPU (AVX2/AVX-512/NEON), GPU VRAM (NVIDIA/AMD/Apple),
 disk speed, and available backends -- all in a single call.
 """
+import logging
 import platform
 from typing import Dict, Any
 import psutil
+
+logger = logging.getLogger(__name__)
 
 
 def detect_via_llmfit() -> Dict[str, Any]:
@@ -39,7 +42,7 @@ def detect_via_llmfit() -> Dict[str, Any]:
         # llmfit not installed -- return empty shell; caller can fall back
         return {"_source": "unavailable"}
     except Exception as exc:
-        print(f"llmfit probe failed: {exc}")
+        logger.warning("llmfit probe failed: %s", exc)
         return {"_source": "error", "_error": str(exc)}
 
 

@@ -17,12 +17,11 @@ The frontend communicates with the backend via Axios for REST calls (model listi
 - Runs inside Electron shell or standalone browser
 - Zustand for lightweight global state management (chat state, UI state, model selection)
 - Tailwind CSS + shadcn/ui for the component library
-- Vite for development server and production bundling
+- Next.js 16 (App Router) for the dev server and static-export production builds
 - Real-time token rendering via WebSocket stream
 
 ## Related
 - [[Zustand]]
 - [[Tailwind CSS]]
-- [[Vite]]
 - [[Technical Architecture]]
 - [[Electron]]

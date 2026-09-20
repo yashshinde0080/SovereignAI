@@ -28,7 +28,7 @@ faiss-cpu>=1.7.4
 sentence-transformers>=2.2.0
 toml>=0.10.2
 gguf>=0.10.0
-httpx>=0.27.0
+httpx>=0.27.0,<0.28  # 0.28 removed the `app` kwarg starlette TestClient uses
 pytest>=8.0
 pytest-asyncio>=0.23.0
 # For GGUF models with unsupported architectures (bitnet, IQ2_BN, etc.)

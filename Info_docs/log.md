@@ -75,4 +75,17 @@
 - Docs: updated readme.md with line-based architecture diagram for clearer system overview
 - Commits: a557067, 7eb3844
 
+## [2026-09-19] feat+chore | README refresh + UI preview assets
+- Docs: readme.md updated (+58/-44) — refreshed project overview and layout
+- Assets: added electron-preview.png (51 KB) and web-ui-preview.png (293 KB) to Info_docs/assets/ for landing/docs
+- Commits: 2b87848, 5792033
+
+## [2026-09-20] fix+test | Cloud API key stability + graceful decryption + test regressions
+- Cloud encryption: replaced machine-derived key (hostname + MAC) with persisted random key in workspace/database/.secret_key — prevents InvalidToken 500 storm when active NIC changes; key now travels with USB workspace
+- Registry: _decrypt() catches InvalidToken, logs warning, returns empty string (caller masks as ****) — no 500 on /v1/cloud/* endpoints; user re-saves key to fix
+- Registry: update_provider() now returns masked shape (api_key_masked) matching CloudProviderOut serialization — avoids "Field required" 500 on provider edit
+- Requirements: pinned httpx<0.28 (0.28 removed `app` kwarg used by starlette TestClient)
+- Tests: added test_undecryptable_key_degrades_gracefully (regression for old key orphaning); test_persisted_key_is_stable_across_instances (verifies shared secret); test for masked return shape on update_provider
+- Commits: 077eb5e, 8317124, 7935a99, b494b21, 3fd4446
+
 

@@ -74,6 +74,12 @@ def test_registry_crud_and_encryption(tmp_path):
     assert upd["is_enabled"] is False
     assert reg.get_provider(p["id"])["api_key"] == "sk-new-key-9876543210"
 
+    # update returns the same masked shape as add/list — this is what
+    # CloudProviderOut (PUT /v1/cloud/providers/{id}) serializes. A with_key
+    # shape here 500s every provider edit with "api_key_masked: Field required".
+    assert "api_key_masked" in upd
+    assert "api_key" not in upd
+
     # enabled-only view respects the flag
     assert reg.get_enabled_providers() == []
     reg.update_provider(p["id"], {"is_enabled": True})

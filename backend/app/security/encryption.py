@@ -9,6 +9,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import base64
 
+from app.config import settings
+
 
 class ModelEncryption:
     """Encrypt and decrypt model files"""
@@ -43,15 +45,24 @@ class ModelEncryption:
         return hashlib.sha256(machine_id.encode()).digest()
 
     def _generate_machine_key(self) -> bytes:
-        """Generate key from machine identifiers."""
-        salt = self._machine_salt()
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=self.ITERATIONS,
-        )
-        return base64.urlsafe_b64encode(kdf.derive(b"sovereign_ai_machine_key"))
+        """Generate the at-rest encryption key.
+
+        ponytail: persisted random key in workspace/database/.secret_key.
+        The old scheme derived the key from hostname + uuid.getnode() (active
+        NIC's MAC), so the key silently changed when the adapter changed and
+        every stored cloud API key became undecryptable (InvalidToken 500
+        storm on /v1/cloud/*). A random persisted key is stable, and travels
+        with the USB workspace — which is the portability goal anyway.
+        """
+        key_path = settings.workspace_dir / "database" / ".secret_key"
+        key_path.parent.mkdir(parents=True, exist_ok=True)
+        if key_path.exists():
+            key = key_path.read_bytes().strip()
+            if key:
+                return key
+        key = Fernet.generate_key()
+        key_path.write_bytes(key)
+        return key
 
     def _key_from_password(self, password: str, salt: bytes) -> bytes:
         """Derive Fernet key from a user password + salt read from file header."""

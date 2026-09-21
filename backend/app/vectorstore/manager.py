@@ -9,7 +9,7 @@ import logging
 import numpy as np
 from typing import List, Optional
 
-from .config import load_vector_config
+from .config import VectorStoreConfig
 from .chunker import DocumentChunker
 from .embedding_pipeline import EmbeddingPipeline
 from .index_builder import FAISSIndexBuilder
@@ -43,8 +43,8 @@ class VectorStoreManager:
         vs.shutdown()
     """
 
-    def __init__(self, config_path: str = "config/storage.toml"):
-        self.config = load_vector_config(config_path)
+    def __init__(self):
+        self.config = VectorStoreConfig()
         self.chunker = DocumentChunker(
             chunk_size=self.config.chunk_size,
             chunk_overlap=self.config.chunk_overlap,

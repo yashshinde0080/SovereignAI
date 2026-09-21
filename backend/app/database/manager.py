@@ -6,7 +6,6 @@ Initialize once. Use everywhere.
 
 import os
 import logging
-import toml
 
 from .connection import ConnectionPool
 from .migrations import MigrationRunner
@@ -35,20 +34,14 @@ class DatabaseManager:
         db.shutdown()
     """
 
-    def __init__(self, config_path: str = "config/storage.toml"):
-        # Load config
-        if os.path.exists(config_path):
-            config = toml.load(config_path)
-            db_config = config.get("database", {})
-        else:
-            db_config = {}
-
-        from app.config import settings
+    def __init__(self):
         # One DB file for the whole app: <project>/workspace/database/sovereign.db
-        self.db_path = str(db_config.get("path", settings.database_path))
-        journal_mode = db_config.get("journal_mode", "WAL")
-        busy_timeout = db_config.get("busy_timeout", 5000)
-        cache_size = db_config.get("cache_size", -64000)
+        # (config/storage.toml was optional and never shipped; Settings defaults are authoritative)
+        from app.config import settings
+        self.db_path = str(settings.database_path)
+        journal_mode = "WAL"
+        busy_timeout = 5000
+        cache_size = -64000
 
         # Create connection pool
         self._pool = ConnectionPool(

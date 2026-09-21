@@ -88,4 +88,10 @@
 - Tests: added test_undecryptable_key_degrades_gracefully (regression for old key orphaning); test_persisted_key_is_stable_across_instances (verifies shared secret); test for masked return shape on update_provider
 - Commits: 077eb5e, 8317124, 7935a99, b494b21, 3fd4446
 
+## [2026-09-21] refactor+chore | Code cleanup + dependency stabilization
+- Backend database: simplified `DatabaseManager` connection handling in `manager.py` (removed redundant logic, -35 net lines)
+- VectorStore: removed unused config surface in `vectorstore/config.py` (-29 lines); tightened `manager.py` import chain
+- Dependencies: pinned stable releases in `uv.lock` + `requirements.txt` — transformers 4.45.2 (from 5.3.0.dev0), tokenizers 0.20.3 (from 0.22.2), typer 0.9.0 (from 0.24.1); removed `shellingham`, `typing-inspection`, `toml` transient deps; `pyproject.toml` synced
+- Commits: 727bc80, 5bcc2b6
+
 

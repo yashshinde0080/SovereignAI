@@ -89,9 +89,16 @@
 - Commits: 077eb5e, 8317124, 7935a99, b494b21, 3fd4446
 
 ## [2026-09-21] refactor+chore | Code cleanup + dependency stabilization
-- Backend database: simplified `DatabaseManager` connection handling in `manager.py` (removed redundant logic, -35 net lines)
-- VectorStore: removed unused config surface in `vectorstore/config.py` (-29 lines); tightened `manager.py` import chain
+- Backend database: simplified `DatabaseManager` connection handling in `manager.py` (removed redundant logic, -35 net lines); removed `toml` dependency and optional `config/storage.toml` coupling
+- VectorStore: removed unused config surface in `vectorstore/config.py` (-29 lines, deleted `load_vector_config`); tightened `manager.py` import chain to use defaults from Settings
 - Dependencies: pinned stable releases in `uv.lock` + `requirements.txt` — transformers 4.45.2 (from 5.3.0.dev0), tokenizers 0.20.3 (from 0.22.2), typer 0.9.0 (from 0.24.1); removed `shellingham`, `typing-inspection`, `toml` transient deps; `pyproject.toml` synced
 - Commits: 727bc80, 5bcc2b6
+
+## [2026-09-22] refactor+chore | Code cleanup + dependency pruning
+- Cloud engine: fixed doc references `TODOS.md` → `TODO.md` in `engine.py` and `providers.py`
+- Plugin sandbox: simplified to timeout-only execution — removed `max_memory_mb` knob (unenforceable on Windows), `ThreadPoolExecutor`, `resource` import; `PluginSandbox` now only enforces `asyncio.wait_for` timeout (docstring updated)
+- Backend deps: removed `tensorflow`, `torchaudio`, `torchvision` from `pyproject.toml` (unused, pulled by old transformers dev build)
+- Frontend: added `@plugin "@tailwindcss/typography"` to `globals.css` for prose classes used by `MessageList.tsx`; migrated slider from `@radix-ui/react-slider` to `radix-ui` (single package), removed `@radix-ui/react-slider` from `package.json`/`package-lock.json`
+- Commits: 67fbf6a, 7cda500, 09767eb, bc843e0
 
 

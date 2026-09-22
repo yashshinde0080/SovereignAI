@@ -10,7 +10,6 @@
     "test": "node --test lib/maskedLm.test.ts"
   },
   "dependencies": {
-    "@radix-ui/react-slider": "^1.3.6",
     "@tailwindcss/typography": "^0.5.19",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

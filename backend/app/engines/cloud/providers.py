@@ -10,7 +10,7 @@ anthropic and google have their own shapes. Everything stays in plain
 dicts — wire format lives here, pydantic schemas in app/schemas/cloud.py.
 
 Errors are raised as fastapi.HTTPException with the status codes mapped in
-TODOS.md §10 so callers (chat.py, api/cloud.py) need no provider-specific
+TODO.md §10 so callers (chat.py, api/cloud.py) need no provider-specific
 handling.
 """
 
@@ -215,7 +215,7 @@ def parse_stream_event(provider_type: str, data: dict) -> Tuple[str, Optional[st
 
 
 def raise_for_status(provider_name: str, status: int, body: str) -> None:
-    """Map a provider HTTP error to the status codes in TODOS.md §10."""
+    """Map a provider HTTP error to the status codes in TODO.md §10."""
     msg = _extract_error_message(body)
     if status in (401, 403):
         raise HTTPException(401, f"API key rejected by {provider_name}. Check your key.")

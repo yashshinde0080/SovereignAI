@@ -13,7 +13,6 @@ cryptography==41.0.7
 python-multipart==0.0.6
 bcrypt==4.2.0
 slowapi==0.1.9
-websockets==12.0
 pypdf==3.17.4
 rich==13.7.0
 typer==0.9.0
@@ -26,7 +25,6 @@ accelerate==0.34.1
 safetensors>=0.4.0
 faiss-cpu>=1.7.4
 sentence-transformers>=2.2.0
-toml>=0.10.2
 gguf>=0.10.0
 httpx>=0.27.0,<0.28  # 0.28 removed the `app` kwarg starlette TestClient uses
 pytest>=8.0

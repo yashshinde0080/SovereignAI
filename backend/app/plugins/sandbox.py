@@ -8,55 +8,32 @@ requires subprocess-based sandboxing (tracked in reviews/issues-21-8-2026.md
 ISSUE-24).
 """
 import asyncio
-try:
-    import resource
-except ImportError:
-    resource = None
 from typing import Any, Dict
-from concurrent.futures import ThreadPoolExecutor
 
 from app.plugins.interface import PluginInterface
 
 
 class PluginSandbox:
-    """Sandbox for plugin execution"""
-    
-    def __init__(
-        self,
-        max_memory_mb: int = 512,
-        max_time_seconds: int = 30
-    ):
-        self.max_memory_mb = max_memory_mb
+    """Sandbox for plugin execution — timeout only, see module docstring.
+
+    Deliberately has no memory knob: nothing here can enforce one, and a
+    ``max_memory_mb`` argument that silently does nothing is worse than none.
+    """
+
+    def __init__(self, max_time_seconds: int = 30):
         self.max_time_seconds = max_time_seconds
-        self.executor = ThreadPoolExecutor(max_workers=4)
-    
+
     async def execute(
         self,
         plugin: PluginInterface,
         action: str,
         params: Dict[str, Any]
     ) -> Any:
-        """Execute plugin action in sandbox"""
-        
-        # Create timeout wrapper
+        """Execute plugin action, cancelling it if it exceeds the timeout."""
         try:
-            result = await asyncio.wait_for(
+            return await asyncio.wait_for(
                 plugin.execute(action, params),
                 timeout=self.max_time_seconds
             )
-            return result
         except asyncio.TimeoutError:
             raise TimeoutError(f"Plugin execution timed out after {self.max_time_seconds}s")
-    
-    def _set_limits(self):
-        """Set resource limits for plugin execution (Unix only)"""
-        if resource is None:
-            return  # Windows: no resource limits available
-        try:
-            soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-            resource.setrlimit(
-                resource.RLIMIT_AS,
-                (self.max_memory_mb * 1024 * 1024, hard)
-            )
-        except Exception:
-            pass

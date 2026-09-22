@@ -76,7 +76,7 @@
 - Commits: a557067, 7eb3844
 
 ## [2026-09-19] feat+chore | README refresh + UI preview assets
-- Docs: readme.md updated (+58/-44) — refreshed project overview and layout
+-Docs: readme.md updated (+58/-44) — refreshed project overview and layout
 - Assets: added electron-preview.png (51 KB) and web-ui-preview.png (293 KB) to Info_docs/assets/ for landing/docs
 - Commits: 2b87848, 5792033
 

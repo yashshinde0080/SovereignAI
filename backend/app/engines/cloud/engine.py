@@ -6,7 +6,7 @@ re-emits the reply in the SovereignAI chunk format. get_memory_usage() is
 all zeros — nothing lives locally.
 
 Provider failures are raised as fastapi.HTTPException with the status codes
-mapped in TODOS.md §10, so chat.py needs no provider-specific handling.
+mapped in TODO.md §10, so chat.py needs no provider-specific handling.
 """
 
 import asyncio

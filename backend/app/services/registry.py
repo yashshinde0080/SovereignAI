@@ -29,15 +29,18 @@ class ModelRegistry:
     async def initialize(self):
         """Initialize database"""
         db = await self._conn()
-        # Drop corrupted models table if created by manager.py schemas
+        # The `models` table is shared with database/migrations.py (via
+        # ModelsTable). If it exists in the migration schema (has size_label),
+        # migrate it in place instead of dropping it — the old DROP destroyed
+        # registered model rows and broke ModelsTable queries.
         try:
             cursor = await db.execute("PRAGMA table_info(models)")
             cols = [row[1] for row in await cursor.fetchall()]
-            if 'size_label' in cols:
-                await db.execute("DROP TABLE models")
+            if 'size_label' in cols and 'checksum' not in cols:
+                await db.execute("ALTER TABLE models RENAME TO models_legacy_v0")
         except Exception:
             pass
-            
+
         await db.execute("""
             CREATE TABLE IF NOT EXISTS models (
                 id TEXT PRIMARY KEY,
@@ -65,6 +68,27 @@ class ModelRegistry:
                 FOREIGN KEY (model_id) REFERENCES models(id)
             )
         """)
+        # Migrate any legacy-schema rows into the registry schema. Runs only
+        # while models_legacy_v0 exists, so it's idempotent and crash-safe:
+        # a failed run just retries the copy on next startup.
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='models_legacy_v0'"
+        )
+        if await cursor.fetchone():
+            await db.execute("""
+                INSERT OR REPLACE INTO models
+                    (id, name, family, quant, size_gb, path, checksum,
+                     downloaded, modes_supported, created_at)
+                SELECT name, name, family, quant,
+                       file_size_bytes / 1073741824.0,
+                       file_path, checksum_sha256,
+                       CASE WHEN status = 'ready' THEN 1 ELSE 0 END,
+                       engines_supported, created_at
+                FROM models_legacy_v0
+            """)
+            # Rows are safely copied; retire the legacy copy so the migration
+            # doesn't re-run (and re-overwrite newer rows) every startup.
+            await db.execute("DROP TABLE models_legacy_v0")
         
         # Migrate older schema versions
         columns = [

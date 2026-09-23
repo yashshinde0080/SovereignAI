@@ -202,16 +202,21 @@ class ModelsTable:
         return [self._row_to_record(row) for row in cursor.fetchall()]
 
     def get_total_storage_bytes(self) -> int:
-        """Total storage used by all ready models."""
-        cursor = self.pool.execute(
-            """
-            SELECT COALESCE(SUM(file_size_bytes), 0) as total
-            FROM models
-            WHERE status = 'ready'
-            """
-        )
-        row = cursor.fetchone()
-        return row["total"]
+        """Total storage used by all ready models (0 if registry schema)."""
+        try:
+            cursor = self.pool.execute(
+                """
+                SELECT COALESCE(SUM(file_size_bytes), 0) as total
+                FROM models
+                WHERE status = 'ready'
+                """
+            )
+            row = cursor.fetchone()
+            return row["total"]
+        except sqlite3.OperationalError:
+            # The `models` table may carry the app/services/registry.py schema
+            # (no file_size_bytes column); degrade to 0 rather than crash stats.
+            return 0
 
     def get_least_recently_used(self, limit: int = 5) -> List[ModelRecord]:
         """Get LRU models for potential cleanup."""
@@ -227,11 +232,14 @@ class ModelsTable:
         return [self._row_to_record(row) for row in cursor.fetchall()]
 
     def count(self) -> int:
-        """Count of active models."""
-        cursor = self.pool.execute(
-            "SELECT COUNT(*) as c FROM models WHERE status != 'removed'"
-        )
-        return cursor.fetchone()["c"]
+        """Count of active models (0 if registry schema lacks `status`)."""
+        try:
+            cursor = self.pool.execute(
+                "SELECT COUNT(*) as c FROM models WHERE status != 'removed'"
+            )
+            return cursor.fetchone()["c"]
+        except sqlite3.OperationalError:
+            return 0
 
     def _row_to_record(self, row: sqlite3.Row) -> ModelRecord:
         """Convert database row to Pydantic model."""

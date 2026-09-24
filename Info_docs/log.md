@@ -101,4 +101,15 @@
 - Frontend: added `@plugin "@tailwindcss/typography"` to `globals.css` for prose classes used by `MessageList.tsx`; migrated slider from `@radix-ui/react-slider` to `radix-ui` (single package), removed `@radix-ui/react-slider` from `package.json`/`package-lock.json`
 - Commits: 67fbf6a, 7cda500, 09767eb, bc843e0
 
+## [2026-09-23] refactor+fix | Model registry migration conflict resolution
+- Root cause: `ModelRegistry.initialize()` DROPped the shared `models` table when it detected the migration schema (size_label column), destroying registered model rows and breaking `ModelsTable` stats queries
+- Fix: migrate in place instead of dropping — rename legacy table to `models_legacy_v0`, copy rows into registry schema, then retire legacy table (idempotent, crash-safe; retries on next startup if interrupted)
+- `ModelsTable.count()` and `get_total_storage_bytes()` now degrade to 0 (catch `sqlite3.OperationalError`) instead of crashing when the registry schema owns the table
+- Commits: 0116114
+
+## [2026-09-24] test+fix | Regression test for model registry migration + cleanup
+- Added `backend/tests/test_model_registry_migration.py` (136 lines) covering: legacy rows preserved through migration, idempotent re-initialization, legacy table retired, `ModelsTable` stats degrade gracefully on registry schema
+- Cleaned up duplicate migration logic in `registry.py` (4b41f64 consolidates 0116114)
+- Commits: 9f4d699, 4b41f64
+
 

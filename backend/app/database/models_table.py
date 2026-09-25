@@ -201,9 +201,24 @@ class ModelsTable:
         )
         return [self._row_to_record(row) for row in cursor.fetchall()]
 
+    def _schema(self) -> set:
+        """Column names present on the live `models` table.
+
+        Two schemas exist in this repo for historical reasons: the migration
+        schema this class was written against (``size_label``/``file_size_bytes``)
+        and the registry schema ``app.services.registry`` installs
+        (``size_gb``/``path``/``downloaded``). `ModelRegistry.initialize()` runs
+        at startup and renames the migration schema away, so the registry schema
+        is the one that actually exists at runtime. Reading both keeps the two
+        stats below correct instead of permanently reporting zero.
+        """
+        cursor = self.pool.execute("PRAGMA table_info(models)")
+        return {row[1] for row in cursor.fetchall()}
+
     def get_total_storage_bytes(self) -> int:
-        """Total storage used by all ready models (0 if registry schema)."""
-        try:
+        """Total storage used by all ready models, in bytes."""
+        cols = self._schema()
+        if "file_size_bytes" in cols:
             cursor = self.pool.execute(
                 """
                 SELECT COALESCE(SUM(file_size_bytes), 0) as total
@@ -211,12 +226,18 @@ class ModelsTable:
                 WHERE status = 'ready'
                 """
             )
-            row = cursor.fetchone()
-            return row["total"]
-        except sqlite3.OperationalError:
-            # The `models` table may carry the app/services/registry.py schema
-            # (no file_size_bytes column); degrade to 0 rather than crash stats.
-            return 0
+            return cursor.fetchone()["total"]
+        if "size_gb" in cols:
+            # Registry schema stores GB; only fully-downloaded rows count.
+            cursor = self.pool.execute(
+                """
+                SELECT COALESCE(SUM(size_gb), 0) as total
+                FROM models
+                WHERE COALESCE(downloaded, 1) = 1
+                """
+            )
+            return int((cursor.fetchone()["total"] or 0) * 1024 ** 3)
+        return 0
 
     def get_least_recently_used(self, limit: int = 5) -> List[ModelRecord]:
         """Get LRU models for potential cleanup."""
@@ -232,14 +253,15 @@ class ModelsTable:
         return [self._row_to_record(row) for row in cursor.fetchall()]
 
     def count(self) -> int:
-        """Count of active models (0 if registry schema lacks `status`)."""
-        try:
+        """Count of registered models."""
+        cols = self._schema()
+        if "status" in cols:
             cursor = self.pool.execute(
                 "SELECT COUNT(*) as c FROM models WHERE status != 'removed'"
             )
-            return cursor.fetchone()["c"]
-        except sqlite3.OperationalError:
-            return 0
+        else:
+            cursor = self.pool.execute("SELECT COUNT(*) as c FROM models")
+        return cursor.fetchone()["c"]
 
     def _row_to_record(self, row: sqlite3.Row) -> ModelRecord:
         """Convert database row to Pydantic model."""

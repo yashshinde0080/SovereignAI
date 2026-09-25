@@ -1,92 +1,73 @@
-"""Inference Scheduler"""
+"""Inference gate.
+
+SovereignAI runs exactly one loaded model per process, backed by one engine.
+``active_engine`` is a single object and its weights, KV cache and sampler state
+are all mutable — so two overlapping ``generate()`` / ``generate_stream()``
+calls interleave on shared state. This gate admits one inference at a time and
+keeps a queue count for observability.
+
+Usage:
+    async with app.state.inference_scheduler.slot():
+        ...await engine.generate(...)
+
+Both the streaming and non-streaming chat paths use it. For streaming the slot
+is held for the lifetime of the async generator, so a slow stream still blocks
+the next request — which is the point: the alternative is two streams sharing
+one KV cache.
+
+The previous implementation ran a ``while True: await asyncio.sleep(0.01)``
+worker that polled ``PriorityQueue.empty()`` and spun the event loop at ~100 Hz
+per idle process, set ``self.engine`` outside ``__init__``, and let a raising
+engine silently kill the task with no error surface. None of that survives:
+``asyncio.Semaphore`` blocks without polling, and the caller owns the await.
+"""
+
 import asyncio
-from typing import Dict, Optional, Callable
-from dataclasses import dataclass
-from enum import Enum
-from queue import PriorityQueue
-import time
+import contextlib
+import logging
+from typing import AsyncIterator, Dict
 
-
-class TaskPriority(Enum):
-    HIGH = 0
-    NORMAL = 1
-    LOW = 2
-
-
-@dataclass
-class InferenceTask:
-    """Inference task"""
-    id: str
-    prompt: str
-    max_tokens: int
-    temperature: float
-    top_p: float
-    callback: Optional[Callable] = None
-    priority: TaskPriority = TaskPriority.NORMAL
-    created_at: float = 0
-    
-    def __post_init__(self):
-        self.created_at = time.time()
-    
-    def __lt__(self, other):
-        return (self.priority.value, self.created_at) < (other.priority.value, other.created_at)
+logger = logging.getLogger("sovereign.core.scheduler")
 
 
 class InferenceScheduler:
-    """Schedule and manage inference tasks"""
-    
+    """Serializes inference against the single active engine."""
+
     def __init__(self, max_concurrent: int = 1):
+        if max_concurrent < 1:
+            raise ValueError("max_concurrent must be >= 1")
         self.max_concurrent = max_concurrent
-        self.queue: PriorityQueue = PriorityQueue()
-        self.active_tasks: Dict[str, InferenceTask] = {}
-        self.running = False
-        self._lock = asyncio.Lock()
-    
-    async def submit(self, task: InferenceTask) -> str:
-        """Submit task to queue"""
-        self.queue.put(task)
-        return task.id
-    
-    async def start(self, engine):
-        """Start scheduler loop"""
-        self.running = True
-        self.engine = engine
-        
-        while self.running:
-            if not self.queue.empty() and len(self.active_tasks) < self.max_concurrent:
-                task = self.queue.get()
-                asyncio.create_task(self._process_task(task))
-            
-            await asyncio.sleep(0.01)
-    
-    async def stop(self):
-        """Stop scheduler"""
-        self.running = False
-    
-    async def _process_task(self, task: InferenceTask):
-        """Process single task"""
-        async with self._lock:
-            self.active_tasks[task.id] = task
-        
+        self._sem = asyncio.Semaphore(max_concurrent)
+        self._queued = 0
+        self._active = 0
+
+    @contextlib.asynccontextmanager
+    async def slot(self) -> AsyncIterator[None]:
+        """Hold the inference slot for the duration of the block."""
+        self._queued += 1
         try:
-            result = await self.engine.generate(
-                prompt=task.prompt,
-                max_tokens=task.max_tokens,
-                temperature=task.temperature,
-                top_p=task.top_p
-            )
-            
-            if task.callback:
-                task.callback(result)
-                
+            await self._sem.acquire()
         finally:
-            async with self._lock:
-                del self.active_tasks[task.id]
-    
+            self._queued -= 1
+
+        self._active += 1
+        try:
+            yield
+        finally:
+            self._active -= 1
+            self._sem.release()
+
     def get_queue_size(self) -> int:
-        """Get current queue size"""
-        return self.queue.qsize()
-    
+        """Requests waiting for a slot (excludes the one running)."""
+        return self._queued
+
     def get_active_count(self) -> int:
-        """Get active task count"""
-        return len(self.active_tasks)
+        """Requests currently holding a slot."""
+        return self._active
+
+    def get_stats(self) -> Dict[str, int]:
+        return {
+            "queue_size": self._queued,
+            "active_count": self._active,
+            "max_concurrent": self.max_concurrent,
+        }

@@ -183,6 +183,18 @@ class LayerStreamEngine(BaseEngine):
                     "bits_per_coord": settings.turboquant_bits,
                     "enable_qjl": settings.turboquant_qjl_enabled,
                 }
+        if tq_config is not None:
+            # Loud on purpose: TurboQuant fails the accuracy gate at every bit
+            # rate measured, and nothing at runtime catches the resulting quality
+            # loss — the model still generates, just worse. If this line shows up
+            # in a log, the output is degraded and someone opted in by accident.
+            logger.warning(
+                "TurboQuant KV compression is ENABLED (bits=%s). It fails the "
+                "accuracy gate (benchmarks/accuracy_eval.py) at every bit rate "
+                "measured, so expect degraded output. Set "
+                "SOVEREIGN_TURBOQUANT_ENABLED=false to disable.",
+                settings.turboquant_bits,
+            )
 
         # Detect hybrid architecture (e.g. Qwen3.5 linear_attention + full_attention)
         # Check both the full config and text_config — layer_types may live on either

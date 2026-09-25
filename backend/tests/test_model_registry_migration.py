@@ -8,8 +8,8 @@ rows and breaking DatabaseManager's ModelsTable stats queries.
 Covers:
 - legacy (migration-schema) rows are migrated in place, not dropped
 - migration is idempotent (re-init keeps rows, legacy table retired)
-- ModelsTable.count()/get_total_storage_bytes() degrade to 0 on the
-  registry schema instead of raising OperationalError
+- ModelsTable stats read whichever schema is live (migration schema as
+  written, registry schema as installed by ModelRegistry)
 """
 
 import asyncio
@@ -118,8 +118,12 @@ async def test_migration_idempotent(legacy_db):
         await registry.close()
 
 
-async def test_modelstable_degrades_on_registry_schema(legacy_db):
-    """ModelsTable stats must not crash when the registry owns the schema."""
+async def test_modelstable_reads_registry_schema(legacy_db):
+    """Once the registry schema is live, stats must report it, not zero.
+
+    These two calls used to catch OperationalError and return 0, so
+    DatabaseManager.get_stats() permanently reported an empty model registry.
+    """
     registry = ModelRegistry(legacy_db)
     try:
         await registry.initialize()
@@ -130,7 +134,20 @@ async def test_modelstable_degrades_on_registry_schema(legacy_db):
                           busy_timeout=1000, cache_size=-2000)
     try:
         models = ModelsTable(pool)
-        assert models.count() == 0
-        assert models.get_total_storage_bytes() == 0
+        assert models.count() == 1
+        # 322122547 bytes stored as size_gb; round-trip through GB is lossy.
+        assert models.get_total_storage_bytes() == pytest.approx(322122547, rel=0.01)
+    finally:
+        pool.close_all()
+
+
+def test_modelstable_reads_migration_schema(legacy_db):
+    """The native migration schema must still read correctly."""
+    pool = ConnectionPool(db_path=str(legacy_db), journal_mode="DELETE",
+                          busy_timeout=1000, cache_size=-2000)
+    try:
+        models = ModelsTable(pool)
+        assert models.count() == 1
+        assert models.get_total_storage_bytes() == 322122547
     finally:
         pool.close_all()

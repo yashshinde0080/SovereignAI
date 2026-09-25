@@ -45,12 +45,23 @@ class Settings(BaseSettings):
     default_mode: str = "auto"
 
     # TurboQuant KV Cache Compression
-    # Off by default: the shipped cache is ~1x vs FP16 (no bit-packing yet) and the
-    # 6x claim is unvalidated. Re-enable only after the accuracy eval gate passes.
+    #
+    # OFF by default, and it must stay off until the accuracy gate passes.
+    # benchmarks/accuracy_eval.py FAILS on Qwen2-0.5B and Pythia-70m at every
+    # bit rate: the shipped codebook uses uniform centroids instead of the
+    # paper's Beta Lloyd-Max, and the QJL decode scaling is near-no-op (so the
+    # compression is nowhere near the 6x claim).
+    #
+    # There is no runtime check that catches the resulting quality loss — the
+    # model still generates, just worse. See
+    # reviews/autoplan-report-2026-08-09.md before flipping this.
+    #
+    # (An earlier comment here blamed "no bit-packing yet"; bit-packing is in
+    # fact implemented — see TurboQuantConfig.bit_pack — which made the real
+    # blocker harder to find.)
     turboquant_enabled: bool = False
     turboquant_bits: float = 3.5
     turboquant_qjl_enabled: bool = True
-    turboquant_rotation: str = "random"
 
     model_config = ConfigDict(env_prefix="SOVEREIGN_", env_file=".env")
 

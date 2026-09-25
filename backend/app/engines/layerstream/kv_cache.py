@@ -149,7 +149,14 @@ class StatefulCache:
 
 
 class KVCacheManager:
-    """Manages KV cache strictly on CPU with O(1 layer) GPU footprint."""
+    """Manages KV cache strictly on CPU with O(1 layer) GPU footprint.
+
+    Constructed directly by ``LayerExecutor``, which picks between this and
+    ``TurboQuantKVCacheManager`` on the code path that already knows the model
+    architecture. There is deliberately no ``create(mode=...)`` factory: it had
+    exactly zero callers, and a second construction path for the same choice is
+    how the two cache types drift apart.
+    """
     def __init__(self):
         self.key_cache: List[Optional[torch.Tensor]] = []
         self.value_cache: List[Optional[torch.Tensor]] = []
@@ -200,19 +207,6 @@ class KVCacheManager:
                 if t is not None:
                     total_bytes += t.nelement() * t.element_size()
         return total_bytes / (1024 ** 2)
-
-    @classmethod
-    def create(cls, mode: str = "standard", **kwargs):
-        """Factory: create a KVCacheManager or TurboQuant variant."""
-        if mode == "turboquant":
-            from app.engines.shared.turboquant import TurboQuantKVCacheManager, TurboQuantConfig
-            config = kwargs.pop('turboquant_config', {})
-            if isinstance(config, dict):
-                cfg = TurboQuantConfig(**config)
-            else:
-                cfg = config
-            return TurboQuantKVCacheManager(cfg, **kwargs)
-        return cls()
 
 
 class ProxyList:

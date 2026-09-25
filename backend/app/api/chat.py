@@ -1,4 +1,5 @@
 """Chat API Endpoints"""
+import contextlib
 import json
 import logging
 import uuid
@@ -138,19 +139,30 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     
     if chat_request.stream:
         return StreamingResponse(
-            stream_response(app.state.active_engine, input_data, chat_request, rag_metadata_out, request, app.state.active_model),
+            stream_response(
+                app.state.active_engine,
+                input_data,
+                chat_request,
+                rag_metadata_out,
+                request,
+                app.state.active_model,
+                scheduler=getattr(app.state, "inference_scheduler", None),
+            ),
             media_type="text/event-stream"
         )
     
     # Non-streaming response
     if await request.is_disconnected():
         raise HTTPException(status_code=499, detail="Client disconnected")
-    response = await app.state.active_engine.generate(
-        input_data=input_data,
-        max_tokens=chat_request.max_tokens,
-        temperature=chat_request.temperature,
-        top_p=chat_request.top_p
-    )
+
+    scheduler = getattr(app.state, "inference_scheduler", None)
+    async with (scheduler.slot() if scheduler else _null_slot()):
+        response = await app.state.active_engine.generate(
+            input_data=input_data,
+            max_tokens=chat_request.max_tokens,
+            temperature=chat_request.temperature,
+            top_p=chat_request.top_p
+        )
     
     content = response.get("output", "") if "output" in response else response.get("text", "")
     
@@ -188,7 +200,42 @@ async def execute_task(request: Request):
 
 
 
+@contextlib.asynccontextmanager
+async def _null_slot():
+    """No-op stand-in when no scheduler is registered (tests, direct calls)."""
+    yield
+
+
 async def stream_response(
+    engine, 
+    prompt: str, 
+    request: ChatRequest,
+    rag_metadata: list = None,
+    http_request: Request = None,
+    model_name: str = None,
+    scheduler=None,
+) -> AsyncGenerator[str, None]:
+    """Stream tokens, holding the inference slot for the whole response.
+
+    The slot is held until the generator finishes: two concurrent streams would
+    otherwise share one engine's KV cache. Pass ``scheduler=None`` to skip the
+    gate (direct calls in tests).
+    """
+    if scheduler is None:
+        async for frame in _stream_ungated(
+            engine, prompt, request, rag_metadata, http_request, model_name
+        ):
+            yield frame
+        return
+
+    async with scheduler.slot():
+        async for frame in _stream_ungated(
+            engine, prompt, request, rag_metadata, http_request, model_name
+        ):
+            yield frame
+
+
+async def _stream_ungated(
     engine, 
     prompt: str, 
     request: ChatRequest,

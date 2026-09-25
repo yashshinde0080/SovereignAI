@@ -43,8 +43,8 @@ class VectorStoreManager:
         vs.shutdown()
     """
 
-    def __init__(self):
-        self.config = VectorStoreConfig()
+    def __init__(self, config: Optional[VectorStoreConfig] = None):
+        self.config = config or VectorStoreConfig()
         self.chunker = DocumentChunker(
             chunk_size=self.config.chunk_size,
             chunk_overlap=self.config.chunk_overlap,

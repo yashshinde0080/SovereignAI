@@ -18,6 +18,8 @@ from app.core.hardware_llmfit import detect_hardware as detect_hardware
 from app.services.model_manager import ModelManager
 from app.plugins.manager import PluginManager
 from app.security.middleware import lan_auth_middleware
+from app.security.audit import audit_logger
+from app.core.scheduler import InferenceScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,13 @@ async def lifespan(app: FastAPI):
     app.state.db = DatabaseManager()
     app.state.db.initialize()
 
+    # Bind the audit facade to the one canonical audit writer (AuditTable).
+    # While unbound it drops events rather than failing a request.
+    audit_logger.bind(app.state.db)
+
+    # Gate overlapping chat requests off the single active engine.
+    app.state.inference_scheduler = InferenceScheduler()
+
     # Initialize vector store
     from app.vectorstore.manager import VectorStoreManager
     app.state.vector_store = VectorStoreManager()
@@ -141,6 +150,12 @@ async def lifespan(app: FastAPI):
         app.state.vector_store.shutdown()
     if hasattr(app.state, 'cloud_provider_registry'):
         app.state.cloud_provider_registry.close()
+    if hasattr(app.state, 'db'):
+        await audit_logger.log(
+            event_type="system",
+            source="lifespan",
+            message="Server shutting down",
+        )
 
 
 app = FastAPI(

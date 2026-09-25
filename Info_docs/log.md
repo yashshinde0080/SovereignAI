@@ -107,8 +107,18 @@
 - `ModelsTable.count()` and `get_total_storage_bytes()` now degrade to 0 (catch `sqlite3.OperationalError`) instead of crashing when the registry schema owns the table
 - Commits: 0116114
 
+## [2026-09-25] refactor+review | Code quality cleanup + over-engineering review
+- Backend: major code quality pass across 21 files (+752/-426) — `chat.py`: `nullcontext` over hand-rolled async CM; `scheduler.py`: dead `get_stats`/`get_queue_size` removed; `audit.py`: `get_logs` (test-only) removed; `license.py`/`quantizer.py`: unused classes that raised in `__init__` deleted; `vector_store.py`/`embedder.py`/`index.py`: import chain tightened; `downloader.py`: unused timeout param + redundant filename guards removed; `kv_cache.py`/`executor.py`/`models_table.py`/`config.py`/`middleware.py`/`main.py`/`utils/__init__.py`/`manager.py`: incremental cleanup; test updates for migration + scheduler/audit
+- CI: deleted `.github/workflows/backend.yml` (35 lines) — workflow removed
+- Docs: added `review.md` (103 lines) — ranked over-engineering review covering ~12,900 lines of deletable code (engine/ package, Docs/ duplication, API refs, Diagrams/, benchmarks, launcher scripts, turboquant polar default, retriever, usb_bundle, etc.); includes self-review of this session's diff (-110 lines actionable)
+- Commits: 4fc2d2a, 0c6347b, 2da9b84, 788181f
+
 ## [2026-09-24] test+fix | Regression test for model registry migration + cleanup
 - Added `backend/tests/test_model_registry_migration.py` (136 lines) covering: legacy rows preserved through migration, idempotent re-initialization, legacy table retired, `ModelsTable` stats degrade gracefully on registry schema
-- Cleaned up duplicate migration logic in `registry.py` (4b41f64 consolidates 0116114)
+- Cleaned up duplicate migration logic in `registry.py` (4b41f64 consolidates 0116114) — migrate in place via `models_legacy_v0` rename + idempotent copy + drop; `ModelsTable.count()`/`get_total_storage_bytes()` catch `OperationalError` and return 0 instead of crashing
 - Commits: 9f4d699, 4b41f64
+
+
+
+
 

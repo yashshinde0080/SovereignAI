@@ -73,8 +73,8 @@ def main(model_path: str, gpu_layers: int) -> None:
           f"delta {(peak_ram - baseline) / 1024:.2f} GB)")
     print(f"RAM vs file size : {(peak_ram - baseline) / 1024 / (os.path.getsize(model_path) / (1024 ** 3)):.1f}x "
           f"(quantized residency: ~1x means weights stay Q4 in RAM)")
-    print(f"FullRAM ref      : 3.84 tok/s CPU / 7.03 CUDA, 1.93 GB delta (fp32/fp16 dequant)")
-    print(f"LayerStream ref  : 0.40 tok/s")
+    print("FullRAM ref      : 3.84 tok/s CPU / 7.03 CUDA, 1.93 GB delta (fp32/fp16 dequant)")
+    print("LayerStream ref  : 0.40 tok/s")
 
     del llm
 

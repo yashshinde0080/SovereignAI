@@ -86,7 +86,7 @@ async def main(model_path: str, device: str) -> None:
             if engine.device == "cpu" else
             "cuda path: fp16 weights in VRAM; RAM stays low.")
     print(f"note              : {note}")
-    print(f"LayerStream ref   : 0.40 tok/s (same prompt, 32 tokens, same box, Qwen3.5-0.8B)")
+    print("LayerStream ref   : 0.40 tok/s (same prompt, 32 tokens, same box, Qwen3.5-0.8B)")
 
     await engine.unload()
 

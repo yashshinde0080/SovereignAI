@@ -113,12 +113,15 @@
 - Docs: added `review.md` (103 lines) — ranked over-engineering review covering ~12,900 lines of deletable code (engine/ package, Docs/ duplication, API refs, Diagrams/, benchmarks, launcher scripts, turboquant polar default, retriever, usb_bundle, etc.); includes self-review of this session's diff (-110 lines actionable)
 - Commits: 4fc2d2a, 0c6347b, 2da9b84, 788181f
 
+
 ## [2026-09-24] test+fix | Regression test for model registry migration + cleanup
 - Added `backend/tests/test_model_registry_migration.py` (136 lines) covering: legacy rows preserved through migration, idempotent re-initialization, legacy table retired, `ModelsTable` stats degrade gracefully on registry schema
 - Cleaned up duplicate migration logic in `registry.py` (4b41f64 consolidates 0116114) — migrate in place via `models_legacy_v0` rename + idempotent copy + drop; `ModelsTable.count()`/`get_total_storage_bytes()` catch `OperationalError` and return 0 instead of crashing
 - Commits: 9f4d699, 4b41f64
 
 
-
-
+## [2026-09-26] patch+cleanup | Benchmark formatting + electron build artifact removed
+- Backend benchmarks: fixed print formatting in `benchmark_fullram.py` and `benchmark_llamacpp.py` — removed `f-string` on static reference lines (LayerStream/FullRAM refs) for consistency
+- Electron: deleted stale `electron/build_output.txt` (12 lines, old linux build log)
+- Commits: 4eb8ff1
 

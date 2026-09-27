@@ -125,3 +125,8 @@
 - Electron: deleted stale `electron/build_output.txt` (12 lines, old linux build log)
 - Commits: 4eb8ff1
 
+## [2026-09-27] doc | Presentation slides + Info_docs sync to current architecture
+- Created `ppt.txt` (12 slides) at repo root: Title, Problem, Value Prop, Architecture diagram, Three engines (FullRAM/LayerStream/CloudAPI), Engine selection logic, Three interfaces, Data layout, Plugins, Security+Cloud mode, Dev/Test commands, Roadmap
+- Info_docs: Updated `INDEX.md` (Next.js 16, React 19, Tailwind v4 entries), `project/TRD.md` (three engines, workspace paths, dual DBs, encrypted cloud keys), `tech-stack/React.md` (React 19, Next.js 16, shadcn/ui new-york), `tech-stack/Tailwind CSS.md` (v4 @theme inline, oklch tokens, legacy v3 noted), `tech-stack/Next.js.md` (new: App Router, static export, config), `engines/Engines Overview.md` (three engines, current perf numbers, selection logic, TurboQuant status)
+- Commits: c7dbc59, 221cbe3, 7031dee
+

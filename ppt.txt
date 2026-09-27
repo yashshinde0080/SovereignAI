@@ -1,0 +1,245 @@
+# SovereignAI Edge — Presentation Slides (12 Slides)
+
+---
+
+## Slide 1: Title Slide
+
+**SovereignAI Edge**
+*Fully Portable, 100% Offline AI Platform for Consumer Hardware*
+
+**Subtitle:** Run LLMs locally on any device — USB, laptop, desktop — with zero cloud dependency
+
+**Presenter:** [Your Name]
+**Date:** 2026
+
+---
+
+## Slide 2: The Problem
+
+**Why SovereignAI Edge?**
+
+- **Privacy crisis:** Cloud APIs leak sensitive data (enterprise IP, medical, legal, defense)
+- **Connectivity gaps:** Air-gapped environments, remote work, travel, low-bandwidth regions
+- **Cost at scale:** API fees compound — $0.002/1K tokens = $200/month per active user
+- **Vendor lock-in:** Model deprecation, rate limits, terms-of-service changes
+- **No true offline alternatives:** Existing tools require internet for model download, auth, or telemetry
+
+**Our answer:** A platform that runs entirely on your hardware. Zero bytes leave your machine. Ever.
+
+---
+
+## Slide 3: Core Value Proposition
+
+**Three Pillars**
+
+| Pillar | What It Means |
+|--------|---------------|
+| **Portable** | Runs from USB/SSD — no install, no registry, no config on host OS |
+| **Offline-First** | 100% local execution — frontend, backend, inference, all on localhost |
+| **Adaptive** | Dual engines auto-select: FullRAM (speed) or LayerStream (low memory) |
+
+**Target Users:**
+- Privacy-conscious individuals & digital nomads
+- Enterprise/defense in air-gapped networks
+- Researchers avoiding API costs
+- Developers building local AI apps
+
+---
+
+## Slide 4: Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  Client Layer                        │
+│  ┌──────────┐  ┌────────────┐  ┌──────────────┐    │
+│  │ Electron │  │  React Web │  │   CLI (Typer) │    │
+│  │  Desktop │  │   (Next.js)│  │               │    │
+│  └────┬─────┘  └─────┬──────┘  └──────┬────────┘    │
+└───────┼──────────────┼────────────────┼──────────────┘
+        │              │                │
+        ▼              ▼                ▼
+┌─────────────────────────────────────────────────────┐
+│              FastAPI Gateway (127.0.0.1:8000)        │
+│  /v1/chat/completions  |  /v1/models  |  /ws/metrics │
+└─────────────────────┬───────────────────────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        ▼             ▼             ▼
+   ┌─────────┐   ┌───────────┐  ┌──────────┐
+   │FullRAM  │   │LayerStream│  │CloudAPI  │
+   │Engine   │   │Engine     │  │Engine    │
+   └────┬────┘   └─────┬─────┘  └────┬─────┘
+        │              │             │
+        ▼              ▼             ▼
+   transformers   PyTorch +      Provider APIs
+   AutoModel      safetensors    (OpenAI, Anthropic,
+   (GGUF fallback)                Google, Custom)
+```
+
+---
+
+## Slide 5: Dual Engine Architecture
+
+### FullRAM Engine — Maximum Throughput
+- Loads **entire model** into RAM/VRAM via `transformers.AutoModelForCausalLM`
+- Streaming via `TextIteratorStreamer` + `asyncio.to_thread()`
+- GGUF fallback via `llama-cpp-python` / `ik-llama-cpp-python`
+- **Best for:** 16GB+ RAM, dedicated GPU (8GB+ VRAM)
+- **Performance:** 20-80+ tok/s on consumer GPUs
+
+### LayerStream Engine — Memory-Bounded
+- **Streams layers** from disk per forward pass (safetensors chunks)
+- Preprocessing: `WeightSplitter` → per-layer `.safetensors` + `quant_config.json`
+- Two-phase pipeline: Context prefill → Autoregressive decode
+- KV cache in system RAM; VRAM footprint ~constant
+- **Best for:** 8GB RAM, NVMe SSD, integrated graphics
+- **Performance:** 0.4-8 tok/s (measured on 8GB device)
+
+### CloudAPI Engine — Online Mode
+- Proxies to OpenAI, Anthropic, Google, Mistral, Custom endpoints
+- Encrypted API key storage (Fernet + PBKDF2HMAC)
+- Streaming SSE from all provider types
+- **Use when:** Local hardware insufficient or cloud preferred
+
+---
+
+## Slide 6: Engine Selection Logic
+
+**Automatic at Model Load** (`ModelManager._load_model_locked()` → `EngineFactory.create_engine()`)
+
+```
+TaskResolver.resolve() → AutoConfig introspection
+         │
+         ▼
+MemoryManager.suggest_mode() → llmfit.score_model_fit()
+         │
+         ├─ fit > 0.85 & RAM < 70%  → FullRAM
+         ├─ fit > 0.60              → LayerStream
+         └─ else                    → Insufficient (error)
+         │
+         ▼
+Threshold Fallback (if llmfit unavailable):
+  CUDA VRAM ≥ 1.1× model size → FullRAM
+  RAM ≥ 1.1× model size       → FullRAM
+  RAM ≥ 0.1× model size       → LayerStream
+  Else                        → Insufficient
+```
+
+**Cloud mode (`mode=cloud`):** Bypasses all local checks — no model introspection needed.
+
+---
+
+## Slide 7: Three Interfaces, One Backend
+
+| Interface | Tech Stack | Use Case |
+|-----------|------------|----------|
+| **Electron Desktop** | Electron 28, bundles backend + frontend/out | Native app, tray, menus, offline-first |
+| **React Web UI** | Next.js 16, React 19, Tailwind v4, shadcn/ui | Browser access on LAN, static export for Electron |
+| **CLI** | Typer, Rich, Prompt-toolkit | Scripting, automation, headless servers |
+
+**All share:** Same FastAPI gateway, same engine, same SQLite DB, same plugin system.
+
+---
+
+## Slide 8: Data & Persistence (All Relative Paths)
+
+```
+./workspace/
+├── models/           # GGUF checkpoints, HF cache, installed/
+├── database/
+│   ├── sovereign.db          # Models, sessions, docs, plugins, benchmarks
+│   └── sovereign_settings.db # Settings (JSON blobs), agents, cloud providers
+├── offload_cache/    # LayerStream per-layer safetensors
+├── sessions/         # Chat snapshots
+├── data/vector_index/ # FAISS index + metadata.db (RAG)
+├── plugins/          # User Python scripts
+└── logs/             # server_cli.log
+```
+
+- **Two SQLite DBs** (WAL mode, thread-local connections)
+- **Encryption:** Fernet + PBKDF2HMAC (480k iterations) for model files & cloud API keys
+- **Zero absolute paths** — USB-portable by design
+
+---
+
+## Slide 9: Extensibility & Plugins
+
+**Plugin System** (`backend/app/plugins/`)
+- `PluginInterface` ABC: `initialize()`, `cleanup()`, `get_actions()`, `execute(action, params)`
+- Dynamic import via `importlib.util`
+- **Sandbox:** Timeout-only (30s) — documented gap: no FS/network/memory isolation on Windows
+- Use cases: Local RAG, custom prompts, archive search, data transformation
+
+**Model Providers** (`backend/app/providers/`)
+- HuggingFace, Local filesystem, Enterprise repo, USB bundle
+- GGUF format support (Llama, Mistral, Gemma, Qwen, etc.)
+
+---
+
+## Slide 10: Security & Cloud Mode
+
+### Local-First Security
+- **Auth:** Bearer token (opt-in) — only enforced when `bind_localhost_only=false` AND `api_token` set
+- **Encryption:** Machine-bound keys (platform.node() + uuid.getnode())
+- **Rate limiting:** 60 req/min via slowapi
+- **No telemetry:** Zero network calls unless CloudAPI engine explicitly used
+
+### Cloud Mode (Optional)
+- **Providers:** OpenAI, Anthropic, Google, Mistral, Custom (OpenAI-compatible: Together, Groq, vLLM, Ollama)
+- **Keys:** Fernet-encrypted at rest in `sovereign_settings.db`, **never returned in GET** (masked only), never logged
+- **Streaming:** SSE from all providers, unified chunk format
+- **Switch:** `POST /v1/chat/mode/switch?mode=cloud`
+
+---
+
+## Slide 11: Development & Testing
+
+### Commands
+| Task | Command |
+|------|---------|
+| Backend dev | `cd backend && python main.py` (hot-reload via `SOVEREIGN_RELOAD=1`) |
+| Frontend dev | `cd frontend && npm run dev` |
+| Electron dev | `cd electron && USE_DEV_SERVER=true npm start` |
+| Tests (fast) | `cd backend && python -m pytest -m "not slow"` |
+| Tests (all) | `cd backend && python -m pytest` |
+| Build Electron | `cd electron && npm run build:win\|mac\|linux` |
+
+### Test Suite
+- 17 test files, ~134 tests (pytest + pytest-asyncio)
+- `@slow` marker for real-engine round-trips (LayerStream, FullRAM)
+- No `conftest.py` — fixtures inline per file
+- Coverage gaps: RAG, chat e2e, hardware detector, websocket (documented)
+
+---
+
+## Slide 12: Roadmap & Status
+
+### Current State (2026-09)
+- ✅ FullRAM engine (transformers primary, llama.cpp fallback)
+- ✅ LayerStream engine (validated on 8GB: Qwen2-0.5B 8 tok/s, Qwen3.5-0.8B hybrid 1.3 tok/s with device cache)
+- ✅ CloudAPI engine (5 provider types, encrypted keys, streaming)
+- ✅ Three UIs (Electron, Web, CLI) + Plugin system
+- ✅ RAG (FAISS + sentence-transformers)
+- ✅ Dual SQLite DBs, encryption, opt-in auth
+
+### Known Gaps
+- TurboQuant experimental, default OFF (eval gate fails)
+- LayerStream hybrid models lack `causal-conv1d`/`fla` kernels (CPU fallback only)
+- Plugin sandbox: timeout-only on Windows
+- Test coverage gaps: RAG, e2e chat, hardware detector
+
+### Next Milestones
+1. LayerStream kernel support (causal-conv1d, fla) → 5-10× hybrid speedup
+2. TurboQuant accuracy gate pass → enable by default
+3. Plugin sandbox hardening (Windows isolation)
+4. Cloud provider model registry sync
+5. ARM64 Windows / Linux ARM Electron builds
+
+---
+
+**Thank You**
+*Questions?*
+
+**Repo:** `github.com/anomalyco/SovereignAI` (or your fork)
+**Docs:** `Info_docs/` (Obsidian wiki, 31 pages)
+**Launch:** `launch.bat` / `launch.sh` / `python backend/main.py`

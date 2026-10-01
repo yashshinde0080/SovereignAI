@@ -1,4 +1,5 @@
 """Chat API Endpoints"""
+import asyncio
 import json
 import logging
 import uuid
@@ -73,12 +74,13 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
                 else:
                     condensed_query = query_text
 
-                # Get RAG context
-                rag_context = vector_store.build_context(
+                # Get RAG context (blocking: embed + FAISS search → thread)
+                rag_context = await asyncio.to_thread(
+                    vector_store.build_context,
                     query_text=condensed_query,
                     top_k=5,
                     max_tokens=2048,
-                    score_threshold=0.0  # Removed hardcoded 0.3 threshold
+                    score_threshold=0.0  # → config.min_score floor applies
                 )
                 
                 if rag_context and rag_context.results:

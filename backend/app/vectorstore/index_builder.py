@@ -195,6 +195,13 @@ class FAISSIndexBuilder:
             logger.error(f"Failed to load FAISS index: {e}")
             return False
 
+    def reconstruct(self, vector_index: int) -> np.ndarray:
+        """Get one vector back by FAISS position (used by MMR rerank).
+        Raises if the index type cannot reconstruct (some PQ variants)."""
+        if self._index is None:
+            raise RuntimeError("No index")
+        return self._index.reconstruct(int(vector_index))
+
     def reset(self):
         """Delete index and start fresh."""
         index_path = self.config.index_full_path

@@ -1,3 +1,25 @@
+## [2026-10-01] fix+test | RAG audit fixes: grounding, offline embedder, dedup, async, docx/md
+- RAG correctness: sentence splitter handles abbreviations/decimals/initials, paragraph + code-fence structure preserved, hyphenated PDF breaks joined, token-based overlap, len/3 token estimate; content-hash chunk dedup with renumbering
+- Offline/privacy: embedder loads CPU-only with local_files_only and HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE forced; unloaded after indexing so it never competes with the LLM for RAM
+- Quality: min-score floor (0.15), MMR rerank over top_k*3 candidates, [Source: file#chunk] labels, /v1/rag/query prompt now grounds instead of inviting parametric answers
+- Perf: sqlite connection shared across threads (check_same_thread=False + writer lock); ingest/search/delete/rebuild off the event loop via asyncio.to_thread; Flat index default (exact, no training edge cases)
+- Plumbing: .md/.docx ingestion (docx via stdlib zipfile+xml), encoding detection ladder (utf-8/utf-8-sig/cp1252/latin-1)
+- Tests: 23 unit tests (chunker edges, dedup, retrieval) + tests/rag_eval.py (20 QA pairs: recall@1 75%, recall@5 95%, grounding 95% with cached all-MiniLM-L6-v2, offline)
+- Files: 13 files changed, 981 insertions(+), 114 deletions(-) across vectorstore, api/rag, api/chat, tests
+- Commit: f241951
+
+## [2026-09-29] refactor+chore | Major dependency cleanup + llama.cpp pin
+- Backend deps: removed tensorflow, torchaudio, torchvision, tensorboard, tensorboard-data-server, protobuf, werkzeug, wheel, six, termcolor from uv.lock (734 lines removed) — unused, pulled by old transformers dev build
+- Requirements: pinned llama-cpp-python==0.3.34 (was >=0.3.34) for reproducible Windows wheel installs
+- Files: backend/requirements.txt, backend/uv.lock
+- Commits: afd6854
+
+## [2026-09-23] fix+refactor | Model registry migration + graceful schema handling
+- ModelsTable: get_total_storage_bytes() and count() now catch sqlite3.OperationalError and return 0 — degrades gracefully if registry schema lacks file_size_bytes or status columns instead of crashing stats
+- ModelRegistry: initialize() migrates legacy models table (has size_label but no checksum) to models_legacy_v0, creates new registry schema, copies rows with id/name/family/quant/size_gb/path/checksum/downloaded/modes_supported/created_at, then drops legacy table — idempotent, crash-safe, runs only once
+- Files: backend/app/database/models_table.py, backend/app/services/registry.py
+- Commit: 44bc995
+
 ## [2026-09-22] refactor+chore | Code cleanup + dependency pruning
 - Cloud engine: fixed doc references `TODOS.md` → `TODO.md` in `engine.py` and `providers.py`
 - Plugin sandbox: simplified to timeout-only execution — removed `max_memory_mb` knob (unenforceable on Windows), `ThreadPoolExecutor`, `resource` import; `PluginSandbox` now only enforces `asyncio.wait_for` timeout (docstring updated)

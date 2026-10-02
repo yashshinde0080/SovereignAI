@@ -346,19 +346,22 @@ class VectorMetadataStore:
     def delete_document_data(self, document_id: str):
         """
         Delete all chunks and embeddings for a document.
-        Note: FAISS index positions become stale.
-        Full rebuild recommended after deletion.
+        Raises ValueError if the document doesn't exist (no chunk rows) —
+        callers distinguish 404 from a real failure.
         """
         with self._lock:
             self._conn.execute(
                 "DELETE FROM embeddings WHERE document_id = ?",
                 (document_id,)
             )
-            self._conn.execute(
+            cursor = self._conn.execute(
                 "DELETE FROM chunks WHERE document_id = ?",
                 (document_id,)
             )
+            deleted = cursor.rowcount
             self._conn.commit()
+        if deleted == 0:
+            raise ValueError(f"Document not found: {document_id}")
         logger.info(
             f"Deleted all data for document: {document_id}"
         )

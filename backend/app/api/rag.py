@@ -49,13 +49,21 @@ def _docx_to_text(content: bytes) -> str:
     return "\n\n".join(paragraphs)
 
 
+def _ensure_vector_store(request: Request) -> VectorStoreManager:
+    """503 with a plain message when the store was never initialized."""
+    vector_store = getattr(request.app.state, "vector_store", None)
+    if vector_store is None:
+        raise HTTPException(status_code=503, detail="Vector store not initialized")
+    return vector_store
+
+
 @router.post("/upload")
 async def upload_document(
     request: Request,
     file: UploadFile = File(...)
 ):
     """Upload document for RAG"""
-    vector_store: VectorStoreManager = request.app.state.vector_store
+    vector_store = _ensure_vector_store(request)
     
     # Check Content-Length before reading body (fail fast)
     content_length = request.headers.get("content-length")
@@ -82,8 +90,6 @@ async def upload_document(
             text = _docx_to_text(content)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        if not text.strip():
-            raise HTTPException(status_code=422, detail="No text could be extracted from this DOCX.")
     elif filename.endswith('.pdf'):
         pdf_plugin = request.app.state.plugin_manager.get_plugin('pdf_ingestion')
         if pdf_plugin is None:
@@ -92,13 +98,16 @@ async def upload_document(
                 detail="PDF plugin not available (pypdf not installed). Upload a .txt file instead."
             )
         text = await pdf_plugin.extract_text(content)
-        if not text.strip():
-            raise HTTPException(
-                status_code=422,
-                detail="No text could be extracted from this PDF (scanned/image-only PDFs are not supported)."
-            )
     else:
         raise HTTPException(status_code=400, detail=f"Unhandled file type: {filename}")
+
+    # Empty .txt and failed extractions fail the same way (was: silent
+    # "success" with 0 chunks for empty files).
+    if not (text or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail="No text could be extracted from this file (scanned/image-only PDFs are not supported)."
+        )
 
     try:
         # Add to vector store (blocking: chunk+embed+index → worker thread)
@@ -125,14 +134,20 @@ async def upload_document(
 @router.post("/query", response_model=QueryResponse)
 async def query_documents(request: Request, query: QueryRequest):
     """Query documents"""
-    vector_store: VectorStoreManager = request.app.state.vector_store
-    
-    # Search similar chunks
-    search_results = await asyncio.to_thread(
-        vector_store.search,
-        query_text=query.query,
-        top_k=query.top_k,
-    )
+    vector_store = _ensure_vector_store(request)
+
+    # One embed+search pass: build_context both retrieves and formats the
+    # labeled context. (The old code ran search() + build_context() — two
+    # full embed+FAISS passes for the same query.)
+    try:
+        rag_context = await asyncio.to_thread(
+            vector_store.build_context,
+            query_text=query.query,
+            top_k=query.top_k,
+            max_tokens=2048,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=f"Vector store unavailable: {e}")
 
     results = [
         {
@@ -141,27 +156,12 @@ async def query_documents(request: Request, query: QueryRequest):
             "metadata": r.metadata,
             "document_id": r.document_id
         }
-        for r in search_results
+        for r in rag_context.results
     ]
     
     # If model is loaded, generate a grounded response from labeled context
     if request.app.state.active_engine and query.generate_response:
-        # Labeled, delimited, budgeted context — same format as chat path
-        rag_context = vector_store.build_context(
-            query_text=query.query,
-            top_k=query.top_k,
-            max_tokens=2048,
-        )
         context = rag_context.context_text
-        results = [
-            {
-                "text": r.content,
-                "score": r.score,
-                "metadata": r.metadata,
-                "document_id": r.document_id
-            }
-            for r in rag_context.results
-        ]
 
         # Grounding template: excerpts are UNTRUSTED DATA, answer only from
         # them, say not-found otherwise. (The previous "answer based on your
@@ -220,11 +220,13 @@ async def rag_stats(request: Request):
 @router.post("/rebuild")
 async def rebuild_index(request: Request):
     """Manual vector-store rebuild from metadata (fixes FAISS/metadata desync
-    without a restart). Re-embeds all chunks and blocks the loop for its
-    duration — same as the delete path, which already rebuilds inline."""
+    without a restart)."""
     vector_store: VectorStoreManager = request.app.state.vector_store
     try:
-        vector_store.rebuild_index()  # ponytail: inline (sqlite thread affinity); to_thread trips check_same_thread
+        # to_thread: re-embeds everything — keep the event loop serving.
+        # (ConnectionPool hands each thread its own conn; the vectorstore's
+        # shared conn is guarded by its writer lock.)
+        await asyncio.to_thread(vector_store.rebuild_index)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Rebuild failed: {e}")
     stats = vector_store.get_stats()
@@ -262,15 +264,15 @@ async def get_document_chunks(request: Request, doc_id: str):
 
 @router.delete("/documents/{doc_id}")
 async def delete_document(request: Request, doc_id: str):
-    """Delete document from index"""
+    """Delete document from index. 404 = unknown doc, 500 = rebuild failure
+    (the old code reported every failure as 404)."""
     vector_store: VectorStoreManager = request.app.state.vector_store
+    if not vector_store.get_document_chunks(doc_id):
+        raise HTTPException(status_code=404, detail="Document not found")
     try:
         await asyncio.to_thread(vector_store.delete_document, doc_id)
-        success = True
-    except Exception:
-        success = False
-    
-    if not success:
+    except ValueError:
         raise HTTPException(status_code=404, detail="Document not found")
-    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {e}")
     return {"status": "deleted", "document_id": doc_id}

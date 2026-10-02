@@ -1,3 +1,10 @@
+## [2026-10-02] fix+refactor | RAG patch: 503 on missing vectorstore, single embed+search pass, 404/500 distinction, .md/.docx upload
+- Backend rag.py: added `_ensure_vector_store()` helper returning 503 when store not initialized (was AttributeError crash); `/query` now uses `build_context()` once (was: `search()` + `build_context()` — two embed+FAISS passes); `/rebuild` runs in worker thread via `asyncio.to_thread` (was inline blocking); `/documents/{doc_id}` DELETE now returns 404 for unknown doc, 500 for rebuild failure (was all 404)
+- Backend vectorstore/store.py: `delete_document_data()` raises `ValueError` if document doesn't exist (rowcount check) — callers distinguish 404 from real failure
+- Frontend: `.md` and `.docx` added to accepted upload types in `DocumentsContent`, `PromptInput`, `OnlineServices` (was `.txt,.pdf` only)
+- Files: 5 files changed, 62 insertions(+), 47 deletions(-) across backend rag.py, store.py, frontend documents/page.tsx, PromptInput.tsx, OnlineServices.tsx
+- Commits: 0d86f8b, 08e0483
+
 ## [2026-10-01] fix+test | RAG audit fixes: grounding, offline embedder, dedup, async, docx/md
 - RAG correctness: sentence splitter handles abbreviations/decimals/initials, paragraph + code-fence structure preserved, hyphenated PDF breaks joined, token-based overlap, len/3 token estimate; content-hash chunk dedup with renumbering
 - Offline/privacy: embedder loads CPU-only with local_files_only and HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE forced; unloaded after indexing so it never competes with the LLM for RAM

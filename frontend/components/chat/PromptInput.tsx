@@ -156,7 +156,7 @@ export function PromptInput({ onSend, disabled, externalValue, editing, onCancel
           <input
             ref={fileInputRef}
             type="file"
-            accept=".txt,.pdf"
+            accept=".txt,.md,.docx"
             className="hidden"
             onChange={handleFile}
           />

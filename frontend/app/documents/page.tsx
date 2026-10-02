@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
-const VALID_TYPES = ['.txt', '.pdf'];
+const VALID_TYPES = ['.txt', '.md', '.docx'];
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -241,7 +241,7 @@ function DocumentsContent() {
             type="file"
             id="file-upload"
             className="hidden"
-            accept=".txt,.pdf"
+            accept=".txt,.md,.docx"
             onChange={handleUpload}
           />
           <div className="flex items-center gap-3">

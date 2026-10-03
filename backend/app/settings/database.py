@@ -108,7 +108,12 @@ class SettingsDatabase:
         )
         row = cursor.fetchone()
         if row:
-            return json.loads(row["data"])
+            try:
+                return json.loads(row["data"])
+            except (ValueError, TypeError):
+                # Corrupt JSON blob (hand-edit, truncated write): degrade to
+                # "missing" so callers fall back to schema defaults, not crash.
+                return None
         return None
 
     def update_section(self, section: str, data: dict) -> bool:

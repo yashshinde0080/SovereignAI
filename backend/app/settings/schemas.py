@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 from enum import Enum
 
 
@@ -113,8 +113,13 @@ class GeneralSettings(BaseModel):
     show_status_bar: bool = True
     enable_notifications: bool = True
     startup_model: Optional[str] = None
-    default_mode: str = "auto"
+    default_mode: Literal["auto", "fullram", "layerstream", "cloud"] = "auto"
     max_context_length: int = Field(default=4096, ge=512, le=131072)
+    # Generation defaults — used when a chat request omits the field.
+    # Request params always win over these.
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    top_p: float = Field(default=0.9, ge=0.0, le=1.0)
+    max_tokens: int = Field(default=512, ge=1, le=32768)
     stream_responses: bool = True
     show_token_speed: bool = True
     font_size: int = Field(default=14, ge=10, le=24)

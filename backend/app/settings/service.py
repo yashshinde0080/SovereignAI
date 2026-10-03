@@ -1,6 +1,10 @@
 import bcrypt
+import json
+import logging
 from typing import Optional
 from .database import SettingsDatabase
+
+logger = logging.getLogger(__name__)
 from .schemas import (
     GeneralSettings,
     AgentConfig,
@@ -25,6 +29,25 @@ class SettingsService:
         agents = self.db.get_all_agents()
         all_settings["agents"] = agents
         return all_settings
+
+    def get_section_safe(self, section: str, model) -> dict:
+        """Read a section, falling back to schema defaults on corrupt JSON.
+
+        A hand-edited or truncated settings DB must degrade to defaults with a
+        log line, not take the server down.
+        """
+        raw = self.db.get_section(section)
+        if raw is None:
+            return model().model_dump()
+        if isinstance(raw, dict):
+            return raw
+        return model().model_dump()
+
+    def _safe(self, section: str, model, getter):
+        data = getter()
+        if data is not None:
+            return data
+        return model().model_dump()
 
     def reset_all_settings(self) -> bool:
         self._security_cache = None

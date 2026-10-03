@@ -14,6 +14,8 @@ export interface Message {
   sources?: RagSource[];
   /** Which model answered this message (from stream model_name delta). */
   model?: string;
+  /** Epoch ms stamp used for data_retention expiry. Absent on legacy messages (kept). */
+  ts?: number;
 }
 
 export interface Model {

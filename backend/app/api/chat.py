@@ -1,4 +1,5 @@
 """Chat API Endpoints"""
+import asyncio
 import json
 import logging
 import uuid
@@ -17,6 +18,34 @@ from app.schemas.chat import (
 
 
 router = APIRouter()
+
+
+def _resolve_sampling(chat_request, settings_service) -> dict:
+    """Per-request sampling params: request value > saved general setting > schema default.
+
+    Pydantic fields_set tells "client omitted the field" apart from "client sent
+    the default" — omitted fields fall back to the saved settings so the UI's
+    generation sliders take effect without per-request plumbing.
+    """
+    out = {
+        "max_tokens": chat_request.max_tokens,
+        "temperature": chat_request.temperature,
+        "top_p": chat_request.top_p,
+    }
+    if settings_service is None:
+        return out
+    try:
+        general = settings_service.get_general() or {}
+    except Exception:
+        return out  # broken settings must never break chat
+    omitted = chat_request.model_fields_set
+    for key in out:
+        if key not in omitted and key in general:
+            try:
+                out[key] = general[key]
+            except (TypeError, KeyError):
+                pass
+    return out
 
 
 @router.post("/completions")
@@ -73,12 +102,13 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
                 else:
                     condensed_query = query_text
 
-                # Get RAG context
-                rag_context = vector_store.build_context(
+                # Get RAG context (blocking: embed + FAISS search → thread)
+                rag_context = await asyncio.to_thread(
+                    vector_store.build_context,
                     query_text=condensed_query,
                     top_k=5,
                     max_tokens=2048,
-                    score_threshold=0.0  # Removed hardcoded 0.3 threshold
+                    score_threshold=0.0  # → config.min_score floor applies
                 )
                 
                 if rag_context and rag_context.results:
@@ -137,19 +167,21 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     )
     
     if chat_request.stream:
+        sampling = _resolve_sampling(chat_request, settings_service)
         return StreamingResponse(
-            stream_response(app.state.active_engine, input_data, chat_request, rag_metadata_out, request, app.state.active_model),
+            stream_response(app.state.active_engine, input_data, chat_request, rag_metadata_out, request, app.state.active_model, sampling),
             media_type="text/event-stream"
         )
     
     # Non-streaming response
     if await request.is_disconnected():
         raise HTTPException(status_code=499, detail="Client disconnected")
+    sampling = _resolve_sampling(chat_request, settings_service)
     response = await app.state.active_engine.generate(
         input_data=input_data,
-        max_tokens=chat_request.max_tokens,
-        temperature=chat_request.temperature,
-        top_p=chat_request.top_p
+        max_tokens=sampling["max_tokens"],
+        temperature=sampling["temperature"],
+        top_p=sampling["top_p"]
     )
     
     content = response.get("output", "") if "output" in response else response.get("text", "")
@@ -195,6 +227,7 @@ async def stream_response(
     rag_metadata: list = None,
     http_request: Request = None,
     model_name: str = None,
+    sampling: dict = None,
 ) -> AsyncGenerator[str, None]:
     """Stream tokens from the engine."""
     chunk_no = 0
@@ -218,6 +251,8 @@ async def stream_response(
 
     # Batch several engine tokens per SSE frame instead of one frame per token.
     BATCH_CHARS = 96
+    if sampling is None:
+        sampling = _resolve_sampling(request, None)
     pending: list[str] = []
     pending_chars = 0
 
@@ -233,9 +268,9 @@ async def stream_response(
     try:
         async for chunk in engine.generate_stream(
             input_data=prompt,
-            max_tokens=request.max_tokens,
-            temperature=request.temperature,
-            top_p=request.top_p
+            max_tokens=sampling["max_tokens"],
+            temperature=sampling["temperature"],
+            top_p=sampling["top_p"]
         ):
             if http_request is not None and await http_request.is_disconnected():
                 return

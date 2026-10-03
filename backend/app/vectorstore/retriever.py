@@ -7,6 +7,8 @@ Handles score thresholds, document filtering, and context construction.
 import logging
 from typing import List
 
+import numpy as np
+
 from .config import VectorStoreConfig
 from .index_builder import FAISSIndexBuilder
 from .store import VectorMetadataStore
@@ -52,9 +54,10 @@ class Retriever:
         )
         query_vector = query_vector.reshape(1, -1)
 
-        # Step 2: Search FAISS
+        # Step 2: Search FAISS — over-fetch candidates so the score filter,
+        # dedup, and MMR rerank have something left to keep
         top_k = query.top_k or self.config.top_k_default
-        distances, indices = self.index.search(query_vector, top_k)
+        distances, indices = self.index.search(query_vector, top_k * 3)
 
         distances = distances[0]  # First (only) query
         indices = indices[0]
@@ -82,8 +85,10 @@ class Retriever:
             else:
                 score = 1.0 / (1.0 + float(dist))  # Convert L2 to similarity
 
-            # Apply threshold
-            if query.score_threshold > 0 and score < query.score_threshold:
+            # Apply threshold: explicit query threshold, else the config floor
+            # (score 0.0 must not mean "accept everything")
+            threshold = query.score_threshold or self.config.min_score
+            if threshold > 0 and score < threshold:
                 continue
 
             # Get chunk data
@@ -112,11 +117,59 @@ class Retriever:
         # Sort by score descending
         results.sort(key=lambda r: r.score, reverse=True)
 
+        # MMR rerank (maximal marginal relevance): keep the top_k most
+        # relevant AND least-redundant results. Greedy, cosine space
+        # (vectors are L2-normalized), candidate vectors via FAISS
+        # reconstruct — no extra deps.
+        results = self._mmr_rerank(results, top_k, query_vector[0])
+
         logger.info(
             f"Search returned {len(results)} results "
             f"for query: '{query.query_text[:50]}...'"
         )
         return results
+
+    def _mmr_rerank(self, results: List[SearchResult],
+                    top_k: int, query_vec: "np.ndarray") -> List[SearchResult]:
+        """Greedy MMR: iteratively pick the result maximizing
+        λ·sim(q, r) − (1−λ)·max sim(r, already-picked)."""
+        if len(results) <= 1:
+            return results
+
+        try:
+            vecs = np.stack([
+                self.index.reconstruct(int(self._vector_index_of(r)))
+                for r in results
+            ])
+        except Exception:
+            # reconstruct unavailable (IVFPQ etc.) → skip rerank, keep ranking
+            return results[:top_k]
+
+        lam = self.config.mmr_lambda
+        q = query_vec / (np.linalg.norm(query_vec) or 1.0)
+        picked: List[int] = []
+        candidates = list(range(len(results)))
+        while candidates and len(picked) < top_k:
+            best, best_val = None, -1e9
+            for c in candidates:
+                relevance = float(np.dot(q, vecs[c]))
+                redundancy = (
+                    max(float(np.dot(vecs[c], vecs[p])) for p in picked)
+                    if picked else 0.0
+                )
+                val = lam * relevance - (1 - lam) * redundancy
+                if val > best_val:
+                    best, best_val = c, val
+            picked.append(best)
+            candidates.remove(best)
+        return [results[i] for i in picked]
+
+    def _vector_index_of(self, result: SearchResult) -> int:
+        """FAISS position of a result via its embedding record."""
+        rec = self.metadata_store.get_embedding_by_chunk_id(result.chunk_id)
+        if rec is None:
+            raise KeyError(result.chunk_id)
+        return rec["vector_index"]
 
     def build_rag_context(self, query: SearchQuery,
                           max_tokens: int = 2048) -> RAGContext:
@@ -137,23 +190,22 @@ class Retriever:
                 continue
             seen_chunks.add(result.chunk_id)
 
-            # Estimate tokens (rough: 4 chars per token)
-            chunk_tokens = len(result.content) // 4
+            chunk_tokens = max(1, len(result.content) // 3)
 
             if total_tokens + chunk_tokens > max_tokens:
                 # Check if we can fit a partial chunk
                 remaining_tokens = max_tokens - total_tokens
                 if remaining_tokens > 50:  # Worth including partial
                     doc_name = result.metadata.get("filename", result.document_id)
-                    truncated = result.content[:remaining_tokens * 4]
-                    formatted_chunk = f"[Source: {doc_name}]\n{truncated}"
+                    truncated = result.content[:remaining_tokens * 3]
+                    formatted_chunk = f"[Source: {doc_name}#{result.chunk_index}]\n{truncated}"
                     context_parts.append(formatted_chunk)
                     total_tokens += remaining_tokens
                     filtered_results.append(result)
                 break
 
             doc_name = result.metadata.get("filename", result.document_id)
-            formatted_chunk = f"[Source: {doc_name}]\n{result.content}"
+            formatted_chunk = f"[Source: {doc_name}#{result.chunk_index}]\n{result.content}"
             context_parts.append(formatted_chunk)
             total_tokens += chunk_tokens
             filtered_results.append(result)

@@ -19,17 +19,32 @@ class DocumentChunker:
     Respects sentence boundaries when possible.
     """
 
+    # Common abbreviations whose trailing dot must not end a sentence
+    _ABBREVIATIONS = (
+        "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs",
+        "etc", "inc", "ltd", "co", "corp", "fig", "eq", "no", "vol",
+        "ch", "pp", "al", "approx", "dept", "univ", "e.g", "i.e",
+    )
+    _PROTECT_CHAR = "\x01"  # sentinel for a protected period
+    _CODE_FENCE = re.compile(r"```.*?(?:```|\Z)", re.DOTALL)
+
     def __init__(self, chunk_size: int = 512,
                  chunk_overlap: int = 64,
                  max_chunks: int = 10000):
         self.chunk_size = chunk_size
-        self.chunk_overlap = chunk_overlap
+        self.chunk_overlap = chunk_overlap  # tokens; chars via len/3 estimate
         self.max_chunks = max_chunks
 
-        # Sentence boundary pattern
+        # Sentence boundary pattern (period already end-of-sentence — the
+        # splitter masks abbreviations/decimals/initials before splitting)
         self._sentence_pattern = re.compile(
-            r'(?<=[.!?])\s+(?=[A-Z])'
+            r'(?<=[.!?])[\'\")\]]*\s+(?=[A-Z"\'(0-9])'
         )
+
+    @property
+    def _overlap_chars(self) -> int:
+        """Token-based overlap converted to chars via the len/3 estimate."""
+        return self.chunk_overlap * 3
 
     def chunk_text(self, text: str,
                    document_id: str) -> List[TextChunk]:
@@ -44,8 +59,18 @@ class DocumentChunker:
         if not text or not text.strip():
             return []
 
-        # Clean text
-        text = self._clean_text(text)
+        # Clean text — fenced code blocks bypass prose cleaning so their
+        # newlines survive (they are split atomically later)
+        parts = []
+        pos = 0
+        for m in self._CODE_FENCE.finditer(text):
+            if m.start() > pos:
+                parts.append(self._clean_text(text[pos:m.start()]))
+            parts.append(self._clean_code(m.group(0)))
+            pos = m.end()
+        if pos < len(text):
+            parts.append(self._clean_text(text[pos:]))
+        text = "\n".join(p for p in parts if p)
 
         # Split into sentences first
         sentences = self._split_sentences(text)
@@ -66,18 +91,60 @@ class DocumentChunker:
         return chunks
 
     def _clean_text(self, text: str) -> str:
-        """Clean and normalize text."""
-        # Normalize whitespace
-        text = re.sub(r'\s+', ' ', text)
-        # Remove null bytes
+        """Clean prose while preserving paragraph structure.
+        Never called on code blocks — see _clean_code."""
         text = text.replace('\x00', '')
+        text = re.sub(r'\r\n?', '\n', text)
+        # PDF hyphenated line breaks: "exam-\nple" -> "example"
+        text = re.sub(r'(\w)-\n(\w)', r'\1\2', text)
+        # Collapse horizontal whitespace only
+        text = re.sub(r'[ \t]+', ' ', text)
+        # PDF line breaks: single newline inside a paragraph -> space
+        text = re.sub(r'(?<!\n)\n(?!\n)', ' ', text)
+        # 3+ newlines -> paragraph break
+        text = re.sub(r'\n{3,}', '\n\n', text)
         return text.strip()
 
+    def _clean_code(self, text: str) -> str:
+        """Clean code blocks minimally — keep newlines intact."""
+        return text.replace('\x00', '').replace('\r\n', '\n').replace('\r', '\n')
+
+    def _protect_periods(self, text: str) -> str:
+        """Mask periods that must not be treated as sentence ends:
+        decimals (3.14), initials (J. Smith), known abbreviations (Dr., e.g.)."""
+        text = re.sub(r'(?<=\d)\.(?=\d)', self._PROTECT_CHAR, text)
+        text = re.sub(r'\b([A-Z])\.(?=\s+[A-Z])', r'\1' + self._PROTECT_CHAR, text)
+        for abbr in self._ABBREVIATIONS:
+            text = re.sub(
+                r'\b' + re.escape(abbr) + r'\.(?=\s)',
+                lambda m: m.group(0)[:-1] + self._PROTECT_CHAR,
+                text, flags=re.IGNORECASE,
+            )
+        return text
+
+    def _split_prose(self, text: str) -> List[str]:
+        masked = self._protect_periods(text)
+        parts = self._sentence_pattern.split(masked)
+        return [
+            self._unprotect(p).strip()
+            for p in parts if p.strip()
+        ]
+
+    def _unprotect(self, text: str) -> str:
+        return text.replace(self._PROTECT_CHAR, '.')
+
     def _split_sentences(self, text: str) -> List[str]:
-        """Split text into sentences."""
-        sentences = self._sentence_pattern.split(text)
-        # Filter empty
-        return [s.strip() for s in sentences if s.strip()]
+        """Split into sentences; fenced code blocks are atomic."""
+        sentences: List[str] = []
+        pos = 0
+        for m in self._CODE_FENCE.finditer(text):
+            if m.start() > pos:
+                sentences.extend(self._split_prose(text[pos:m.start()]))
+            sentences.append(m.group(0).strip())
+            pos = m.end()
+        if pos < len(text):
+            sentences.extend(self._split_prose(text[pos:]))
+        return [s for s in sentences if s]
 
     def _build_chunks(self, sentences: List[str],
                       document_id: str,
@@ -153,11 +220,12 @@ class DocumentChunker:
                     ))
                     chunk_index += 1
 
-                    # Overlap: keep last few sentences
+                    # Overlap: keep trailing sentences up to the token budget
+                    # (chunk_overlap tokens ≈ chunk_overlap*3 chars)
                     overlap_chars = 0
                     overlap_sentences = []
                     for s in reversed(current_chunk):
-                        if overlap_chars + len(s) <= self.chunk_overlap:
+                        if overlap_chars + len(s) <= self._overlap_chars:
                             overlap_sentences.insert(0, s)
                             overlap_chars += len(s) + 1
                         else:
@@ -220,8 +288,8 @@ class DocumentChunker:
                 ))
                 idx += 1
 
-            # Move with overlap
-            pos = max(pos + 1, end - self.chunk_overlap)
+            # Move with overlap (token budget → chars via len/3)
+            pos = max(pos + 1, end - self._overlap_chars)
 
         return chunks
 
@@ -232,8 +300,9 @@ class DocumentChunker:
 
     def _estimate_tokens(self, text: str) -> int:
         """
-        Rough token estimation.
-        Average English: ~4 chars per token.
-        Not perfect. Good enough for budget estimation.
+        Token estimate: len/3 (safe margin over the optimistic len/4 —
+        undercounting busts the context budget). No tokenizer loaded at
+        chunk time; swap for a real count if the embedder's tokenizer is
+        ever available here.
         """
-        return max(1, len(text) // 4)
+        return max(1, len(text) // 3)

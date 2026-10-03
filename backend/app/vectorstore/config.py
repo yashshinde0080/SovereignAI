@@ -20,8 +20,10 @@ class VectorStoreConfig:
     max_chunks_per_document: int = 10000
     nprobe: int = 10
     top_k_default: int = 5
+    min_score: float = 0.15  # retrieval floor when query passes 0.0 (normalized cosine)
+    mmr_lambda: float = 0.7  # 1.0 = pure relevance, 0.0 = pure diversity
     use_gpu: bool = False
-    index_type: str = "IVFFlat"  # "Flat", "IVFFlat", "IVFPQ"
+    index_type: str = "Flat"  # "Flat", "IVFFlat", "IVFPQ" — Flat exact default: correct at any corpus size, zero training edge cases
     nlist: int = 100
     normalize_embeddings: bool = True
 

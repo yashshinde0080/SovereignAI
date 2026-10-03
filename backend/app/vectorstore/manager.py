@@ -43,8 +43,8 @@ class VectorStoreManager:
         vs.shutdown()
     """
 
-    def __init__(self):
-        self.config = VectorStoreConfig()
+    def __init__(self, config: Optional[VectorStoreConfig] = None):
+        self.config = config or VectorStoreConfig()
         self.chunker = DocumentChunker(
             chunk_size=self.config.chunk_size,
             chunk_overlap=self.config.chunk_overlap,
@@ -141,6 +141,27 @@ class VectorStoreManager:
             logger.warning(f"No chunks generated for {filename}")
             return document_id
 
+        # Step 1b: content-hash dedup — identical chunks already indexed
+        # (any document) are dropped before embedding.
+        hashes = [self.metadata_store.content_hash(c.content) for c in chunks]
+        existing = self.metadata_store.get_existing_hashes(hashes)
+        if existing:
+            chunks, hashes = zip(*[
+                (c, h) for c, h in zip(chunks, hashes) if h not in existing
+            ])
+            chunks, hashes = list(chunks), list(hashes)
+            logger.info(
+                f"{filename}: skipped {len(existing)} duplicate chunks"
+            )
+        if not chunks:
+            logger.info(f"{filename}: all chunks duplicates; nothing indexed")
+            return document_id
+
+        # Renumber sequentially after dedup so chunk_ids/indexes stay dense
+        for i, c in enumerate(chunks):
+            c.chunk_id = self.chunker._generate_chunk_id(document_id, i)
+            c.chunk_index = i
+
         # Add filename to chunk metadata
         if metadata:
             for chunk in chunks:
@@ -151,7 +172,7 @@ class VectorStoreManager:
                 chunk.metadata["filename"] = filename
 
         # Step 2: Store chunks in metadata DB
-        self.metadata_store.insert_chunks_batch(chunks)
+        self.metadata_store.insert_chunks_batch(chunks, hashes=hashes)
 
         # Step 3: Generate embeddings
         texts = [chunk.content for chunk in chunks]
@@ -202,6 +223,10 @@ class VectorStoreManager:
 
         # Step 6: Save index to disk
         self.index_builder.save()
+
+        # Index-time only: free the embedder so it never competes with the
+        # LLM for RAM (8GB target). Reloaded on demand at next ingest/query.
+        self.embedding_pipeline.unload_model()
 
         # Save state
         self.metadata_store.save_state(
@@ -336,6 +361,9 @@ class VectorStoreManager:
 
         # Save
         self.index_builder.save()
+
+        # Index-time only: free the embedder (same rationale as ingest)
+        self.embedding_pipeline.unload_model()
 
         logger.info(
             f"Index rebuilt: {self.index_builder.total_vectors} vectors"

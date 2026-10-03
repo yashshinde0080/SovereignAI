@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Save } from "lucide-react";
+import { useSettingsStore } from "@/store/settings";
+import { persistTheme, applyTheme } from "@/lib/themeBoot";
 
 interface GeneralSettingsProps {
   data: Record<string, unknown>;
@@ -31,6 +33,9 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
     startup_model: "",
     default_mode: "auto",
     max_context_length: 4096,
+    temperature: 0.7,
+    top_p: 0.9,
+    max_tokens: 512,
     stream_responses: true,
     show_token_speed: true,
     font_size: 14,
@@ -50,10 +55,77 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
   const update = (key: string, value: unknown) => {
     setForm((prev) => ({ ...prev, [key]: value }) as typeof form);
+    // Theme applies instantly + persists; everything else waits for Save.
+    if (key === "theme") {
+      const v = String(value);
+      window.localStorage.setItem("sovereign.theme", v);
+      document.documentElement.dataset.themeSetting = v;
+      applyTheme(v);
+      void persistTheme(v);
+    }
   };
+
+  // Global sampling defaults shown in the Generation group (temperature/top_p/max_tokens)
+  const temperature = Number(form.temperature ?? 0.7);
+  const topP = Number(form.top_p ?? 0.9);
+  const maxTokens = Number(form.max_tokens ?? 512);
 
   return (
     <div className="space-y-6">
+      {/* Generation — saved defaults for every chat request (request overrides win) */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+          Generation
+        </h3>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm text-slate-300">Temperature</Label>
+            <p className="text-xs text-slate-500">{temperature.toFixed(1)} — lower is focused, higher is creative</p>
+          </div>
+          <Slider
+            className="w-[160px]"
+            min={0}
+            max={2}
+            step={0.1}
+            value={[temperature]}
+            onValueChange={(v) => update("temperature", v[0])}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm text-slate-300">Top P</Label>
+            <p className="text-xs text-slate-500">{topP.toFixed(2)}</p>
+          </div>
+          <Slider
+            className="w-[160px]"
+            min={0}
+            max={1}
+            step={0.05}
+            value={[topP]}
+            onValueChange={(v) => update("top_p", v[0])}
+          />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <Label className="text-sm text-slate-300">Max Tokens</Label>
+            <p className="text-xs text-slate-500">Default reply length cap</p>
+          </div>
+          <Input
+            type="number"
+            className="w-[160px] bg-slate-900 border-slate-700"
+            min={1}
+            max={32768}
+            value={maxTokens}
+            onChange={(e) =>
+              update("max_tokens", parseInt(e.target.value) || 512)
+            }
+          />
+        </div>
+      </div>
+
       {/* Appearance */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
@@ -235,7 +307,10 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
       </div>
 
       <Button
-        onClick={() => onSave(form)}
+        onClick={() => {
+          onSave(form);
+          void useSettingsStore.getState().updateSection("general", form);
+        }}
         className="w-full bg-blue-600 hover:bg-blue-700"
       >
         <Save className="h-4 w-4 mr-2" />

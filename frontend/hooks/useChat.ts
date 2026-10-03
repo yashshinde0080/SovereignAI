@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Message, RagSource } from '@/types';
 import { errMsg } from '@/lib/utils';
+import { useSettingsStore } from '@/store/settings';
+import { filterByRetention, isHistoryEnabled, isSessionOnly } from '@/lib/chatRetention';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 const SESSION_KEY = 'sovereignai.chat.sessionId';
@@ -43,6 +45,18 @@ function getSessionId(): string {
 
 const STORAGE_KEY = `sovereignai.chat.messages.${getSessionId()}`;
 
+function storage(): Storage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    // clear_on_exit (and session_only retention) → sessionStorage so data
+    // dies with the tab natively; otherwise localStorage.
+    const dc = useSettingsStore.getState().settings?.data_controls as Record<string, unknown> | undefined;
+    return isSessionOnly(dc) ? window.sessionStorage : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 function sanitizeMessages(parsed: unknown): Message[] {
   if (!Array.isArray(parsed)) return [];
   return parsed
@@ -59,9 +73,11 @@ function sanitizeMessages(parsed: unknown): Message[] {
 function loadMessages(): Message[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const dc = useSettingsStore.getState().settings?.data_controls as Record<string, unknown> | undefined;
+    if (!isHistoryEnabled(dc)) return []; // memory-only mode
+    const raw = storage()?.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return sanitizeMessages(JSON.parse(raw));
+    return filterByRetention(sanitizeMessages(JSON.parse(raw)), dc?.data_retention);
   } catch {
     return [];
   }
@@ -75,6 +91,12 @@ export function useChat() {
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Load settings once on mount so sampling defaults + send_on_enter are live.
+  useEffect(() => {
+    const s = useSettingsStore.getState();
+    if (!s.settings && !s.loading) void s.load();
+  }, []);
 
   useEffect(() => {
     const restored = loadMessages();
@@ -99,10 +121,16 @@ export function useChat() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || isLoading) return;
+    const dc = useSettingsStore.getState().settings?.data_controls as Record<string, unknown> | undefined;
+    if (!isHistoryEnabled(dc)) return; // save off → don't persist
     try {
-      window.localStorage.setItem(
+      storage()?.setItem(
         STORAGE_KEY,
-        JSON.stringify(messages.filter((m) => m.content.trim()))
+        JSON.stringify(
+          messages
+            .filter((m) => m.content.trim())
+            .map((m) => ({ ...m, ts: m.ts ?? Date.now() }))
+        )
       );
     } catch {
       // non-fatal
@@ -112,6 +140,17 @@ export function useChat() {
   const runCompletion = useCallback(async (messagesToSend: Message[]) => {
     setMessages(messagesToSend);
     setIsLoading(true);
+
+    // Saved general settings are the defaults; backend re-resolves request > saved > default.
+    const general = (useSettingsStore.getState().settings?.general ?? {}) as Record<string, unknown>;
+    const savedMaxTokens = Number(general.max_tokens);
+    const savedTemp = Number(general.temperature);
+    const savedTopP = Number(general.top_p);
+    const sampling = {
+      ...(Number.isFinite(savedMaxTokens) && savedMaxTokens > 0 ? { max_tokens: savedMaxTokens } : {}),
+      ...(Number.isFinite(savedTemp) ? { temperature: savedTemp } : {}),
+      ...(Number.isFinite(savedTopP) && savedTopP > 0 && savedTopP <= 1 ? { top_p: savedTopP } : {}),
+    };
 
     let flushRaf: number | null = null;
     const controller = new AbortController();
@@ -126,7 +165,7 @@ export function useChat() {
           messages: messagesToSend,
           stream: true,
           use_rag: true,
-          max_tokens: 512,
+          ...sampling,
           model: messagesToSend[0]?.model,
         }),
       });

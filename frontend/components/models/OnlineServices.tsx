@@ -97,12 +97,12 @@ function RagQuickPanel() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex items-center gap-2">
-          <input type="file" id="online-rag-upload" className="hidden" accept=".txt,.pdf" onChange={handleUpload} />
+          <input type="file" id="online-rag-upload" className="hidden" accept=".txt,.md,.docx" onChange={handleUpload} />
           <label htmlFor="online-rag-upload" className="flex-1">
             <Button asChild variant="outline" className="w-full" disabled={uploading}>
               <span>
                 {uploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                {uploading ? "Uploading..." : "Upload .txt / .pdf"}
+                {uploading ? "Uploading..." : "Upload .txt / .md / .docx"}
               </span>
             </Button>
           </label>

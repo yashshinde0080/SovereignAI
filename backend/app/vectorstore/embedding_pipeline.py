@@ -5,6 +5,7 @@ Handles batching. Handles memory.
 """
 
 import logging
+import os
 import numpy as np
 from typing import List
 
@@ -27,8 +28,13 @@ class EmbeddingPipeline:
 
     def load_model(self):
         """
-        Load embedding model.
-        Lazy loading - only when first needed.
+        Load embedding model. Offline + CPU-only.
+
+        Offline: env flags + local_files_only — SentenceTransformer must
+        never touch the network. Model must be pre-cached in HF_HOME
+        (workspace/hf_cache on the USB); otherwise this raises and the
+        caller surfaces a clear error. CPU-only so embedding never contends
+        with LayerStream for CUDA VRAM (8GB target).
         """
         if self._model is not None:
             return
@@ -37,12 +43,19 @@ class EmbeddingPipeline:
             from sentence_transformers import SentenceTransformer
             from app.config import settings
 
+            # Offline guarantee — set before any HF load. Idempotent;
+            # launch scripts can also export these.
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
             logger.info(
                 f"Loading embedding model: {self.config.embedding_model}"
             )
             self._model = SentenceTransformer(
                 self.config.embedding_model,
-                cache_folder=str(settings.models_dir)
+                cache_folder=str(settings.models_dir),
+                device="cpu",
+                local_files_only=True,
             )
             # Verify dimension
             test_embedding = self._model.encode(["test"])

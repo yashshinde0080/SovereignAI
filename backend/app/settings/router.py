@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from .schemas import (
     GeneralSettings,
     AgentConfig,
@@ -17,6 +17,19 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 service = SettingsService()
 
 
+async def _broadcast_settings_changed(section: str):
+    """Poke existing /ws/metrics clients so the UI refetches settings.
+
+    Reuses the metrics socket — no second WebSocket endpoint.
+    """
+    try:
+        from app.websocket.metrics import clients, broadcast_metrics
+        await broadcast_metrics({"type": "settings_changed", "section": section})
+        _ = clients  # imported for parity; broadcast_metrics owns delivery
+    except Exception:
+        pass  # settings save must not fail because no UI is listening
+
+
 # ──────────────────────────────────────────────
 # FULL SETTINGS
 # ──────────────────────────────────────────────
@@ -28,9 +41,11 @@ async def get_all_settings():
 
 
 @router.post("/reset", response_model=SettingsUpdateResponse)
-async def reset_all_settings():
+async def reset_all_settings(request: Request):
     """Reset all settings to defaults."""
     success = service.reset_all_settings()
+    if success:
+        await _broadcast_settings_changed("all")
     return SettingsUpdateResponse(
         success=success,
         message="All settings reset to defaults" if success else "Reset failed",
@@ -48,11 +63,38 @@ async def get_general_settings():
 
 
 @router.put("/general", response_model=SettingsUpdateResponse)
-async def update_general_settings(settings: GeneralSettings):
+async def update_general_settings(request: Request, settings: GeneralSettings):
     success = service.update_general(settings)
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to save general settings")
+
+    # Engine-affecting: if the configured startup model/mode now differs from
+    # what's loaded, reload. Refuse while a generation is in flight.
+    if request.app.state.active_model is not None:
+        target = settings.startup_model
+        if target and (
+            target != request.app.state.active_model
+            or settings.default_mode != request.app.state.active_mode
+        ):
+            if getattr(request.app.state.active_engine, "is_generating", False):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Model reload blocked: generation in progress. Try again when idle.",
+                )
+            try:
+                await request.app.state.model_manager.load_model(
+                    target, mode=settings.default_mode
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Settings saved but startup model reload failed: {e}",
+                )
+
+    await _broadcast_settings_changed("general")
     return SettingsUpdateResponse(
-        success=success,
-        message="General settings updated" if success else "Update failed",
+        success=True,
+        message="General settings updated",
         updated_section="general"
     )
 
@@ -69,6 +111,8 @@ async def get_personalization_settings():
 @router.put("/personalization", response_model=SettingsUpdateResponse)
 async def update_personalization_settings(settings: PersonalizationSettings):
     success = service.update_personalization(settings)
+    if success:
+        await _broadcast_settings_changed("personalization")
     return SettingsUpdateResponse(
         success=success,
         message="Personalization settings updated" if success else "Update failed",
@@ -95,6 +139,8 @@ async def get_data_controls():
 @router.put("/data-controls", response_model=SettingsUpdateResponse)
 async def update_data_controls(settings: DataControlsSettings):
     success = service.update_data_controls(settings)
+    if success:
+        await _broadcast_settings_changed("data_controls")
     return SettingsUpdateResponse(
         success=success,
         message="Data controls updated" if success else "Update failed",
@@ -115,11 +161,13 @@ async def get_security_settings():
 
 
 @router.put("/security", response_model=SettingsUpdateResponse)
-async def update_security_settings(settings: SecuritySettings):
+async def update_security_settings(request: Request, settings: SecuritySettings):
     success = service.update_security(settings)
+    if success:
+        await _broadcast_settings_changed("security")
     return SettingsUpdateResponse(
         success=success,
-        message="Security settings updated" if success else "Update failed",
+        message="Security settings updated (port/binding changes need a server restart)" if success else "Update failed",
         updated_section="security"
     )
 

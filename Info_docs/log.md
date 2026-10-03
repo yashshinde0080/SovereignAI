@@ -144,5 +144,3 @@
 ## [2026-08-26] docs | Documentation updates + research references
 - Documentation updates: added research references to algorithms-and-formulas.md and research-results.md; updated log.md with new entry; verified 112 tests passing
 
-
-

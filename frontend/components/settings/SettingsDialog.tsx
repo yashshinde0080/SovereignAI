@@ -33,6 +33,7 @@ import { ParentalControlsSettings } from "./ParentalControlsSettings";
 import { CloudProvidersSettings } from "./CloudProvidersSettings";
 import { useToast } from "@/components/ui/use-toast";
 import { api } from "@/lib/api";
+import { useSettingsStore } from "@/store/settings";
 import type { Agent, SettingsMap } from "@/types";
 
 type Section =
@@ -101,6 +102,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       const result = await api.updateSettingsSection(section, data);
 
       setSettings((prev) => ({ ...prev, [section]: data }));
+      // Mirror into the global settings store so live consumers (chat storage
+      // mode, retention, send_on_enter, sampling defaults) see the change.
+      void useSettingsStore.getState().updateSection(section, data);
 
       toast({
         title: "Saved",
@@ -119,6 +123,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     try {
       await api.resetSettings();
       await fetchAllSettings();
+      void useSettingsStore.getState().resetAll();
       toast({ title: "Reset", description: "All settings restored to defaults" });
     } catch {
       toast({

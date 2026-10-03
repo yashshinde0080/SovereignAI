@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
 import { Send, X, PencilLine, Plus, Loader2, UploadCloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/store/settings';
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB — matches the Documents page
 const VALID_TYPES = ['.txt', '.pdf'];
@@ -98,8 +99,16 @@ export function PromptInput({ onSend, disabled, externalValue, editing, onCancel
     if (file) void uploadFile(file);
   };
 
+  // send_on_enter is a real setting: off = Enter inserts a newline,
+  // Ctrl/Cmd+Enter sends. On = Enter sends, Shift+Enter newline (default).
+  const sendOnEnter = useSettingsStore((s) => (s.settings?.general as Record<string, unknown> | undefined)?.send_on_enter !== false);
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (sendOnEnter) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSubmit();
     }

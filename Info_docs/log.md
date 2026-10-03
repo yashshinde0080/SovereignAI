@@ -1,3 +1,13 @@
+## [2026-10-03] feat+refactor | Settings overhaul: generation defaults, theme boot, send_on_enter, chat retention, sampling fallback, live reload
+- Backend settings: `_resolve_sampling()` — request params > saved general > schema defaults; `default_mode` validated as Literal[auto,fullram,layerstream,cloud]; corrupt JSON blobs degrade to defaults; settings router broadcasts changes via existing `/ws/metrics` (no new endpoint); `update_general` triggers model reload when startup_model/mode differ, blocked 409 if generation in flight
+- Backend settings: `SettingsService.get_section_safe()` + `_safe()` guard for corrupt DB; `SettingsDatabase.get_section()` catches ValueError/TypeError on bad JSON
+- Frontend settings: new `useSettingsStore` (Zustand) — optimistic updates, debounced saves (400ms), reset + flush pending; `GeneralSettings` gains temperature/top_p/max_tokens sliders, theme live-apply + persist, send_on_enter toggle
+- Chat: retention logic — `isHistoryEnabled`/`isSessionOnly`/`filterByRetention`; storage backend switches `localStorage`↔`sessionStorage` based on `clear_on_exit`; messages get `ts` epoch stamp for expiry; sampling defaults pulled from saved general settings (temperature 0.7, top_p 0.9, max_tokens 512)
+- Theme: `bootTheme` inline script in `layout.tsx` reads localStorage before first paint — no flash, no layout jump; backend reconcile on load
+- Tests: `test_settings_behavior.py` (235 lines) — sampling precedence, schema bounds, persistence across restart, corrupt JSON fallback, reload guard, broadcast safety
+- Files: 13 files changed, ~620 insertions(+), ~30 deletions(-) across backend chat.py, settings/, frontend store/settings.ts, hooks/useChat.ts, components/settings/, types, lib/themeBoot.ts
+- Commits: 44cf352, 9c14c95, 35263c8
+
 ## [2026-10-02] fix+refactor | RAG patch: 503 on missing vectorstore, single embed+search pass, 404/500 distinction, .md/.docx upload
 - Backend rag.py: added `_ensure_vector_store()` helper returning 503 when store not initialized (was AttributeError crash); `/query` now uses `build_context()` once (was: `search()` + `build_context()` — two embed+FAISS passes); `/rebuild` runs in worker thread via `asyncio.to_thread` (was inline blocking); `/documents/{doc_id}` DELETE now returns 404 for unknown doc, 500 for rebuild failure (was all 404)
 - Backend vectorstore/store.py: `delete_document_data()` raises `ValueError` if document doesn't exist (rowcount check) — callers distinguish 404 from real failure

@@ -127,15 +127,23 @@ class SettingsDatabase:
                    DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP""",
                 (section, json_data)
             )
-            conn.execute(
-                "INSERT INTO audit_log (action, section, details) VALUES (?, ?, ?)",
-                ("update", section, json_data)
-            )
+            self.log_audit("update", section, json_data)
             conn.commit()
             return True
         except Exception:
             conn.rollback()
             return False
+
+    def log_audit(self, action: str, section: str, details: str) -> None:
+        """Append one audit row. Best-effort: audit failures never block saves."""
+        try:
+            self._get_connection().execute(
+                "INSERT INTO audit_log (action, section, details) VALUES (?, ?, ?)",
+                (action, section, details),
+            )
+            self._get_connection().commit()
+        except Exception:
+            pass
 
     def get_all_settings(self) -> dict:
         conn = self._get_connection()

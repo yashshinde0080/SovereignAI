@@ -53,6 +53,15 @@ class SettingsService:
         self._security_cache = None
         return self.db.reset_all()
 
+    def log_audit(self, action: str, section: str, details: str) -> None:
+        """Append to the audit log, gated by settings.audit_logging.
+
+        `update` events always land (they're the change record itself); other
+        actions (chat_request, unlock_attempt, plugin exec) honor the switch.
+        """
+        if action != "update" and not self.get_security().get("audit_logging", True):
+            return
+        self.db.log_audit(action, section, details)
     # ── General ──
 
     def get_general(self) -> dict:

@@ -52,9 +52,7 @@ export function DataControlsSettings({
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
           Data Storage
-        </h3>
-
-        {[
+        </h3>        {[
           {
             key: "save_chat_history",
             label: "Save chat history",
@@ -63,12 +61,12 @@ export function DataControlsSettings({
           {
             key: "encrypt_local_data",
             label: "Encrypt local data",
-            desc: "AES-256 encryption for stored data",
+            desc: "AES-GCM encrypt chat history in this browser (key stays in the browser too).",
           },
           {
             key: "auto_delete_sessions",
             label: "Auto-delete old sessions",
-            desc: "Remove sessions based on retention policy",
+            desc: "Server-side sweep of saved session snapshots per retention policy",
           },
           {
             key: "clear_on_exit",

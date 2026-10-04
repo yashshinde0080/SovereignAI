@@ -15,7 +15,12 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Save } from "lucide-react";
 import { useSettingsStore } from "@/store/settings";
-import { persistTheme, applyTheme } from "@/lib/themeBoot";
+import {
+  persistTheme,
+  applyTheme,
+  applyFontSize,
+  applyLanguage,
+} from "@/lib/themeBoot";
 
 interface GeneralSettingsProps {
   data: Record<string, unknown>;
@@ -55,13 +60,17 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
   const update = (key: string, value: unknown) => {
     setForm((prev) => ({ ...prev, [key]: value }) as typeof form);
-    // Theme applies instantly + persists; everything else waits for Save.
+    // Visual settings apply instantly + persist; everything else waits for Save.
     if (key === "theme") {
       const v = String(value);
       window.localStorage.setItem("sovereign.theme", v);
       document.documentElement.dataset.themeSetting = v;
       applyTheme(v);
       void persistTheme(v);
+    } else if (key === "font_size") {
+      applyFontSize(value);
+    } else if (key === "language") {
+      applyLanguage(value);
     }
   };
 

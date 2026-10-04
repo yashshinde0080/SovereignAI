@@ -16,6 +16,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { useChat } from '@/hooks/useChat';
+import { useSettingsStore } from '@/store/settings';
 import { useStore } from '@/store';
 import { api } from '@/lib/api';
 import { toast } from '@/components/ui/use-toast';
@@ -51,6 +52,7 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
   const {
     messages,
     isLoading,
+    tokenSpeed,
     sendMessage,
     editAndResend,
     regenerate,
@@ -58,6 +60,8 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
     clearMessages,
     exportChat,
   } = useChat();
+  const general = useSettingsStore((s) => s.settings?.general) as Record<string, unknown> | undefined;
+  const showTokenSpeed = general?.show_token_speed !== false;
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [docs, setDocs] = useState<RAGDoc[]>([]);
   const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -169,9 +173,12 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
   }, [regenerate]);
 
   const handleExport = () => {
+    const fmt = String(
+      (useSettingsStore.getState().settings?.data_controls as Record<string, unknown> | undefined)?.export_format || 'markdown'
+    );
     toast({
       title: 'Exporting conversation',
-      description: 'Your chat is being saved as a markdown file.',
+      description: `Saving chat as ${fmt.toUpperCase()}.`,
     });
     exportChat();
   };
@@ -236,6 +243,8 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
           onEditMessage={handleEditMessage}
           onRegenerate={handleRegenerate}
           modelName={displayModel}
+          tokenSpeed={tokenSpeed}
+          showTokenSpeed={showTokenSpeed}
         />
       </div>
 

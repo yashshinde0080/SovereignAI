@@ -4,11 +4,15 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useStore } from '@/store';
 import { useMetrics } from '@/hooks/useMetrics';
+import { useSettingsStore } from '@/store/settings';
 import { Circle, Cpu, MemoryStick } from 'lucide-react';
 
 export function TopBar() {
   const { systemStatus } = useStore();
   const { metrics, connected } = useMetrics();
+  // show_status_bar=false hides the live metrics strip (model row stays).
+  const showStatusBar =
+    (useSettingsStore((s) => s.settings?.general) as Record<string, unknown> | undefined)?.show_status_bar !== false;
 
   return (
     <header className="h-14 border-b bg-card px-6 flex items-center justify-between">
@@ -34,7 +38,7 @@ export function TopBar() {
       </div>
 
       {/* Metrics */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4" hidden={!showStatusBar}>
         <div className="flex items-center gap-2 text-sm">
           <Cpu className="h-4 w-4 text-muted-foreground" />
           <span className={(metrics?.cpu_percent ?? 0) > 80 ? 'text-red-500' : ''}>

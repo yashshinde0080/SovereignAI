@@ -14,9 +14,20 @@ interface ChatWindowProps {
   onEditMessage?: (index: number) => void;
   onRegenerate?: () => void;
   modelName?: string;
+  tokenSpeed?: number | null;
+  showTokenSpeed?: boolean;
 }
 
-export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, onRegenerate, modelName }: ChatWindowProps) {
+export function ChatWindow({
+  messages,
+  isLoading,
+  editingIndex,
+  onEditMessage,
+  onRegenerate,
+  modelName,
+  tokenSpeed,
+  showTokenSpeed,
+}: ChatWindowProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const lastScrollTop = useRef(0);
@@ -147,6 +158,8 @@ export function ChatWindow({ messages, isLoading, editingIndex, onEditMessage, o
             editingIndex={editingIndex}
             isLoading={isLoading}
             modelName={modelName}
+            tokenSpeed={tokenSpeed}
+            showTokenSpeed={showTokenSpeed}
           />
           {isLoading && (
             <div className="flex items-center gap-3 text-muted-foreground mt-3 mb-6">

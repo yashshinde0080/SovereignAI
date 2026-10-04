@@ -206,7 +206,7 @@ export function useChat() {
   }, [messages, isLoading]);
 
   const runCompletion = useCallback(async (messagesToSend: Message[]) => {
-    const { general, parental, dc } = settingsSnap();
+    const { general, parental } = settingsSnap();
 
     // Parental max_session_duration_minutes: 0 = unlimited.
     if (isSessionExpired(parental, sessionStartRef.current)) {

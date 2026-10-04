@@ -33,13 +33,27 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   // require_password → lock the app until verified (per tab, sessionStorage).
+  // ponytail: async mimic — setState lives in the async callback, matching the
+  // react-hooks/set-state-in-effect rule the same way the async settings load
+  // in useChat does.
   useEffect(() => {
-    if (security?.require_password === true) {
-      if (window.sessionStorage.getItem('sovereign.unlocked') !== '1') setLocked(true);
-    } else {
-      setLocked(false);
-      window.sessionStorage.removeItem('sovereign.unlocked');
-    }
+    let alive = true;
+    (async () => {
+      if (security?.require_password === true) {
+        if (window.sessionStorage.getItem('sovereign.unlocked') !== '1') {
+          if (alive) setLocked(true);
+        } else {
+          if (alive) setLocked(false);
+          window.sessionStorage.removeItem('sovereign.unlocked');
+        }
+      } else {
+        if (alive) setLocked(false);
+        window.sessionStorage.removeItem('sovereign.unlocked');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, [security?.require_password]);
 
   // session_timeout_minutes: lock after N idle minutes (0 = off).
@@ -64,13 +78,20 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   }, [security?.session_timeout_minutes, locked]);
 
   // require_pin_for_settings → show PIN overlay while Settings tries to open.
+  // ponytail: async mimic for the same lint rule (see require_password effect).
   useEffect(() => {
-    if (parental?.require_pin_for_settings !== true) {
-      setPinPrompt(false);
-      return;
-    }
-    const alreadyOk = () => window.sessionStorage.getItem('sovereign.pin_ok') === '1';
-    if (settingsOpen && !alreadyOk()) setPinPrompt(true);
+    let alive = true;
+    (async () => {
+      if (parental?.require_pin_for_settings !== true) {
+        if (alive) setPinPrompt(false);
+        return;
+      }
+      const alreadyOk = window.sessionStorage.getItem('sovereign.pin_ok') === '1';
+      if (settingsOpen && !alreadyOk && alive) setPinPrompt(true);
+    })();
+    return () => {
+      alive = false;
+    };
   }, [settingsOpen, parental?.require_pin_for_settings]);
 
   const closePin = () => {

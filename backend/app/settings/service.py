@@ -191,6 +191,19 @@ class SettingsService:
         personalization = self.get_personalization()
         active_agent = self.get_active_agent()
 
+        # Parental controls: ignore user custom instructions & persona fields
+        # while the lock is on (kids can't re-persona the assistant).
+        try:
+            if self.get_parental_controls().get("enabled") and self.get_parental_controls().get(
+                "disable_custom_instructions"
+            ):
+                personalization = {
+                    k: personalization.get(k)
+                    for k in ("base_style_tone", "headers_lists_mode", "response_length")
+                }
+        except Exception:
+            pass  # broken parental settings must not break prompting
+
         parts = []
 
         # Base style

@@ -2,8 +2,9 @@
 import asyncio
 import json
 import logging
+import re
 import uuid
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
@@ -48,6 +49,47 @@ def _resolve_sampling(chat_request, settings_service) -> dict:
     return out
 
 
+# ponytail: 4-word blocklist, extend when false positives/wild misses show up
+_EXPLICIT_RE = re.compile(r"\b(porn|nsfw|xxx)\b", re.IGNORECASE)
+
+
+def _trim_history(messages_dicts: list, max_context_length) -> list:
+    """Keep system messages whole; drop oldest turns past the char budget.
+
+    ~4 chars/token is a deliberately rough budget — its job is stopping the
+    prompt from exploding, not exact token accounting.
+    """
+    try:
+        budget = max(1, int(max_context_length)) * 4
+    except (TypeError, ValueError):
+        return messages_dicts
+    system = [m for m in messages_dicts if m["role"] == "system"]
+    rest = [m for m in messages_dicts if m["role"] != "system"]
+    kept: list = []
+    used = 0
+    for m in reversed(rest):
+        n = len(m["content"])
+        if kept and used + n > budget:
+            break
+        kept.append(m)
+        used += n
+    kept.reverse()
+    return system + kept
+
+
+def _parental_block(pc: Optional[dict], user_text: str) -> Optional[str]:
+    """Parental-controls content gate. Returns a reason string or None."""
+    if not pc or not pc.get("enabled"):
+        return None
+    low = (user_text or "").lower()
+    for topic in pc.get("restrict_topics") or []:
+        if topic and str(topic).lower() in low:
+            return f"Request blocked by parental controls: restricted topic '{topic}'."
+    if pc.get("block_explicit_content") and _EXPLICIT_RE.search(low):
+        return "Request blocked by parental controls: explicit content filter."
+    return None
+
+
 @router.post("/completions")
 async def chat_completions(request: Request, chat_request: ChatRequest):
     """Generate chat completion"""
@@ -68,6 +110,23 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     
     # Apply Personalization & Agent Settings
     settings_service = getattr(app.state, "settings_service", None)
+
+    # Parental controls: content gate + activity log (audit stores counts, never text)
+    pc = None
+    try:
+        pc = settings_service.get_parental_controls() if settings_service else None
+    except Exception:
+        pc = None
+    user_text = "\n".join(m.content for m in chat_request.messages if m.role == "user")
+    blocked = _parental_block(pc, user_text)
+    if blocked:
+        raise HTTPException(status_code=403, detail=blocked)
+    if pc and pc.get("activity_log") and settings_service is not None:
+        try:
+            settings_service.log_audit("chat_request", "chat", json.dumps({"chars": len(user_text)}))
+        except Exception:
+            pass  # logging must never block chat
+
     if settings_service:
         system_prompt = settings_service.get_system_prompt()
         
@@ -148,6 +207,16 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
             # If RAG fails, continue with original message
             logger.warning("RAG context build failed, continuing without it: %s", e)
             
+    # Context cap: max_context_length (general) bounds the rendered history.
+    if settings_service is not None:
+        try:
+            messages_dicts = _trim_history(
+                messages_dicts,
+                (settings_service.get_general() or {}).get("max_context_length", 4096),
+            )
+        except Exception:
+            pass  # a settings hiccup must never break chat
+
     prompt = ""
     if tokenizer and hasattr(tokenizer, "apply_chat_template"):
         try:
@@ -169,7 +238,11 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     if chat_request.stream:
         sampling = _resolve_sampling(chat_request, settings_service)
         return StreamingResponse(
-            stream_response(app.state.active_engine, input_data, chat_request, rag_metadata_out, request, app.state.active_model, sampling),
+            stream_response(
+                app.state.active_engine, input_data, chat_request, rag_metadata_out,
+                request, app.state.active_model, sampling,
+                sem=getattr(app.state, "gen_semaphore", None),
+            ),
             media_type="text/event-stream"
         )
     
@@ -177,12 +250,19 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     if await request.is_disconnected():
         raise HTTPException(status_code=499, detail="Client disconnected")
     sampling = _resolve_sampling(chat_request, settings_service)
-    response = await app.state.active_engine.generate(
-        input_data=input_data,
-        max_tokens=sampling["max_tokens"],
-        temperature=sampling["temperature"],
-        top_p=sampling["top_p"]
-    )
+    sem = getattr(app.state, "gen_semaphore", None)
+    if sem is not None:
+        await sem.acquire()
+    try:
+        response = await app.state.active_engine.generate(
+            input_data=input_data,
+            max_tokens=sampling["max_tokens"],
+            temperature=sampling["temperature"],
+            top_p=sampling["top_p"]
+        )
+    finally:
+        if sem is not None:
+            sem.release()
     
     content = response.get("output", "") if "output" in response else response.get("text", "")
     
@@ -228,8 +308,30 @@ async def stream_response(
     http_request: Request = None,
     model_name: str = None,
     sampling: dict = None,
+    sem=None,
 ) -> AsyncGenerator[str, None]:
     """Stream tokens from the engine."""
+    if sem is not None:
+        await sem.acquire()
+    try:
+        async for frame in _stream_frames(
+            engine, prompt, request, rag_metadata, http_request, model_name, sampling,
+        ):
+            yield frame
+    finally:
+        if sem is not None:
+            sem.release()
+
+
+async def _stream_frames(
+    engine,
+    prompt: str,
+    request: ChatRequest,
+    rag_metadata: list = None,
+    http_request: Request = None,
+    model_name: str = None,
+    sampling: dict = None,
+) -> AsyncGenerator[str, None]:
     chunk_no = 0
 
     # Stable stream id — one per request, all chunks share it

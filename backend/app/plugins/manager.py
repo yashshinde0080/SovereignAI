@@ -12,18 +12,34 @@ from app.plugins.sandbox import PluginSandbox
 class PluginManager:
     """Manage plugin lifecycle"""
     
-    def __init__(self):
+    def __init__(self, settings_service=None):
+        self.settings_service = settings_service
         self.plugins: Dict[str, PluginInterface] = {}
         self.builtin_plugins_path = Path(__file__).parent / "builtin"
         self.user_plugins_path = settings.plugins_dir
         self.sandbox = PluginSandbox()
+
+    def _external_disabled(self) -> bool:
+        """security.disable_external_plugins (default True) blocks user plugins."""
+        if self.settings_service is None:
+            return True
+        try:
+            return bool(
+                (self.settings_service.get_security() or {}).get(
+                    "disable_external_plugins", True
+                )
+            )
+        except Exception:
+            return True
     
     async def load_plugins(self):
         """Load all plugins"""
         # Load builtin plugins
         await self._load_from_directory(self.builtin_plugins_path, builtin=True)
         
-        # Load user plugins
+        # Load user plugins (skipped while disable_external_plugins is on)
+        if self._external_disabled():
+            return
         if self.user_plugins_path.exists():
             await self._load_from_directory(self.user_plugins_path, builtin=False)
     

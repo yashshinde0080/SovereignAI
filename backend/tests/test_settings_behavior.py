@@ -13,7 +13,7 @@ from starlette.requests import Request
 
 from app.settings.database import SettingsDatabase
 from app.settings.service import SettingsService
-from app.settings.schemas import GeneralSettings
+from app.settings.schemas import GeneralSettings, SecuritySettings, ParentalControlsSettings, DataControlsSettings
 from app.api.chat import _resolve_sampling, _trim_history, _parental_block
 from app.schemas.chat import ChatRequest
 
@@ -302,7 +302,7 @@ def test_log_audit_gated_by_audit_logging(tmp_path):
     svc.log_audit("chat_request", "chat", "{}")
     assert len(svc.get_audit_log()) == 1
     # turn audit_logging off → non-update actions skipped
-    svc.update_security(type(svc.db) and __import__("app.settings.schemas", fromlist=["SecuritySettings"]).SecuritySettings(audit_logging=False))
+    svc.update_security(SecuritySettings(audit_logging=False))
     svc.log_audit("chat_request", "chat", "{}")
     assert len(svc.get_audit_log()) == 1  # unchanged
     # update events always logged
@@ -312,20 +312,12 @@ def test_log_audit_gated_by_audit_logging(tmp_path):
 
 # ── model manager: allowed_models + encrypt_models wiring ──
 
-class _FakeRegistry:
-    async def initialize(self):
-        pass
-
-
-@pytest.mark.asyncio
 async def test_model_manager_allowed_models_block(tmp_path):
     from app.services.model_manager import ModelManager
 
     svc = SettingsService(str(tmp_path / "s.db"))
     svc.update_parental_controls(
-        __import__("app.settings.schemas", fromlist=["ParentalControlsSettings"]).ParentalControlsSettings(
-            enabled=True, allowed_models=["Qwen2-0.5B"]
-        )
+        ParentalControlsSettings(enabled=True, allowed_models=["Qwen2-0.5B"])
     )
     mm = ModelManager(settings_service=svc)
     with pytest.raises(PermissionError):
@@ -333,35 +325,28 @@ async def test_model_manager_allowed_models_block(tmp_path):
     mm._check_allowed_models("qwen2-0.5b")  # normalized match passes
 
 
-@ pytest.mark.asyncio  # noqa: E305
 async def test_encrypt_models_flag_off_disables_helper(tmp_path):
     from app.services.model_manager import ModelManager
 
     svc = SettingsService(str(tmp_path / "s.db"))
-    svc.update_security(
-        __import__("app.settings.schemas", fromlist=["SecuritySettings"]).SecuritySettings(encrypt_models=False)
-    )
+    svc.update_security(SecuritySettings(encrypt_models=False))
     mm = ModelManager(settings_service=svc)
     assert mm._encrypt_models_enabled() is False
 
 
 # ── middleware: log_api_requests + enable_cors strip ──
 
-@ pytest.mark.asyncio  # noqa: E305
-async def test_middleware_cors_strip_and_log(monkeypatch, tmp_path):
+async def test_middleware_cors_strip(tmp_path):
     from app.security.middleware import lan_auth_middleware
+    from starlette.responses import JSONResponse
 
     svc = SettingsService(str(tmp_path / "s.db"))
-    svc.update_security(
-        __import__("app.settings.schemas", fromlist=["SecuritySettings"]).SecuritySettings(enable_cors=False)
-    )
-    svc.update_data_controls(
-        __import__("app.settings.schemas", fromlines=["DataControlsSettings"]).DataControlsSettings(log_api_requests=True)
-    )
+    svc.update_security(SecuritySettings(enable_cors=False))
 
     async def call_next(request):
-        resp = __import__("starlette.responses", fromlist=["JSONResponse"]).JSONResponse({"ok": True})
+        resp = JSONResponse({"ok": True})
         resp.headers["access-control-allow-origin"] = "*"
+        resp.headers["access-control-allow-methods"] = "GET, POST"
         return resp
 
     scope = {
@@ -378,3 +363,32 @@ async def test_middleware_cors_strip_and_log(monkeypatch, tmp_path):
     req = Request(scope, lambda: None)
     resp = await lan_auth_middleware(req, call_next)
     assert "access-control-allow-origin" not in resp.headers
+    assert "access-control-allow-methods" not in resp.headers
+
+
+async def test_middleware_cors_kept_when_enabled(tmp_path):
+    from app.security.middleware import lan_auth_middleware
+    from starlette.responses import JSONResponse
+
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_security(SecuritySettings(enable_cors=True))
+
+    async def call_next(request):
+        resp = JSONResponse({"ok": True})
+        resp.headers["access-control-allow-origin"] = "*"
+        return resp
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/v1/system/status",
+        "headers": [],
+        "query_string": b"",
+        "server": ("t", 80),
+        "client": ("127.0.0.1", 1),
+        "scheme": "http",
+        "app": type("App", (), {"state": type("S", (), {"settings_service": svc})()})(),
+    }
+    req = Request(scope, lambda: None)
+    resp = await lan_auth_middleware(req, call_next)
+    assert resp.headers["access-control-allow-origin"] == "*"

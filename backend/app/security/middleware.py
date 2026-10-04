@@ -75,5 +75,8 @@ async def lan_auth_middleware(request: Request, call_next):
             "access-control-max-age",
             "access-control-expose-headers",
         ):
-            response.headers.pop(h, None)
+            try:
+                del response.headers[h]
+            except KeyError:
+                pass
     return response

@@ -301,13 +301,14 @@ def test_log_audit_gated_by_audit_logging(tmp_path):
     # default audit_logging=True → logged
     svc.log_audit("chat_request", "chat", "{}")
     assert len(svc.get_audit_log()) == 1
-    # turn audit_logging off → non-update actions skipped
+    # turn audit_logging off (this update itself lands as an audit row)
     svc.update_security(SecuritySettings(audit_logging=False))
+    assert len(svc.get_audit_log()) == 2
     svc.log_audit("chat_request", "chat", "{}")
-    assert len(svc.get_audit_log()) == 1  # unchanged
+    assert len(svc.get_audit_log()) == 2  # gated: unchanged
     # update events always logged
     svc.log_audit("update", "general", "{}")
-    assert len(svc.get_audit_log()) == 2
+    assert len(svc.get_audit_log()) == 3
 
 
 # ── model manager: allowed_models + encrypt_models wiring ──

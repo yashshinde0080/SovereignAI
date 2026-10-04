@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol, net, Notification } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { spawn } = require('child_process');
 const { createMenu } = require('./menu');
 const { createTray } = require('./tray');
@@ -7,6 +8,25 @@ const { createTray } = require('./tray');
 let mainWindow;
 let backendProcess;
 let tray;
+
+// Read a boolean general setting straight from the settings DB files, before
+// the backend boots (auto_start_backend) or without waiting for it
+// (minimize_to_tray). Zero-dep: values are stored as plain JSON text in the
+// SQLite file and its WAL, so a byte scan finds them. Defaults on any error.
+function readGeneralFlag(key, fallback) {
+  try {
+    const base = path.join(__dirname, '..', 'workspace', 'database', 'sovereign_settings.db');
+    for (const f of [base, base + '-wal']) {
+      if (!fs.existsSync(f)) continue;
+      const text = fs.readFileSync(f, 'latin1');
+      const m = text.match(new RegExp('"' + key + '":(true|false)'));
+      if (m) return m[1] === 'true';
+    }
+  } catch (e) {
+    console.warn('Could not read setting', key, e.message);
+  }
+  return fallback;
+}
 
 const isDev = !app.isPackaged;
 const BACKEND_PORT = 8000;
@@ -45,14 +65,16 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // minimize_to_tray (general settings, read at startup): hide-to-tray on
+  // close vs real quit. Read once at boot — restart applies changes.
+  const minimizeToTray = readGeneralFlag('minimize_to_tray', true);
   mainWindow.on('close', (event) => {
-    if (app.isQuitting) {
+    if (app.isQuitting || !minimizeToTray) {
       mainWindow = null;
     } else {
       event.preventDefault();
       mainWindow.hide();
     }
-  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -220,11 +242,17 @@ app.whenReady().then(async () => {
     tray = createTray(mainWindow);
 
     // Boot backend in parallel — don't block first paint on Python startup.
-    startBackend().then(() => {
-      console.log('Backend started');
-    }).catch((err) => {
-      console.error('Backend failed to start:', err);
-    });
+    // auto_start_backend=false skips the spawn; the UI self-heals once a
+    // backend appears (frontend retries /status, metricsWs reconnects).
+    if (readGeneralFlag('auto_start_backend', true) === false) {
+      console.log('auto_start_backend=false — skipping backend spawn');
+    } else {
+      startBackend().then(() => {
+        console.log('Backend started');
+      }).catch((err) => {
+        console.error('Backend failed to start:', err);
+      });
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

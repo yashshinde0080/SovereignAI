@@ -79,8 +79,13 @@ class ModelManager:
         self.provider = HuggingFaceProvider()
     
     def _setting(self, section_getter, key, default):
-        """Read one settings key; broken/absent settings service = default."""
-        if self.settings_service is None:
+        """Read one settings key; broken/absent settings service = default.
+
+        Tolerates subclasses that skip __init__ (test doubles): missing
+        settings_service attr behaves like "no settings linked".
+        """
+        svc = getattr(self, "settings_service", None)
+        if svc is None:
             return default
         try:
             return (section_getter() or {}).get(key, default)

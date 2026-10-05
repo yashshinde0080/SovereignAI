@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
@@ -32,6 +33,8 @@ import {
   RotateCcw,
   Info,
   Cloud,
+  Search,
+  X,
 } from "lucide-react";
 import { GeneralSettings } from "./GeneralSettings";
 import { ProjectSettings } from "./ProjectSettings";
@@ -45,6 +48,7 @@ import { CloudProvidersSettings } from "./CloudProvidersSettings";
 import { useToast } from "@/components/ui/use-toast";
 import { api } from "@/lib/api";
 import { useSettingsStore } from "@/store/settings";
+import { searchSettings, type SettingField } from "@/lib/settingsSearch";
 import type { Agent, SettingsMap } from "@/types";
 
 type Section =
@@ -140,6 +144,36 @@ const NAV_GROUPS: { label: string; items: SectionMeta[] }[] = [
 
 const ALL_SECTIONS: SectionMeta[] = NAV_GROUPS.flatMap((g) => g.items);
 
+const HIGHLIGHT_CLASSES = [
+  "ring-2",
+  "ring-blue-500/70",
+  "ring-offset-2",
+  "ring-offset-slate-950",
+  "rounded-md",
+];
+
+/**
+ * Scroll the field whose visible label matches `label` into view and flash a
+ * ring around its row. Fields are located by label text, so components don't
+ * need per-field anchor ids.
+ */
+function highlightField(label: string) {
+  // Radix <Label> renders data-slot="label"; a few catalog entries are group
+  // headings (h3) instead, so match those too.
+  const nodes = Array.from(
+    document.querySelectorAll<HTMLElement>('[data-slot="label"], h3')
+  );
+  const match = nodes.find((el) => el.textContent?.trim() === label);
+  const row = match?.closest("div");
+  if (!row) {
+    return false;
+  }
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.classList.add(...HIGHLIGHT_CLASSES);
+  window.setTimeout(() => row.classList.remove(...HIGHLIGHT_CLASSES), 1600);
+  return true;
+}
+
 
 interface SettingsDialogProps {
   open: boolean;
@@ -151,8 +185,43 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const [settings, setSettings] = useState<SettingsMap>({});
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [jump, setJump] = useState<
+    { section: Section; label: string; nonce: number } | null
+  >(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  const results = useMemo(() => searchSettings(query), [query]);
+
+  const sectionLabel = useCallback(
+    (key: string) => ALL_SECTIONS.find((s) => s.key === key)?.label ?? key,
+    []
+  );
+
+  const selectSection = useCallback((key: Section) => {
+    setJump(null);
+    setActiveSection(key);
+  }, []);
+
+  const jumpTo = useCallback((field: SettingField) => {
+    setQuery("");
+    setActiveSection(field.section as Section);
+    setJump({
+      section: field.section as Section,
+      label: field.label,
+      nonce: Date.now(),
+    });
+  }, []);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      setQuery("");
+    } else if (e.key === "Enter" && results.length > 0) {
+      e.preventDefault();
+      jumpTo(results[0]);
+    }
+  };
 
   const fetchAllSettings = useCallback(async () => {
     try {
@@ -178,11 +247,26 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   }, [open, fetchAllSettings]);
 
-  // Jump back to the top whenever the user switches sections so they never
-  // land mid-page in a freshly selected panel.
+  // Section switch scrolls back to the top so the user never lands mid-page.
+  // A search jump instead scrolls to (and flashes) the matched field, after
+  // letting the newly mounted section paint.
   useEffect(() => {
-    viewportRef.current?.scrollTo({ top: 0 });
-  }, [activeSection]);
+    if (jump && jump.section === activeSection) {
+      // Retry briefly: the section may still be painting (or settings may still
+      // be loading) when the jump lands, so the target label may not exist yet.
+      let attempts = 0;
+      let timer = 0;
+      const tryScroll = () => {
+        attempts += 1;
+        if (!highlightField(jump.label) && attempts < 10) {
+          timer = window.setTimeout(tryScroll, 100);
+        }
+      };
+      timer = window.setTimeout(tryScroll, 80);
+      return () => window.clearTimeout(timer);
+    }
+    viewportRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeSection, jump]);
 
   const updateSection = async (section: string, data: Record<string, unknown>) => {
     try {
@@ -236,7 +320,54 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               </DialogTitle>
             </DialogHeader>
             <Separator className="bg-slate-800" />
+            <div className="px-3 py-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="Search settings..."
+                  aria-label="Search settings"
+                  className="h-8 bg-slate-900 border-slate-700 pl-8 pr-7 text-sm"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    onClick={() => setQuery("")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-500 hover:text-white"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
             <ScrollArea className="flex-1 py-2">
+              {query.trim() ? (
+                <div className="flex flex-col gap-1 px-2 pb-2">
+                  {results.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-slate-500">
+                      No matching settings.
+                    </p>
+                  ) : (
+                    results.map((field) => (
+                      <button
+                        key={`${field.section}.${field.label}`}
+                        onClick={() => jumpTo(field)}
+                        className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-slate-800/60"
+                      >
+                        <span className="text-sm text-slate-200">
+                          {field.label}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                          {sectionLabel(field.section)}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : (
               <nav className="flex flex-col gap-3 px-2">
                 {NAV_GROUPS.map((group) => (
                   <div key={group.label} className="flex flex-col gap-1">
@@ -246,7 +377,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     {group.items.map(({ key, label, icon: Icon }) => (
                       <button
                         key={key}
-                        onClick={() => setActiveSection(key)}
+                        onClick={() => selectSection(key)}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full",
                           activeSection === key
@@ -261,6 +392,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </div>
                 ))}
               </nav>
+              )}
             </ScrollArea>
             <Separator className="bg-slate-800" />
             <div className="p-3">

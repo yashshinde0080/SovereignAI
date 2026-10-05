@@ -8,6 +8,30 @@
 - Files: 13 files changed, ~620 insertions(+), ~30 deletions(-) across backend chat.py, settings/, frontend store/settings.ts, hooks/useChat.ts, components/settings/, types, lib/themeBoot.ts
 - Commits: 44cf352, 9c14c95, 35263c8
 
+## [2026-10-04] feat+refactor+test | Security/Parental Controls + Settings UX overhaul + Concurrency + Lock screen + Electron boot flags
+- Backend security/middleware: `lan_auth_middleware` now does dual duty — (1) auth boundary (opt-in Bearer when `bind_localhost_only=false` + `api_token` set; localhost stays free), (2) request logging (`log_api_requests` in data_controls) emits one INFO line per request (method, path, status, ms) without bodies; CORS headers stripped when `enable_cors=false` (cheap switch honesty without re-registering middleware)
+- Backend chat.py: parental controls content gate — `restrict_topics` substring match + 4-word explicit blocklist (`porn|nsfw|xxx`), returns 403; activity log writes `chat_request` audit rows (counts only, never text); context cap `_trim_history()` keeps system messages whole, drops oldest turns past `max_context_length * 4` chars (~4 chars/token rough budget); per-request generation semaphore (`max_concurrent_requests` from security, default 4) gates engine call only (RAG/tokenizer un-gated)
+- Backend model_manager: `encrypt_models` (security) toggles `ModelEncryption` construction; parental `allowed_models` non-empty = allowlist for local model loads (normalized match); settings service `log_audit()` gated by `audit_logging` (updates always logged, other actions honor switch)
+- Backend settings: new `parental_controls` section (enabled, restrict_topics[], block_explicit_content, allowed_models[], disable_custom_instructions, max_session_duration_minutes, require_pin_for_settings); new `data_controls` additions (encrypt_local_data, auto_delete_sessions, export_format json|csv|markdown); `security` additions (disable_external_plugins, max_concurrent_requests, session_timeout_minutes, require_password, enable_cors)
+- Frontend useChat: async history load (decrypts if `encrypt_local_data` on), legacy migration, session expiration check (`max_session_duration_minutes`), token speed display (`show_token_speed`), non-streaming mode support (`stream_responses=false`), export format selector (json/csv/markdown), notification+sound on completion (when tab backgrounded), encryption downgrade on toggle-off (overwrites ciphertext with plaintext)
+- Frontend ClientLayout: full-app lock screen (`require_password`) verified against backend bcrypt hash, session timeout auto-lock (`session_timeout_minutes`), settings PIN prompt (`require_pin_for_settings`); all unlock state in sessionStorage (per-tab)
+- Frontend SettingsDialog: grouped nav (Application / AI & Models / Privacy & Data / Access & Safety) with descriptions, search box with jump-to-field highlighting, AlertDialog confirmation for "Reset All Defaults", Cloud API mode in default_mode select, section descriptions, scroll-to-top on section switch
+- Frontend components: `show_status_bar` toggle hides metrics strip (model row stays), `show_token_speed` toggle, `font_size`/`language` instant apply, LockScreen + PinPrompt components (verify via backend endpoints)
+- Electron main.js: reads `auto_start_backend` and `minimize_to_tray` from settings DB at startup (byte-scan sovereign_settings.db + -wal, zero-dep, no backend needed); skips backend spawn when `auto_start_backend=false`
+- Tests: `test_settings_behavior.py` expanded — context trimming, parental block (topics + explicit + None passthrough), retention map, audit gating, model_manager allowed_models + encrypt_models, middleware CORS strip/keep, log_api_requests
+- Files: ~25 files changed across backend api/chat, security, services/model_manager, settings/, frontend hooks/useChat, components/layout, components/settings, components/chat, components/task, lib/chatCrypto, lib/sounds, lib/settingsSearch, electron/main.js, tests
+- Commits: 21cd8cc, 4bc29af, 69d372a, 77d4b9d, 13d2dbc, 495bf96, 77e3c11, cbe080d, bd60bfb, c41f1b8
+
+## [2026-10-05] feat+refactor | SettingsDialog search + jump-to-field + grouped nav polish + Cloud mode in General
+- Frontend SettingsDialog: search input (debounced) filters all settings fields across sections; Enter on result jumps to section + scrolls field into view + 1.6s ring highlight; clear button; search results replace nav when query non-empty; section switch always scrolls to top
+- Frontend GeneralSettings: added "Cloud API (Online)" to `default_mode` select (joins auto/fullram/layerstream)
+- Frontend SecuritySettings: added `disable_external_plugins` toggle (default on, blocks user plugins)
+- Frontend SettingsDialog: "Reset All Defaults" now wrapped in AlertDialog with confirmation (was direct click)
+- Frontend SettingsDialog: nav grouped into 4 labeled sections (Application / AI & Models / Privacy & Data / Access & Safety) with per-item descriptions; section header now shows label + description
+- Frontend SettingsDialog: jump-to-field logic uses label text match on `[data-slot="label"]` or `h3` (no per-field anchors needed), retries up to 10×100ms for late-mounting sections
+- Files: frontend/components/settings/SettingsDialog.tsx, GeneralSettings.tsx, SecuritySettings.tsx
+- Commits: 0735261, 07976a9
+
 ## [2026-10-02] fix+refactor | RAG patch: 503 on missing vectorstore, single embed+search pass, 404/500 distinction, .md/.docx upload
 - Backend rag.py: added `_ensure_vector_store()` helper returning 503 when store not initialized (was AttributeError crash); `/query` now uses `build_context()` once (was: `search()` + `build_context()` — two embed+FAISS passes); `/rebuild` runs in worker thread via `asyncio.to_thread` (was inline blocking); `/documents/{doc_id}` DELETE now returns 404 for unknown doc, 500 for rebuild failure (was all 404)
 - Backend vectorstore/store.py: `delete_document_data()` raises `ValueError` if document doesn't exist (rowcount check) — callers distinguish 404 from real failure

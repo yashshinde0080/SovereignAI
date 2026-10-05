@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Save } from "lucide-react";
-import { useSettingsStore } from "@/store/settings";
 import {
   persistTheme,
   applyTheme,
@@ -214,6 +213,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
               <SelectItem value="auto">Auto</SelectItem>
               <SelectItem value="fullram">Full RAM</SelectItem>
               <SelectItem value="layerstream">Layer Stream (Experimental)</SelectItem>
+              <SelectItem value="cloud">Cloud API (Online)</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -316,10 +316,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
       </div>
 
       <Button
-        onClick={() => {
-          onSave(form);
-          void useSettingsStore.getState().updateSection("general", form);
-        }}
+        onClick={() => onSave(form)}
         className="w-full bg-blue-600 hover:bg-blue-700"
       >
         <Save className="h-4 w-4 mr-2" />

@@ -82,7 +82,7 @@ export function CloudModelList({ refreshKey = 0 }: CloudModelListProps) {
           <p className="text-sm mt-1 mb-3">
             Add a provider API key to use frontier models without local downloads.
           </p>
-          <Button size="sm" variant="outline" onClick={() => setSettingsOpen(true)}>
+          <Button size="sm" variant="outline" onClick={() => setSettingsOpen('cloud')}>
             <Settings className="h-3.5 w-3.5 mr-1" />
             Open Settings → Cloud / Online
           </Button>

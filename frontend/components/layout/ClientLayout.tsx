@@ -120,7 +120,11 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
               {children}
             </main>
           </div>
-          <SettingsDialog open={settingsOpen as boolean} onOpenChange={setSettingsOpen as (open: boolean) => void} />
+          <SettingsDialog
+            open={Boolean(settingsOpen)}
+            onOpenChange={(open) => setSettingsOpen(open)}
+            initialSection={typeof settingsOpen === 'string' ? settingsOpen : undefined}
+          />
         </>
       )}
       {pinPrompt && <PinPrompt onUnlock={() => setPinPrompt(false)} onCancel={closePin} />}

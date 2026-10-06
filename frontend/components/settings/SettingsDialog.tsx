@@ -178,9 +178,11 @@ function highlightField(label: string) {
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Section to reveal on open, e.g. "cloud" from the Cloud Settings shortcuts. */
+  initialSection?: string;
 }
 
-export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsDialogProps) {
   const [activeSection, setActiveSection] = useState<Section>("general");
   const [settings, setSettings] = useState<SettingsMap>({});
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -243,9 +245,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   useEffect(() => {
     if (open) {
+      // Honor the section the opener asked for (setSettingsOpen('cloud') etc.).
+      if (initialSection && ALL_SECTIONS.some((s) => s.key === initialSection)) {
+        setActiveSection(initialSection as Section);
+        setJump(null);
+      }
       fetchAllSettings();
     }
-  }, [open, fetchAllSettings]);
+  }, [open, initialSection, fetchAllSettings]);
 
   // Section switch scrolls back to the top so the user never lands mid-page.
   // A search jump instead scrolls to (and flashes) the matched field, after

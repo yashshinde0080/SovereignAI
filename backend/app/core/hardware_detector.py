@@ -114,10 +114,8 @@ class HardwareDetector:
     def _cached_disk_speed(self) -> float:
         """Disk benchmark, cached to DB after first run."""
         cache_key = "hardware_disk_speed"
-        cache_file = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..", "..", "workspace", ".hw_cache.json"
-        )
+        from app.config import settings
+        cache_file = str(settings.workspace_dir / ".hw_cache.json")
         try:
             if os.path.exists(cache_file):
                 with open(cache_file) as f:

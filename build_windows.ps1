@@ -177,7 +177,7 @@ try {
         $npmVersion = (& npm --version) -join ""
         $pythonVersion = (& python --version 2>&1) -join ""
         $lockfile = Join-Path $FrontendDir "package-lock.json"
-        if (-not (Test-Path -LiteralPath $lockfile)) { throw "frontend\package-lock.json missing — cannot install reproducibly (npm ci)." }
+        if (-not (Test-Path -LiteralPath $lockfile)) { throw "frontend\package-lock.json missing - cannot install reproducibly (npm ci)." }
 
         Write-Report "OS            : $([Environment]::OSVersion.VersionString) (x64)"
         Write-Report "PowerShell    : $($PSVersionTable.PSVersion)"
@@ -198,7 +198,7 @@ try {
                 Write-Report "npm ci          : ok (lockfile-installed)"
             } catch {
                 Write-Report "npm ci          : FAILED ($($_.Exception.Message))"
-                Write-Report "                  falling back to 'npm install' — lockfile may be out of sync with package.json."
+                Write-Report "                  falling back to 'npm install' - lockfile may be out of sync with package.json."
                 Invoke-Exe "npm.cmd" @("install", "--no-audit", "--no-fund") -WorkDir $FrontendDir -Stage "npm install"
             }
 
@@ -406,7 +406,7 @@ try {
             Copy-Item -LiteralPath $gpuScript -Destination (Join-Path $ExtrasDir "enable-gpu.ps1") -Force
             $readme = Join-Path $ExtrasDir "README-GPU.txt"
             @"
-SovereignAI — optional GPU (CUDA) support
+SovereignAI - optional GPU (CUDA) support
 =========================================
 
 The installer ships a CPU-only torch runtime. A CUDA torch wheel carries

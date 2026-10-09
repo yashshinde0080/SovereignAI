@@ -12,7 +12,7 @@
     Source order:
       1. -TorchSource <path to a site-packages containing a CUDA torch>
       2. a local dev venv (backend\.venv) when it already has a CUDA torch
-      3. pip download of torch==2.5.1 (cu124) — requires network
+      3. pip download of torch==2.5.1 (cu124) - requires network
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File enable-gpu.ps1

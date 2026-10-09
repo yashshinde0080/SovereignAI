@@ -12,30 +12,30 @@
     "start": "electron .",
     "dev": "electron .",
     "build": "electron-builder",
-    "build:win": "electron-builder --win",
+    "build:win": "electron-builder --win --x64",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
   },
   "build": {
     "appId": "com.sovereignai.edge",
-    "productName": "SovereignAI Edge",
+    "productName": "SovereignAI",
     "directories": {
-      "output": "dist"
+      "output": "../build_exe"
     },
     "files": [
       "main.js",
       "preload.js",
       "menu.js",
       "tray.js",
-      "assets/**/*"
+      "assets/icon.ico",
+      "assets/icon.png"
     ],
     "extraResources": [
       {
-        "from": "../backend",
+        "from": "../build_exe/backend",
         "to": "backend",
         "filter": [
-          "**/*",
-          "!**/__pycache__/**"
+          "**/*"
         ]
       },
       {
@@ -45,9 +45,16 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "executableName": "SovereignAI",
+      "artifactName": "SovereignAI-Setup-x64.${ext}"
     },
     "mac": {
       "target": [
@@ -64,7 +71,14 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SovereignAI",
+      "uninstallDisplayName": "SovereignAI",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "SovereignAI-Setup-x64.exe"
     }
   },
   "dependencies": {},

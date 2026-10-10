@@ -18,6 +18,7 @@
     .\build_windows.ps1
     .\build_windows.ps1 -SkipBackend          # frontend + installer only
     .\build_windows.ps1 -SkipInstallerTest    # skip launching the packaged app
+    .\build_windows.ps1 -TestInstall          # also run a real install/uninstall cycle
 #>
 [CmdletBinding()]
 param(
@@ -25,12 +26,33 @@ param(
     [switch]$SkipBackend,
     [switch]$SkipElectron,
     [switch]$SkipInstallerTest,
+    # Runs the NSIS installer for real (installs into build_exe\install_test,
+    # creates Start Menu/desktop shortcuts, then uninstalls). Opt-in: the
+    # default build never touches the user's installed programs.
+    [switch]$TestInstall,
     [switch]$AllowCudaRuntime,
-    [int]$SmokePort = 8123
+    [int]$SmokePort = 8123,
+    # Chromium debug port used to confirm the packaged UI actually rendered.
+    [int]$DebugPort = 9333
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+
+# --------------------------------------------------------------------------- #
+# Module path
+# --------------------------------------------------------------------------- #
+# If this script is launched from a shell that inherited PowerShell 7's (or a
+# POSIX shell's) PSModulePath, Windows PowerShell 5.1 fails to autoload its own
+# cmdlets -- Get-FileHash, Get-CimInstance and friends come back "not
+# recognized". Pin the standard 5.1 module directories before anything else.
+# --------------------------------------------------------------------------- #
+$env:PSModulePath = (@(
+        (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Modules'),
+        (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'),
+        (Join-Path $PSHOME 'Modules')
+    ) | Where-Object { Test-Path -LiteralPath $_ }) -join ';'
+Import-Module Microsoft.PowerShell.Utility -ErrorAction SilentlyContinue
 
 # --------------------------------------------------------------------------- #
 # Paths
@@ -125,9 +147,51 @@ function Get-SizeMb([string]$Path) {
     return [math]::Round($bytes / 1MB, 1)
 }
 
+function Get-Rcedit {
+    # electron-builder's winCodeSign archive carries macOS symlinks, which 7-Zip
+    # cannot create without admin/Developer Mode, so electron-builder's own
+    # rcedit step is disabled (win.signAndEditExecutable = false) and we stamp
+    # the icon/version ourselves. The cache often already holds rcedit-x64.exe
+    # from a partially extracted archive; otherwise fetch the Windows tools only.
+    $cacheRoot = Join-Path $env:LOCALAPPDATA "electron-builder\Cache\winCodeSign"
+    $cached = Get-ChildItem -Path $cacheRoot -Recurse -Filter "rcedit-x64.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cached) { return $cached.FullName }
+
+    $sevenZip = Join-Path $ElectronDir "node_modules\7zip-bin\win\x64\7za.exe"
+    if (-not (Test-Path -LiteralPath $sevenZip)) { return $null }
+
+    $out = Join-Path $cacheRoot "rcedit"
+    New-Item -ItemType Directory -Force -Path $out | Out-Null
+    $archive = Join-Path $cacheRoot "winCodeSign-2.6.0.7z"
+    if (-not (Test-Path -LiteralPath $archive)) {
+        Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z" -OutFile $archive
+    }
+    & $sevenZip x -bd $archive "-o$out" "-x!darwin" -y 2>&1 | Out-Null
+    $found = Get-ChildItem -Path $out -Recurse -Filter "rcedit-x64.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { return $found.FullName }
+    return $null
+}
+
 function Stop-ProcessTree([int]$ProcessId) {
     # /T scopes the kill to this process tree only.
-    & taskkill /pid $ProcessId /T /F 2>&1 | Out-Null
+    # Routed through cmd.exe so taskkill's stderr (a normal message when a child
+    # has already exited) never becomes a PowerShell error record: under
+    # $ErrorActionPreference='Stop' that would abort the pipeline after a
+    # successful build. Cleanup failures never fail the build.
+    try {
+        & cmd.exe /c "taskkill /pid $ProcessId /T /F >nul 2>&1" | Out-Null
+    } catch {
+        Write-Report "note: could not terminate process tree $ProcessId (already gone)"
+    }
+}
+
+# Stops the desktop app and its spawned backend, so a later launch starts from a
+# clean slate. Only these two process names are ever touched.
+function Stop-AppProcesses {
+    @("SovereignAI", "SovereignAIBackend") | ForEach-Object {
+        Get-Process -Name $_ -ErrorAction SilentlyContinue | ForEach-Object { Stop-ProcessTree $_.Id }
+    }
+    Start-Sleep -Seconds 2
 }
 
 function Wait-ForHealth([int]$Port, [int]$TimeoutSeconds, [int]$ProcessId) {
@@ -332,14 +396,39 @@ try {
 
     # ----------------------------------------------------------------------- #
     if (-not $SkipElectron) {
-        Invoke-Stage "Electron: build Windows x64 NSIS installer" {
+        Invoke-Stage "Electron: build unpacked app + Windows x64 NSIS installer" {
             $backendExe = Join-Path $BackendOut "SovereignAIBackend.exe"
             Assert-File $backendExe "Packaged backend (extraResources input)"
             Assert-File (Join-Path $FrontendDir "out\index.html") "Frontend export (extraResources input)"
 
-            Invoke-Exe "npm.cmd" @("run", "build:win") -WorkDir $ElectronDir -Stage "electron-builder"
+            $unpacked = Join-Path $BuildDir "win-unpacked"
+            $appExe = Join-Path $unpacked "SovereignAI.exe"
+            $iconPath = Join-Path $ElectronDir "assets\icon.ico"
+
+            # 1. unpacked application (exe editing disabled - see Get-Rcedit)
+            Invoke-Exe "npm.cmd" @("run", "build:win:dir") -WorkDir $ElectronDir -Stage "electron-builder --dir"
+            Assert-File $appExe "Unpacked application"
+
+            # 2. stamp icon + version info onto the app executable
+            $rcedit = Get-Rcedit
+            if ($rcedit -and (Test-Path -LiteralPath $iconPath)) {
+                & $rcedit $appExe --set-icon $iconPath `
+                    --set-version-string "ProductName" "SovereignAI" `
+                    --set-version-string "FileDescription" "SovereignAI Edge" `
+                    --set-version-string "CompanyName" "SovereignAI" `
+                    --set-file-version "1.0.0.0" --set-product-version "1.0.0.0" 2>&1 | Out-Null
+                Write-Report "exe metadata    : icon + version stamped with $rcedit"
+                Write-Test "Electron/exe-metadata" $true "rcedit applied icon.ico + version 1.0.0.0"
+            } else {
+                Write-Report "exe metadata    : rcedit unavailable - using the default Electron icon/version"
+                Write-Test "Electron/exe-metadata" $false "rcedit not found; exe keeps default icon"
+            }
+
+            # 3. pack the installer from the stamped directory
+            Invoke-Exe "npx.cmd" @("electron-builder", "--win", "nsis", "--x64", "--prepackaged", $unpacked) -WorkDir $ElectronDir -Stage "electron-builder nsis"
             Assert-File $InstallerPath "NSIS installer"
             Write-Report "installer       : $InstallerPath ($(Get-SizeMb $InstallerPath) MB)"
+            Write-Test "Electron/installer-built" $true "$InstallerPath ($(Get-SizeMb $InstallerPath) MB)"
         }
     } else {
         Write-Report "== Electron skipped (-SkipElectron)"
@@ -371,16 +460,40 @@ try {
         Write-Test "Verify/packaged-layout" $true "SovereignAI.exe + resources\backend + resources\frontend"
     }
 
-    if (-not $SkipInstallerTest -and -not $SkipElectron) {
+    # Runs whenever an unpacked app is present, so -SkipElectron can still be
+    # used to re-test an already-built package without repacking it.
+    if (-not $SkipInstallerTest -and (Test-Path -LiteralPath (Join-Path $BuildDir "win-unpacked\SovereignAI.exe"))) {
         Invoke-Stage "Test: launch the packaged application" {
             $unpacked = Join-Path $BuildDir "win-unpacked"
             $appExe = Join-Path $unpacked "SovereignAI.exe"
-            $proc = Start-Process -FilePath $appExe -WorkingDirectory $unpacked -PassThru
+            Stop-AppProcesses   # a stale instance would own the backend port
+            $proc = Start-Process -FilePath $appExe -WorkingDirectory $unpacked -ArgumentList "--remote-debugging-port=$DebugPort" -PassThru
             $healthy = $false
             try {
                 # Electron spawns the frozen backend on port 8000 and waits for /health.
                 $healthy = Wait-ForHealth -Port 8000 -TimeoutSeconds 180 -ProcessId 0
                 Write-Test "Installer/app-backend-start" $healthy "backend answered on port 8000 after the packaged app launched"
+
+                # Ask the renderer what it actually loaded: the packaged static
+                # export is only "working" if a page target points at app://.
+                $rendered = $false
+                $seen = "no renderer target"
+                for ($i = 0; $i -lt 20 -and -not $rendered; $i++) {
+                    try {
+                        $targets = (Invoke-WebRequest -Uri "http://127.0.0.1:$DebugPort/json/list" -UseBasicParsing -TimeoutSec 5).Content | ConvertFrom-Json
+                        foreach ($t in $targets) {
+                            if ($t.type -eq "page") {
+                                $seen = "title='$($t.title)' url=$($t.url)"
+                                if ($t.url -like "app://*") { $rendered = $true }
+                            }
+                        }
+                    } catch {
+                        # window still coming up
+                    }
+                    if (-not $rendered) { Start-Sleep -Seconds 2 }
+                }
+                Write-Report "renderer        : $seen"
+                Write-Test "Installer/frontend-rendered" $rendered "packaged UI served from $seen"
             } finally {
                 if (-not $proc.HasExited) { Stop-ProcessTree $proc.Id }
                 Get-Process -Name "SovereignAIBackend" -ErrorAction SilentlyContinue |
@@ -397,6 +510,75 @@ try {
             Write-Test "Installer/user-data-persistence" $dbInUserData "state written to %APPDATA%\SovereignAI"
             Write-Test "Installer/install-dir-clean" (-not $dbNextToExe) "no writable state created inside the install directory"
         }
+    }
+
+    # ----------------------------------------------------------------------- #
+    if ($TestInstall) {
+        Invoke-Stage "Test: install, restart, uninstall (real NSIS cycle)" {
+            $testRoot   = Join-Path $BuildDir "install_test"
+            $installDir = Join-Path $testRoot "app"
+            $uninstaller = Join-Path $installDir "Uninstall SovereignAI.exe"
+            $startMenu  = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\SovereignAI.lnk"
+            $desktopLnk = Join-Path ([Environment]::GetFolderPath('Desktop')) "SovereignAI.lnk"
+            $userData   = Join-Path $env:APPDATA "SovereignAI"
+            $dbPath     = Join-Path $userData "workspace\database\sovereign.db"
+
+            Remove-Item -Recurse -Force -LiteralPath $testRoot -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
+
+            Stop-AppProcesses
+            # /D must be last and unquoted (NSIS rule), so the test path must be
+            # space-free and is relative to a space-free repo.
+            if ($installDir -match ' ') { throw "install_test path contains spaces; NSIS /D cannot be quoted: $installDir" }
+            $installedExe = Join-Path $installDir "SovereignAI.exe"
+            # A just-written 271 MB self-extracting installer is a favourite target
+            # for a real-time AV scan, which can make the first launch die with an
+            # access violation before it extracts. Retry, then check the result:
+            # what matters is that the app is installed, not that attempt 1 worked.
+            $setup = $null
+            for ($attempt = 1; $attempt -le 3; $attempt++) {
+                if ($attempt -gt 1) { Write-Report "note: retrying the silent install (attempt $attempt)"; Start-Sleep -Seconds 5 }
+                $setup = Start-Process -FilePath $InstallerPath -ArgumentList "/S", "/D=$installDir" -PassThru -Wait
+                Write-Report "silent install  : attempt $attempt exit code $($setup.ExitCode)"
+                if (Test-Path -LiteralPath $installedExe) { break }
+            }
+            Write-Test "Install/silent-install" (Test-Path -LiteralPath $installedExe) "SovereignAI.exe installed after $attempt attempt(s), exit code $($setup.ExitCode)"
+            Assert-File $installedExe "Installed application exe"
+            Assert-File (Join-Path $installDir "resources\backend\SovereignAIBackend.exe") "Installed backend exe"
+            Assert-File $uninstaller "Uninstaller"
+            Write-Test "Install/layout" $true "SovereignAI.exe + resources\backend + uninstaller under $installDir"
+            Write-Test "Install/start-menu-shortcut" (Test-Path -LiteralPath $startMenu) "$startMenu"
+            Write-Test "Install/desktop-shortcut" (Test-Path -LiteralPath $desktopLnk) "$desktopLnk"
+
+            # Launch from the install dir, with no source repo on the path.
+            Stop-AppProcesses
+            $null = Start-Process -FilePath $installedExe -WorkingDirectory $installDir -PassThru
+            $firstRun = Wait-ForHealth -Port 8000 -TimeoutSeconds 180 -ProcessId 0
+            $dbAfterFirst = Test-Path -LiteralPath $dbPath
+            Write-Test "Install/app-starts-outside-repo" $firstRun "backend answered on 127.0.0.1:8000 from the installed app"
+            Stop-AppProcesses
+
+            # Restart: the same per-user data must still be there.
+            $null = Start-Process -FilePath $installedExe -WorkingDirectory $installDir -PassThru
+            $secondRun = Wait-ForHealth -Port 8000 -TimeoutSeconds 180 -ProcessId 0
+            $dbAfterRestart = Test-Path -LiteralPath $dbPath
+            Write-Test "Install/data-persists-across-restart" ($firstRun -and $secondRun -and $dbAfterFirst -and $dbAfterRestart) "same DB at $dbPath on both runs"
+            Stop-AppProcesses
+            $leftover = @(Get-Process -Name "SovereignAI", "SovereignAIBackend" -ErrorAction SilentlyContinue)
+            Write-Test "Install/no-orphan-processes" ($leftover.Count -eq 0) "nothing left running after shutdown"
+
+            # Uninstall.
+            $un = Start-Process -FilePath $uninstaller -ArgumentList "/S" -PassThru -Wait
+            for ($i = 0; $i -lt 20 -and (Test-Path -LiteralPath $installedExe); $i++) { Start-Sleep -Seconds 1 }
+            Write-Test "Uninstall/removes-application" (-not (Test-Path -LiteralPath $installedExe)) "uninstaller exit $($un.ExitCode) removed $installedExe"
+            Write-Test "Uninstall/removes-shortcuts" ((-not (Test-Path -LiteralPath $startMenu)) -and (-not (Test-Path -LiteralPath $desktopLnk))) "Start Menu + desktop links removed"
+            Write-Test "Uninstall/keeps-user-data" (Test-Path -LiteralPath $dbPath) "models/data under %APPDATA%\SovereignAI preserved"
+
+            Remove-Item -Recurse -Force -LiteralPath $testRoot -ErrorAction SilentlyContinue
+        }
+    } else {
+        Write-Report ""
+        Write-Report "== Test: install, restart, uninstall skipped (pass -TestInstall to run it)"
     }
 
     # ----------------------------------------------------------------------- #
@@ -490,9 +672,14 @@ finally {
     $testReport += ""
     $testReport += "SCOPE NOTES"
     $testReport += "  - Frontend, packaged backend and packaged application were exercised on the"
-    $testReport += "    build machine. A clean-machine install test was NOT performed."
-    $testReport += "  - The NSIS installer was built and inspected; it was not run through"
-    $testReport += "    an interactive install/uninstall cycle in this session."
+    $testReport += "    build machine. A clean-machine (no dev tooling) test was NOT performed."
+    if ($TestInstall) {
+        $testReport += "  - The NSIS installer ran a real silent install -> launch -> restart ->"
+        $testReport += "    uninstall cycle against build_exe\install_test (shortcuts included)."
+    } else {
+        $testReport += "  - The NSIS installer was built and inspected; it was not installed. Run"
+        $testReport += "    .\build_windows.ps1 -TestInstall for a real install/uninstall cycle."
+    }
     $testReport += "  - Local model inference requires model weights (workspace\models);"
     $testReport += "    none are bundled, so no generation test was run."
     $testReport += "  - RAG embeddings require a one-time download of the sentence-transformers"

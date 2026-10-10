@@ -16,13 +16,23 @@ const BACKEND_HEALTH_TIMEOUT_MS = 120000;
 
 const isDev = !app.isPackaged;
 
+// Pin user data to %APPDATA%\SovereignAI; Electron would otherwise use the npm
+// package name ("sovereign-ai-desktop"). Must run before anything reads a path.
+app.setPath('userData', path.join(app.getPath('appData'), 'SovereignAI'));
+
 // Writable state lives in the per-user data dir when packaged: the install
 // directory under Program Files (or wherever the user picked) is not writable.
-// Dev keeps using the repo workspace so existing data is untouched.
+// Dev keeps using the repo so existing data is untouched.
+// NOTE: this is the data ROOT -- the backend appends "workspace" itself
+// (SOVEREIGN_DATA_ROOT -> <root>\workspace).
 function dataRoot() {
   return isDev
-    ? path.join(__dirname, '..', 'workspace')
-    : path.join(app.getPath('userData'), 'workspace');
+    ? path.join(__dirname, '..')
+    : app.getPath('userData');
+}
+
+function workspaceDir() {
+  return path.join(dataRoot(), 'workspace');
 }
 
 // Read a boolean general setting straight from the settings DB files, before
@@ -31,7 +41,7 @@ function dataRoot() {
 // SQLite file and its WAL, so a byte scan finds them. Defaults on any error.
 function readGeneralFlag(key, fallback) {
   try {
-    const base = path.join(dataRoot(), 'database', 'sovereign_settings.db');
+    const base = path.join(workspaceDir(), 'database', 'sovereign_settings.db');
     for (const f of [base, base + '-wal']) {
       if (!fs.existsSync(f)) continue;
       const text = fs.readFileSync(f, 'latin1');
@@ -238,13 +248,13 @@ async function bootBackendAndUi() {
   await loadFrontend();
 
   if (!healthy) {
-    const logHint = path.join(dataRoot(), 'logs');
+    const logHint = path.join(workspaceDir(), 'logs');
     dialog.showErrorBox(
       'Backend did not start',
       `The local engine did not answer on port ${BACKEND_PORT} within ` +
       `${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)}s.\n\n` +
       `Check for details in:\n${logHint}\n\n` +
-      `Models and data live in:\n${dataRoot()}`
+      `Models and data live in:\n${workspaceDir()}`
     );
   }
 }

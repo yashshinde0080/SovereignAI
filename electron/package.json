@@ -13,6 +13,8 @@
     "dev": "electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win --x64",
+    "build:win:dir": "electron-builder --win --x64 --dir",
+    "build:win:prepackaged": "electron-builder --win nsis --x64 --prepackaged",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
   },
@@ -54,6 +56,7 @@
       ],
       "icon": "assets/icon.ico",
       "executableName": "SovereignAI",
+      "signAndEditExecutable": false,
       "artifactName": "SovereignAI-Setup-x64.${ext}"
     },
     "mac": {

@@ -147,3 +147,7 @@ opencode.jsonc
 graphify-out/
 
 opencode.json
+
+# Packaging output + build-only virtualenv (see build_windows.ps1)
+build_exe/
+backend/.venv-build/

@@ -16,6 +16,10 @@ interface MessageListProps {
   editingIndex?: number | null;
   isLoading?: boolean;
   modelName?: string;
+  /** Live tok/s while streaming; null hides the badge (show_token_speed). */
+  tokenSpeed?: number | null;
+  /** Show the tok/s badge at all (general.show_token_speed, default on). */
+  showTokenSpeed?: boolean;
 }
 
 const CodeBlock = ({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
@@ -240,7 +244,16 @@ const MessageItem = memo(function MessageItem({
   );
 });
 
-export function MessageList({ messages, onEditMessage, onRegenerate, editingIndex, isLoading, modelName }: MessageListProps) {
+export function MessageList({
+  messages,
+  onEditMessage,
+  onRegenerate,
+  editingIndex,
+  isLoading,
+  modelName,
+  tokenSpeed,
+  showTokenSpeed = true,
+}: MessageListProps) {
   const [viewSource, setViewSource] = useState<RagSource | null>(null);
 
   if (messages.length === 0) {
@@ -322,6 +335,13 @@ export function MessageList({ messages, onEditMessage, onRegenerate, editingInde
           />
         ))}
       </AnimatePresence>
+      {showTokenSpeed && !!tokenSpeed && (
+        <div className="flex justify-center pt-1">
+          <span className="text-[11px] font-mono text-muted-foreground/60">
+            {tokenSpeed.toFixed(1)} tok/s
+          </span>
+        </div>
+      )}
     </div>
   );
 }

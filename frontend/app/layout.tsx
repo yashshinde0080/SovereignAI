@@ -3,7 +3,7 @@ import { Oxanium, Source_Code_Pro } from 'next/font/google';
 import './globals.css';
 import { ClientLayout } from '@/components/layout/ClientLayout';
 import { Toaster } from '@/components/ui/toaster';
-import { bootTheme } from '@/lib/themeBoot';
+import { bootTheme, applyTheme, applyFontSize, applyLanguage } from '@/lib/themeBoot';
 
 const oxanium = Oxanium({ subsets: ['latin'], variable: '--font-oxanium' });
 const sourceCodePro = Source_Code_Pro({ subsets: ['latin'], variable: '--font-scm' });
@@ -13,9 +13,11 @@ export const metadata: Metadata = {
   description: 'Portable Offline AI Platform',
 };
 
-// Theme must apply before first paint — inline script, no layout jump.
+// Theme/font/language must apply before first paint — inline script, no jump.
 // Reads localStorage cache; backend reconcile happens in bootTheme after load.
-const THEME_BOOT = `(${bootTheme.toString()})();`;
+// NOTE: toString() serialization doesn't carry closures — every function
+// bootTheme calls must be serialized alongside it.
+const THEME_BOOT = `${applyTheme.toString()};${applyFontSize.toString()};${applyLanguage.toString()};${bootTheme.toString()};bootTheme();`;
 
 export default function RootLayout({
   children,

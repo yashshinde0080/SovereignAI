@@ -59,10 +59,15 @@ class ModelManager:
     
     HUGGINGFACE_API = "https://huggingface.co/api/models"
     
-    def __init__(self):
+    def __init__(self, settings_service=None):
+        self.settings_service = settings_service
         self.models_dir = settings.models_dir
         self.registry = ModelRegistry(settings.database_path)
-        self.encryption = ModelEncryption() if settings.encryption_enabled else None
+        # encrypt_models switch (security section) decides whether the
+        # ModelEncryption helper is even constructed; cloud key storage keeps
+        # its own ModelEncryption instance regardless.
+        self.encryption = None  # set in initialize(), after settings linked
+        self._encrypt_models = True
         
         self.download_status: Dict[str, Dict[str, Any]] = {}
         self._download_tasks: Dict[str, asyncio.Task] = {}
@@ -73,8 +78,50 @@ class ModelManager:
         
         self.provider = HuggingFaceProvider()
     
+    def _setting(self, section_getter, key, default):
+        """Read one settings key; broken/absent settings service = default.
+
+        Tolerates subclasses that skip __init__ (test doubles): missing
+        settings_service attr behaves like "no settings linked".
+        """
+        svc = getattr(self, "settings_service", None)
+        if svc is None:
+            return default
+        try:
+            return (section_getter() or {}).get(key, default)
+        except Exception:
+            return default
+
+    def _encrypt_models_enabled(self) -> bool:
+        return bool(
+            self._setting(
+                lambda: self.settings_service.get_security(),
+                "encrypt_models",
+                True,
+            )
+        )
+
+    def _check_allowed_models(self, model_id: str) -> None:
+        """Parental controls: allowed_models non-empty = allowlist (local models only)."""
+        allowed = self._setting(
+            lambda: self.settings_service.get_parental_controls(),
+            "allowed_models",
+            [],
+        )
+        if allowed:
+            clean = model_id.replace("/", "-").replace(":", "-").lower()
+            norm = [str(a).replace("/", "-").replace(":", "-").lower() for a in allowed]
+            if clean not in norm and not any(a in clean or clean in a for a in norm):
+                raise PermissionError(
+                    f"Model '{model_id}' is blocked by parental controls (allowed models list)."
+                )
+
     async def initialize(self, app=None):
         """Initialize model manager with app reference for engine state"""
+        if app is not None:
+            self.settings_service = getattr(app.state, "settings_service", None)
+        self._encrypt_models = self._encrypt_models_enabled()
+        self.encryption = ModelEncryption() if self._encrypt_models else None
         self.app = app
         await self.registry.initialize()
         await self.provider.initialize()
@@ -282,7 +329,7 @@ class ModelManager:
                 raise RuntimeError("ModelManager not linked to FastAPI application state")
             async with self._load_lock:
                 return await self._load_model_locked(
-                    model_id, "cloud", {"id": model_id, "path": model_id}, []
+                    model_id, "cloud", {"id": model_id, "path": model_id}, model_id, []
                 )
 
         # Try to find the model from the existing registry FIRST.
@@ -318,11 +365,20 @@ class ModelManager:
             
         if not self.app:
             raise RuntimeError("ModelManager not linked to FastAPI application state")
-        
-        async with self._load_lock:
-            return await self._load_model_locked(model_id, mode, model, all_models)
 
-    async def _load_model_locked(self, model_id: str, mode: str, model: Dict[str, Any], all_models: List[Dict[str, Any]]) -> Dict[str, Any]:
+        self._check_allowed_models(model_id)
+
+        async with self._load_lock:
+            return await self._load_model_locked(model_id, mode, model, model_id, all_models)
+
+    async def _load_model_locked(
+        self,
+        model_id: str,
+        mode: str,
+        model: Dict[str, Any],
+        resolved_id: str,
+        all_models: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
         """Body of load_model, run under the concurrent-load lock."""
         from app.core.engine_factory import EngineFactory
 

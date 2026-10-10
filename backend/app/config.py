@@ -1,8 +1,30 @@
 """Configuration Management"""
 import os
+import sys
 from pathlib import Path
 from pydantic_settings import BaseSettings
 from pydantic import Field, ConfigDict
+
+_REPO_ROOT = Path(__file__).parent.parent.parent
+
+
+def _data_root() -> Path:
+    """Root for every writable path (workspace, models, DBs).
+
+    Dev runs beside the repo. A frozen (PyInstaller) build has no repo and its
+    install dir is typically read-only, so the Electron shell passes
+    SOVEREIGN_DATA_ROOT pointing at the per-user data dir.
+    """
+    env = os.environ.get("SOVEREIGN_DATA_ROOT")
+    if env:
+        return Path(env).expanduser()
+    if getattr(sys, "frozen", False):
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home()) / "SovereignAI"
+    return _REPO_ROOT
+
+
+_DATA_ROOT = _data_root()
+_WORKSPACE = _DATA_ROOT / "workspace"
 
 
 class Settings(BaseSettings):
@@ -18,12 +40,12 @@ class Settings(BaseSettings):
     port: int = 8000
     
     # Paths
-    base_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent)
-    workspace_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace")
-    models_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "models")
-    plugins_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "plugins")
-    database_path: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "database" / "sovereign.db")
-    data_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "data")
+    base_dir: Path = Field(default_factory=lambda: _REPO_ROOT)
+    workspace_dir: Path = Field(default_factory=lambda: _WORKSPACE)
+    models_dir: Path = Field(default_factory=lambda: _WORKSPACE / "models")
+    plugins_dir: Path = Field(default_factory=lambda: _WORKSPACE / "plugins")
+    database_path: Path = Field(default_factory=lambda: _WORKSPACE / "database" / "sovereign.db")
+    data_dir: Path = Field(default_factory=lambda: _WORKSPACE / "data")
     
     # Memory
     max_ram_usage_percent: float = 0.75
@@ -38,7 +60,7 @@ class Settings(BaseSettings):
     trust_remote_code: bool = False
     
     # Custom model catalog (enterprise / USB YAML definitions)
-    catalog_dir: Path = Field(default_factory=lambda: Path(__file__).parent.parent.parent / "workspace" / "plugins" / "user" / "models")
+    catalog_dir: Path = Field(default_factory=lambda: _WORKSPACE / "plugins" / "user" / "models")
 
     # Model Defaults
     default_quant: str = "Q4_K_M"

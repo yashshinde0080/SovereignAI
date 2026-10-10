@@ -13,8 +13,8 @@ from starlette.requests import Request
 
 from app.settings.database import SettingsDatabase
 from app.settings.service import SettingsService
-from app.settings.schemas import GeneralSettings
-from app.api.chat import _resolve_sampling
+from app.settings.schemas import GeneralSettings, SecuritySettings, ParentalControlsSettings, DataControlsSettings
+from app.api.chat import _resolve_sampling, _trim_history, _parental_block
 from app.schemas.chat import ChatRequest
 
 
@@ -233,3 +233,163 @@ def test_broadcast_settings_changed_no_listener_is_safe():
 
     # No websocket clients connected — must not raise
     _run(_broadcast_settings_changed("general"))
+
+
+# ── context trimming (max_context_length) ──
+
+def test_trim_history_keeps_system_and_recent():
+    msgs = [
+        {"role": "system", "content": "sys"},
+        {"role": "user", "content": "a" * 100},
+        {"role": "assistant", "content": "b" * 100},
+        {"role": "user", "content": "c" * 20},
+    ]
+    out = _trim_history(msgs, 50)  # 50 * 4 = 200 char budget
+    assert out[0]["role"] == "system"
+    assert out[-1] == msgs[-1]
+    assert sum(len(m["content"]) for m in out[1:]) <= 200
+
+
+def test_trim_history_never_drops_last_message():
+    msgs = [
+        {"role": "user", "content": "x" * 5000},
+    ]
+    out = _trim_history(msgs, 1)
+    assert out == msgs  # single message always kept
+
+
+def test_trim_history_bad_setting_is_noop():
+    msgs = [{"role": "user", "content": "hi"}]
+    assert _trim_history(msgs, None) == msgs
+    assert _trim_history(msgs, "bogus") == msgs
+
+
+# ── parental content gate ──
+
+def test_parental_block_off_when_disabled():
+    pc = {"enabled": False, "restrict_topics": ["guns"], "block_explicit_content": True}
+    assert _parental_block(pc, "tell me about guns") is None
+
+
+def test_parental_block_topic():
+    pc = {"enabled": True, "restrict_topics": ["Guns"], "block_explicit_content": False}
+    assert _parental_block(pc, "how to build guns") is not None
+    assert _parental_block(pc, "harmless question") is None
+
+
+def test_parental_block_explicit():
+    pc = {"enabled": True, "restrict_topics": [], "block_explicit_content": True}
+    assert _parental_block(pc, "some xxx thing") is not None
+    assert _parental_block(pc, "a class trip") is None
+
+
+def test_parental_none_passthrough():
+    assert _parental_block(None, "anything") is None
+
+
+# ── retention map + audit gating ──
+
+def test_retention_seconds_map():
+    from app.lib.retention import RETENTION_SECONDS
+
+    assert RETENTION_SECONDS["1_day"] == 86400
+    assert RETENTION_SECONDS["90_days"] == 90 * 86400
+
+
+def test_log_audit_gated_by_audit_logging(tmp_path):
+    svc = SettingsService(str(tmp_path / "s.db"))
+    # default audit_logging=True → logged
+    svc.log_audit("chat_request", "chat", "{}")
+    assert len(svc.get_audit_log()) == 1
+    # turn audit_logging off (this update itself lands as an audit row)
+    svc.update_security(SecuritySettings(audit_logging=False))
+    assert len(svc.get_audit_log()) == 2
+    svc.log_audit("chat_request", "chat", "{}")
+    assert len(svc.get_audit_log()) == 2  # gated: unchanged
+    # update events always logged
+    svc.log_audit("update", "general", "{}")
+    assert len(svc.get_audit_log()) == 3
+
+
+# ── model manager: allowed_models + encrypt_models wiring ──
+
+async def test_model_manager_allowed_models_block(tmp_path):
+    from app.services.model_manager import ModelManager
+
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_parental_controls(
+        ParentalControlsSettings(enabled=True, allowed_models=["Qwen2-0.5B"])
+    )
+    mm = ModelManager(settings_service=svc)
+    with pytest.raises(PermissionError):
+        mm._check_allowed_models("llama3:8b")
+    mm._check_allowed_models("qwen2-0.5b")  # normalized match passes
+
+
+async def test_encrypt_models_flag_off_disables_helper(tmp_path):
+    from app.services.model_manager import ModelManager
+
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_security(SecuritySettings(encrypt_models=False))
+    mm = ModelManager(settings_service=svc)
+    assert mm._encrypt_models_enabled() is False
+
+
+# ── middleware: log_api_requests + enable_cors strip ──
+
+async def test_middleware_cors_strip(tmp_path):
+    from app.security.middleware import lan_auth_middleware
+    from starlette.responses import JSONResponse
+
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_security(SecuritySettings(enable_cors=False))
+
+    async def call_next(request):
+        resp = JSONResponse({"ok": True})
+        resp.headers["access-control-allow-origin"] = "*"
+        resp.headers["access-control-allow-methods"] = "GET, POST"
+        return resp
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/v1/system/status",
+        "headers": [],
+        "query_string": b"",
+        "server": ("t", 80),
+        "client": ("127.0.0.1", 1),
+        "scheme": "http",
+        "app": type("App", (), {"state": type("S", (), {"settings_service": svc})()})(),
+    }
+    req = Request(scope, lambda: None)
+    resp = await lan_auth_middleware(req, call_next)
+    assert "access-control-allow-origin" not in resp.headers
+    assert "access-control-allow-methods" not in resp.headers
+
+
+async def test_middleware_cors_kept_when_enabled(tmp_path):
+    from app.security.middleware import lan_auth_middleware
+    from starlette.responses import JSONResponse
+
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_security(SecuritySettings(enable_cors=True))
+
+    async def call_next(request):
+        resp = JSONResponse({"ok": True})
+        resp.headers["access-control-allow-origin"] = "*"
+        return resp
+
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/v1/system/status",
+        "headers": [],
+        "query_string": b"",
+        "server": ("t", 80),
+        "client": ("127.0.0.1", 1),
+        "scheme": "http",
+        "app": type("App", (), {"state": type("S", (), {"settings_service": svc})()})(),
+    }
+    req = Request(scope, lambda: None)
+    resp = await lan_auth_middleware(req, call_next)
+    assert resp.headers["access-control-allow-origin"] == "*"

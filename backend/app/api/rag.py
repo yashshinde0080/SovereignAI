@@ -1,8 +1,10 @@
 """RAG API Endpoints"""
 import asyncio
+import re
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 
 from app.schemas.rag import (
+    Citation,
     QueryRequest,
     QueryResponse,
     DocumentList
@@ -14,6 +16,46 @@ router = APIRouter()
 
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50MB
+
+# The grounding prompt tells the model to cite as [Source: <filename>#<chunk_index>].
+_CITATION_RE = re.compile(r"\[Source:\s*([^\]#]+?)\s*#\s*(\d+)\]")
+
+
+def _verify_citations(answer: str, results) -> tuple:
+    """Cross-check the answer's [Source: name#idx] citations against the chunks
+    that were actually retrieved.
+
+    Returns (citations, unverified_count). Verified entries carry the
+    document's real id/score/quote from the retrieved chunk, never anything
+    parsed out of the model's prose — so an invented source is dropped, not
+    echoed back to the client as if it existed."""
+    allowed = {}
+    for r in results:
+        allowed.setdefault(
+            (r.metadata.get("filename", r.document_id), r.chunk_index), r
+        )
+
+    verified, seen, unverified = [], set(), 0
+    for match in _CITATION_RE.finditer(answer or ""):
+        key = (match.group(1).strip(), int(match.group(2)))
+        if key in seen:
+            continue
+        seen.add(key)
+
+        result = allowed.get(key)
+        if result is None:
+            unverified += 1
+            continue
+
+        verified.append({
+            "document_id": result.document_id,
+            "filename": key[0],
+            "chunk_index": result.chunk_index,
+            "score": result.score,
+            "quote": result.content[:240],
+        })
+
+    return verified, unverified
 
 
 def _decode_text(content: bytes) -> str:
@@ -81,7 +123,6 @@ async def upload_document(
         raise HTTPException(status_code=413, detail="File too large. Max: 50MB")
     
     # Process based on file type
-    filename = (file.filename or "").lower()
     text = ""
     if filename.endswith(('.txt', '.md')):
         text = _decode_text(content)
@@ -158,9 +199,22 @@ async def query_documents(request: Request, query: QueryRequest):
         }
         for r in rag_context.results
     ]
-    
+
+    # Nothing cleared the score floor. Generating from an empty context block
+    # only produces a confident answer with no evidence behind it — say so
+    # instead of spending a generation on it.
+    if not rag_context.results:
+        return QueryResponse(
+            query=query.query,
+            results=results,
+            generated_response=None,
+            insufficient_evidence=True,
+        )
+
+    engine = getattr(request.app.state, "active_engine", None)
+
     # If model is loaded, generate a grounded response from labeled context
-    if request.app.state.active_engine and query.generate_response:
+    if engine and query.generate_response:
         context = rag_context.context_text
 
         # Grounding template: excerpts are UNTRUSTED DATA, answer only from
@@ -189,15 +243,20 @@ async def query_documents(request: Request, query: QueryRequest):
             except Exception:
                 pass
                 
-        response = await request.app.state.active_engine.generate(
+        response = await engine.generate(
             input_data=prompt,
             max_tokens=query.max_tokens
         )
-        
+
+        answer = response.get("output") or response.get("text") or ""
+        citations, unverified = _verify_citations(answer, rag_context.results)
+
         return QueryResponse(
             query=query.query,
             results=results,
-            generated_response=response.get("output") or response.get("text") or ""
+            generated_response=answer,
+            citations=[Citation(**c) for c in citations],
+            unverified_citation_count=unverified,
         )
     
     return QueryResponse(

@@ -1,4 +1,5 @@
 """Main FastAPI Application"""
+import asyncio
 import logging
 import os
 import sys
@@ -95,17 +96,54 @@ async def lifespan(app: FastAPI):
     app.state.hardware_profile = detect_hardware()
     logger.info("Hardware: %s", app.state.hardware_profile)
 
+    # Initialize settings service first — ModelManager reads it for
+    # encrypt_models / allowed_models, and chat.py reads it for every request.
+    from app.settings.service import SettingsService
+    app.state.settings_service = SettingsService()
+
     # Initialize model manager
     app.state.model_manager = ModelManager()
     await app.state.model_manager.initialize(app=app)
 
-    # Initialize settings service
-    from app.settings.service import SettingsService
-    app.state.settings_service = SettingsService()
-
     # Cloud provider registry (sovereign_settings.db, Fernet-encrypted keys)
     from app.engines.cloud.registry import CloudProviderRegistry
     app.state.cloud_provider_registry = CloudProviderRegistry()
+
+    # Per-request generation concurrency cap (security.max_concurrent_requests).
+    # Only the engine call is gated — RAG/tokenizer work stays un-gated so the
+    # semaphore slots aren't held while doing disk work.
+    try:
+        _max_conc = int(app.state.settings_service.get_security().get("max_concurrent_requests", 4) or 4)
+    except Exception:
+        _max_conc = 4
+    app.state.gen_semaphore = asyncio.Semaphore(max(1, _max_conc))
+
+    # Auto-delete expired session snapshots hourly (data_controls.auto_delete_sessions).
+    # Files carry their own mtime — no index to maintain.
+    async def _sweep_sessions():
+        import time as _time
+        from app.lib.retention import RETENTION_SECONDS
+        while True:
+            try:
+                dc = app.state.settings_service.get_data_controls()
+                if dc.get("auto_delete_sessions"):
+                    secs = RETENTION_SECONDS.get(dc.get("data_retention"))
+                    sess_dir = settings.workspace_dir / "sessions"
+                    now = _time.time()
+                    if secs is not None and sess_dir.exists():
+                        for f in sess_dir.glob("*.json"):
+                            try:
+                                if now - f.stat().st_mtime > secs:
+                                    f.unlink()
+                            except OSError:
+                                pass
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass  # a sweep hiccup must never take the sweep task down
+            await asyncio.sleep(3600)
+
+    sweep_task = asyncio.ensure_future(_sweep_sessions())
 
     # Load startup model if configured
     try:
@@ -118,8 +156,10 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("Startup model error: %s", e)
 
-    # Initialize plugin manager
-    app.state.plugin_manager = PluginManager()
+    # Initialize plugin manager (reads settings for disable_external_plugins)
+    app.state.plugin_manager = PluginManager(
+        settings_service=app.state.settings_service
+    )
     await app.state.plugin_manager.load_plugins()
 
     # Active engine reference
@@ -131,6 +171,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down...")
+    sweep_task.cancel()
     if app.state.active_engine:
         await app.state.active_engine.unload()
     if hasattr(app.state, 'model_manager') and hasattr(app.state.model_manager, 'provider'):

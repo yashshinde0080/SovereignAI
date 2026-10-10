@@ -4,7 +4,14 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Message, RagSource } from '@/types';
 import { errMsg } from '@/lib/utils';
 import { useSettingsStore } from '@/store/settings';
-import { filterByRetention, isHistoryEnabled, isSessionOnly } from '@/lib/chatRetention';
+import {
+  filterByRetention,
+  isHistoryEnabled,
+  isSessionOnly,
+  isSessionExpired,
+} from '@/lib/chatRetention';
+import { encryptText, decryptText, isEncrypted } from '@/lib/chatCrypto';
+import { playChime } from '@/lib/sounds';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 const SESSION_KEY = 'sovereignai.chat.sessionId';
@@ -45,15 +52,47 @@ function getSessionId(): string {
 
 const STORAGE_KEY = `sovereignai.chat.messages.${getSessionId()}`;
 
-function storage(): Storage | null {
+function settingsSnap() {
+  const s = useSettingsStore.getState().settings;
+  return {
+    dc: s?.data_controls as Record<string, unknown> | undefined,
+    general: s?.general as Record<string, unknown> | undefined,
+    parental: s?.parental_controls as Record<string, unknown> | undefined,
+  };
+}
+
+/** clear_on_exit / session_only → sessionStorage (dies with tab natively). */
+function storageArea(): Storage | null {
   if (typeof window === 'undefined') return null;
   try {
-    // clear_on_exit (and session_only retention) → sessionStorage so data
-    // dies with the tab natively; otherwise localStorage.
-    const dc = useSettingsStore.getState().settings?.data_controls as Record<string, unknown> | undefined;
-    return isSessionOnly(dc) ? window.sessionStorage : window.localStorage;
+    return isSessionOnly(settingsSnap().dc) ? window.sessionStorage : window.localStorage;
   } catch {
     return null;
+  }
+}
+
+/** Read + decrypt stored history according to data_controls. */
+async function readStored(): Promise<string | null> {
+  const raw = storageArea()?.getItem(STORAGE_KEY) ?? null;
+  if (raw === null) return null;
+  if (!isEncrypted(raw)) return raw;
+  try {
+    return await decryptText(raw);
+  } catch {
+    return null; // undecryptable = treat as absent
+  }
+}
+
+async function loadMessages(): Promise<Message[]> {
+  if (typeof window === 'undefined') return [];
+  try {
+    const { dc } = settingsSnap();
+    if (!isHistoryEnabled(dc)) return []; // memory-only mode
+    const raw = await readStored();
+    if (!raw) return [];
+    return filterByRetention(sanitizeMessages(JSON.parse(raw)), dc?.data_retention);
+  } catch {
+    return [];
   }
 }
 
@@ -64,93 +103,136 @@ function sanitizeMessages(parsed: unknown): Message[] {
       (m: unknown) =>
         m !== null &&
         typeof m === 'object' &&
-        (m as Record<string, unknown>).role === 'user' &&
+        ((m as Record<string, unknown>).role === 'user' ||
+          (m as Record<string, unknown>).role === 'assistant') &&
         typeof (m as Record<string, unknown>).content === 'string'
     )
-    .map((m) => ({ ...m, sources: normalizeSources((m as Record<string, unknown>).sources) }));
+    .map((m) => ({ ...(m as Message), sources: normalizeSources((m as Record<string, unknown>).sources) }));
 }
 
-function loadMessages(): Message[] {
-  if (typeof window === 'undefined') return [];
+/** Persist history honoring save_chat_history / retention stamp / encryption. */
+async function persistMessages(messages: Message[]): Promise<void> {
+  const { dc } = settingsSnap();
+  if (!isHistoryEnabled(dc)) return; // save off → don't persist
+  const store = storageArea();
+  if (!store) return;
+  const cleaned = messages
+    .filter((m) => m.content.trim())
+    .map((m) => ({ ...m, ts: m.ts ?? Date.now() }));
+  const json = JSON.stringify(cleaned);
   try {
-    const dc = useSettingsStore.getState().settings?.data_controls as Record<string, unknown> | undefined;
-    if (!isHistoryEnabled(dc)) return []; // memory-only mode
-    const raw = storage()?.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return filterByRetention(sanitizeMessages(JSON.parse(raw)), dc?.data_retention);
+    if (dc?.encrypt_local_data === true) {
+      store.setItem(STORAGE_KEY, await encryptText(json));
+    } else {
+      // Downgrade: overwrite any previously-encrypted blob with plaintext so
+      // toggling the switch off leaves no unreadable ciphertext behind.
+      store.setItem(STORAGE_KEY, json);
+    }
   } catch {
-    return [];
+    // non-fatal
+  }
+}
+
+// ── notifications + sounds ──
+
+function notifyReply(): void {
+  try {
+    const general = settingsSnap().general;
+    if (general?.enable_notifications === false) return;
+    if (!document.hidden) return; // only bother the user when tab is backgrounded
+    const electron = (window as unknown as { electronAPI?: { showNotification?: (o: { title: string; body: string }) => void } }).electronAPI;
+    if (electron?.showNotification) {
+      electron.showNotification({ title: 'SovereignAI', body: 'Reply ready.' });
+    } else if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('SovereignAI', { body: 'Reply ready.' });
+    }
+  } catch {
+    // non-fatal
+  }
+}
+
+function onGenerationDone(): void {
+  notifyReply();
+  try {
+    const general = settingsSnap().general;
+    if (general?.enable_sounds === true) playChime();
+  } catch {
+    // non-fatal
   }
 }
 
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  /** Live tok/s of the last/ongoing generation (show_token_speed). */
+  const [tokenSpeed, setTokenSpeed] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef(messages);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+  const sessionStartRef = useRef(Date.now());
 
-  // Load settings once on mount so sampling defaults + send_on_enter are live.
+  // Load settings, then restore history (settings decide storage + retention).
   useEffect(() => {
-    const s = useSettingsStore.getState();
-    if (!s.settings && !s.loading) void s.load();
-  }, []);
-
-  useEffect(() => {
-    const restored = loadMessages();
-    if (restored.length > 0) {
-      setMessages(restored);
-      return;
-    }
-    try {
-      const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-      if (legacy) {
-        const migrated = sanitizeMessages(JSON.parse(legacy));
-        if (migrated.length > 0) {
-          window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-          setMessages(migrated);
-          return;
-        }
+    let cancelled = false;
+    (async () => {
+      const s = useSettingsStore.getState();
+      if (!s.settings && !s.loading) {
+        await s.load().catch(() => undefined);
       }
-    } catch {
-      // ignore
-    }
+      const restored = await loadMessages();
+      if (cancelled || restored.length === 0) return;
+      setMessages(restored);
+      // Legacy migration: one-time import of the pre-session-key blob.
+      try {
+        const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+        if (legacy) {
+          const migrated = sanitizeMessages(JSON.parse(legacy));
+          if (migrated.length > 0) window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+        }
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined' || isLoading) return;
-    const dc = useSettingsStore.getState().settings?.data_controls as Record<string, unknown> | undefined;
-    if (!isHistoryEnabled(dc)) return; // save off → don't persist
-    try {
-      storage()?.setItem(
-        STORAGE_KEY,
-        JSON.stringify(
-          messages
-            .filter((m) => m.content.trim())
-            .map((m) => ({ ...m, ts: m.ts ?? Date.now() }))
-        )
-      );
-    } catch {
-      // non-fatal
-    }
+    void persistMessages(messages);
   }, [messages, isLoading]);
 
   const runCompletion = useCallback(async (messagesToSend: Message[]) => {
+    const { general, parental } = settingsSnap();
+
+    // Parental max_session_duration_minutes: 0 = unlimited.
+    if (isSessionExpired(parental, sessionStartRef.current)) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: '**Session time limit reached.** The session duration cap from Parental Controls has expired — start a new session to continue.' },
+      ]);
+      return;
+    }
+
     setMessages(messagesToSend);
     setIsLoading(true);
+    setTokenSpeed(null);
 
     // Saved general settings are the defaults; backend re-resolves request > saved > default.
-    const general = (useSettingsStore.getState().settings?.general ?? {}) as Record<string, unknown>;
-    const savedMaxTokens = Number(general.max_tokens);
-    const savedTemp = Number(general.temperature);
-    const savedTopP = Number(general.top_p);
+    const savedMaxTokens = Number(general?.max_tokens);
+    const savedTemp = Number(general?.temperature);
+    const savedTopP = Number(general?.top_p);
     const sampling = {
       ...(Number.isFinite(savedMaxTokens) && savedMaxTokens > 0 ? { max_tokens: savedMaxTokens } : {}),
       ...(Number.isFinite(savedTemp) ? { temperature: savedTemp } : {}),
       ...(Number.isFinite(savedTopP) && savedTopP > 0 && savedTopP <= 1 ? { top_p: savedTopP } : {}),
     };
+
+    // stream_responses=false → one blocking request (uses the non-SSE branch).
+    const wantStream = general?.stream_responses !== false;
 
     let flushRaf: number | null = null;
     const controller = new AbortController();
@@ -163,7 +245,7 @@ export function useChat() {
         signal: controller.signal,
         body: JSON.stringify({
           messages: messagesToSend,
-          stream: true,
+          stream: wantStream,
           use_rag: true,
           ...sampling,
           model: messagesToSend[0]?.model,
@@ -177,14 +259,16 @@ export function useChat() {
         throw err;
       }
 
-      if (response.headers.get('Content-Type')?.includes('text/event-stream')) {
+      if (wantStream && response.headers.get('Content-Type')?.includes('text/event-stream')) {
         const reader = response.body?.getReader();
         if (!reader) throw new Error('No response body');
 
         let assistantContent = '';
         let assistantModel = '';
+        let tokenCount = 0;
         let buffer = '';
         const decoder = new TextDecoder();
+        const genStart = performance.now();
 
         const patchLastMessage = (patch: Partial<Message>) => {
           setMessages((prev) => {
@@ -199,6 +283,10 @@ export function useChat() {
 
         const flush = () => {
           flushRaf = null;
+          const elapsed = (performance.now() - genStart) / 1000;
+          if (elapsed > 0.2 && tokenCount > 0) {
+            setTokenSpeed(tokenCount / elapsed); // show_token_speed lives here
+          }
           patchLastMessage({
             content: assistantContent,
             ...(assistantModel ? { model: assistantModel } : {}),
@@ -256,6 +344,7 @@ export function useChat() {
                   const token = chunk.choices?.[0]?.delta?.content || '';
                   if (token) {
                     assistantContent += token;
+                    tokenCount += 1;
                     scheduleFlush();
                   }
                 } catch (e) {
@@ -272,10 +361,13 @@ export function useChat() {
           cancelAnimationFrame(flushRaf);
           flushRaf = null;
         }
+        const elapsed = (performance.now() - genStart) / 1000;
+        if (elapsed > 0.2 && tokenCount > 0) setTokenSpeed(tokenCount / elapsed);
         patchLastMessage({
           content: assistantContent,
           ...(assistantModel ? { model: assistantModel } : {}),
         });
+        onGenerationDone();
       } else {
         const data = await response.json();
         const msg = data.choices?.[0]?.message || {};
@@ -283,6 +375,7 @@ export function useChat() {
           ...prev,
           { role: 'assistant', content: msg.content || '', ...(data.model ? { model: data.model } : {}) },
         ]);
+        onGenerationDone();
       }
     } catch (error) {
       if ((error as Error)?.name !== 'AbortError') {
@@ -343,30 +436,55 @@ export function useChat() {
     setMessages([]);
   }, []);
 
+  // export_format (data_controls): json | csv | markdown (default).
   const exportChat = useCallback(() => {
     const date = new Date();
     const stamp = date.toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const lines: string[] = [
-      '# SovereignAI Chat Export',
-      '',
-      `*Exported ${date.toLocaleString()}*`,
-      '',
-      '---',
-      '',
-    ];
-    for (const m of messages) {
-      if (!m.content.trim()) continue;
-      lines.push(`## ${m.role === 'user' ? 'User' : 'Assistant'}`, '');
-      lines.push(m.content, '');
-      if (m.sources?.length) {
-        lines.push('**Sources Used:**', ...m.sources.map((s) => `- ${s.filename}`), '');
+    const usable = messages.filter((m) => m.content.trim());
+    const fmt = String(settingsSnap().dc?.export_format || 'markdown');
+    let blob: Blob;
+    let filename: string;
+
+    if (fmt === 'json') {
+      blob = new Blob(
+        [JSON.stringify({ exported: date.toISOString(), messages: usable }, null, 2)],
+        { type: 'application/json;charset=utf-8' }
+      );
+      filename = `sovereignai-chat-${stamp}.json`;
+    } else if (fmt === 'csv') {
+      const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+      const rows = ['role,content,sources'];
+      for (const m of usable) {
+        rows.push(
+          [esc(m.role), esc(m.content), esc((m.sources ?? []).map((s) => s.filename).join('; '))].join(',')
+        );
       }
+      blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+      filename = `sovereignai-chat-${stamp}.csv`;
+    } else {
+      const lines: string[] = [
+        '# SovereignAI Chat Export',
+        '',
+        `*Exported ${date.toLocaleString()}*`,
+        '',
+        '---',
+        '',
+      ];
+      for (const m of usable) {
+        lines.push(`## ${m.role === 'user' ? 'User' : 'Assistant'}`, '');
+        lines.push(m.content, '');
+        if (m.sources?.length) {
+          lines.push('**Sources Used:**', ...m.sources.map((s) => `- ${s.filename}`), '');
+        }
+      }
+      blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+      filename = `sovereignai-chat-${stamp}.md`;
     }
-    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `sovereignai-chat-${stamp}.md`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -376,6 +494,7 @@ export function useChat() {
   return {
     messages,
     isLoading,
+    tokenSpeed,
     sendMessage,
     editAndResend,
     regenerate,

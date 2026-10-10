@@ -4,14 +4,14 @@ import os
 import time
 from fastapi import APIRouter, HTTPException, Request
 
+from app.config import settings
+
 router = APIRouter()
 
 
-BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-
 def _workspace_dir(app) -> str:
-    d = os.path.join(BASE, "workspace", "sessions")
+    # settings owns the writable root (repo in dev, user data dir when packaged).
+    d = str(settings.workspace_dir / "sessions")
     os.makedirs(d, exist_ok=True)
     return os.path.abspath(d)
 

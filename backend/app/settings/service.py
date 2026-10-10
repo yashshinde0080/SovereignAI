@@ -53,6 +53,15 @@ class SettingsService:
         self._security_cache = None
         return self.db.reset_all()
 
+    def log_audit(self, action: str, section: str, details: str) -> None:
+        """Append to the audit log, gated by settings.audit_logging.
+
+        `update` events always land (they're the change record itself); other
+        actions (chat_request, unlock_attempt, plugin exec) honor the switch.
+        """
+        if action != "update" and not self.get_security().get("audit_logging", True):
+            return
+        self.db.log_audit(action, section, details)
     # ── General ──
 
     def get_general(self) -> dict:
@@ -181,6 +190,19 @@ class SettingsService:
         """Build the full system prompt from personalization + active agent."""
         personalization = self.get_personalization()
         active_agent = self.get_active_agent()
+
+        # Parental controls: ignore user custom instructions & persona fields
+        # while the lock is on (kids can't re-persona the assistant).
+        try:
+            if self.get_parental_controls().get("enabled") and self.get_parental_controls().get(
+                "disable_custom_instructions"
+            ):
+                personalization = {
+                    k: personalization.get(k)
+                    for k in ("base_style_tone", "headers_lists_mode", "response_length")
+                }
+        except Exception:
+            pass  # broken parental settings must not break prompting
 
         parts = []
 

@@ -20,9 +20,10 @@ SCAN_DIRS=(
   "$SRC/launch.sh" "$SRC/launch.bat" "$SRC/install.sh" "$SRC/setup_package.sh"
   "$SRC/scripts/build-release.sh" "$SRC/scripts/build-release.ps1" "$SRC/scripts/release_lib.py"
 )
-# A real drive path has the drive + at least one subdir (two backslashes);
-# this avoids matching escaped newlines ('s:\n') and URLs ('app://') in strings.
-hits=$(grep -rInE '([A-Za-z]:\\[^ ]*\\|/home/[A-Za-z]|/Users/[A-Za-z])' \
+# Drive + a real path segment + separator (C:\Users\). This avoids matching
+# string escapes ('s:\n', 'e:\s*') and URLs ('app://') while still catching
+# leaked build-machine paths. Single-segment paths (C:\Temp) are not flagged.
+hits=$(grep -rInE '([A-Za-z]:\\[A-Za-z0-9_. -]+\\|/home/[A-Za-z]|/Users/[A-Za-z])' \
         --include='*.py' --include='*.js' --include='*.ts' --include='*.tsx' \
         --include='*.sh' --include='*.bat' "${SCAN_DIRS[@]}" 2>/dev/null \
       | grep -vE 'url|http|127\.0\.0\.1|win32|__file__|SOVEREIGN_' || true)

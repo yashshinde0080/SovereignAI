@@ -40,7 +40,10 @@ class VectorMetadataStore:
         # by self._lock (reader/writer race would corrupt cursor state).
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode = WAL")
+        # Rollback journal + FULL sync: the vector index metadata lives on the
+        # (possibly removable, exFAT) drive where WAL's -wal/-shm is unsafe.
+        self._conn.execute("PRAGMA journal_mode = DELETE")
+        self._conn.execute("PRAGMA synchronous = FULL")
         self._conn.execute("PRAGMA foreign_keys = ON")
 
         # Migration: add content_hash to pre-existing databases

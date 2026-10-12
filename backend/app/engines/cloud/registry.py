@@ -35,7 +35,10 @@ class CloudProviderRegistry:
         if self._conn is None:
             self._conn = sqlite3.connect(self.db_path)
             self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA journal_mode=WAL")
+            # Same sovereign_settings.db as SettingsDatabase: keep the portable
+            # rollback-journal + FULL sync there (removable-drive safe), not WAL.
+            self._conn.execute("PRAGMA journal_mode=DELETE")
+            self._conn.execute("PRAGMA synchronous=FULL")
         return self._conn
 
     def _init_db(self):

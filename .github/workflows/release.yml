@@ -1,0 +1,111 @@
+name: release
+
+# Builds portable SovereignAI Edge packages on native runners.
+#   - Manual dispatch: builds + uploads downloadable workflow artifacts (no release).
+#   - Tag push:       same build, then a SEPARATE gated job can publish a GitHub Release.
+# Building never publishes by itself; the publish job needs a tag AND environment approval.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label (blank = VERSION file)"
+        required: false
+        default: ""
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows, arch: x64,   runner: windows-latest }
+          - { os: macos,   arch: arm64, runner: macos-14 }
+          - { os: macos,   arch: x64,   runner: macos-13 }
+          - { os: linux,   arch: x64,   runner: ubuntu-latest }
+          - { os: linux,   arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            electron/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # CPU torch keeps the bundle small and buildable on every runner.
+      - name: Install backend deps
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          pip install "torch==2.5.1" --index-url https://download.pytorch.org/whl/cpu
+          pip install -r backend/requirements.txt || \
+            pip install $(grep -viE 'llama-cpp-python|ik-llama-cpp-python|llmfit' backend/requirements.txt)
+
+      - name: Install frontend + electron deps
+        shell: bash
+        run: |
+          ( cd frontend && npm ci --no-audit --no-fund )
+          ( cd electron && npm ci --no-audit --no-fund )
+
+      - name: Build release (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: ./scripts/build-release.ps1 -Version "${{ github.event.inputs.version }}"
+
+      - name: Build release (macOS/Linux)
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          chmod +x scripts/build-release.sh scripts/check_portable.sh
+          scripts/build-release.sh --version "${{ github.event.inputs.version }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sovereignai-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            releases/${{ matrix.os }}/${{ matrix.arch }}/*.zip
+            releases/${{ matrix.os }}/${{ matrix.arch }}/*.tar.gz
+            releases/${{ matrix.os }}/${{ matrix.arch }}/BUILD-INFO.txt
+            releases/MANIFEST.json
+            releases/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: publish GitHub Release (tags only, gated)
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    # Manual approval / protected environment is the gate between build and publish.
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Compute checksums over downloaded assets
+        run: |
+          cd dist && find . -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0 \
+            | xargs -0 sha256sum | sort -k2 > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" dist --title "SovereignAI Edge ${GITHUB_REF_NAME}" --generate-notes

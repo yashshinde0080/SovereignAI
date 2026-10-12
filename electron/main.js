@@ -16,19 +16,30 @@ const BACKEND_HEALTH_TIMEOUT_MS = 120000;
 
 const isDev = !app.isPackaged;
 
-// Pin user data to %APPDATA%\SovereignAI; Electron would otherwise use the npm
-// package name ("sovereign-ai-desktop"). Must run before anything reads a path.
-app.setPath('userData', path.join(app.getPath('appData'), 'SovereignAI'));
+// Portable mode: run entirely off the drive the exe lives on -- no %APPDATA%,
+// no host %TEMP%. Auto-on for the NSIS portable target (PORTABLE_EXECUTABLE_DIR)
+// or the shipped zip layout (a sibling data/ dir next to the exe). An installed
+// app (Program Files, no data/ sibling) keeps the per-user dirs.
+const exeDir = isDev ? null : path.dirname(app.getPath('exe'));
+const portableRoot = !isDev && (process.env.PORTABLE_EXECUTABLE_DIR
+  || fs.existsSync(path.join(exeDir, 'data'))
+  || process.env.SOVEREIGN_PORTABLE === '1')
+  ? (process.env.PORTABLE_EXECUTABLE_DIR || exeDir)
+  : null;
 
-// Writable state lives in the per-user data dir when packaged: the install
-// directory under Program Files (or wherever the user picked) is not writable.
-// Dev keeps using the repo so existing data is untouched.
-// NOTE: this is the data ROOT -- the backend appends "workspace" itself
-// (SOVEREIGN_DATA_ROOT -> <root>\workspace).
+// Must run before anything reads a path. Portable pins Electron's userData
+// (cache, session, crashpad) next to the exe; installed keeps %APPDATA%.
+app.setPath('userData', portableRoot
+  ? path.join(portableRoot, 'data', 'electron')
+  : path.join(app.getPath('appData'), 'SovereignAI'));
+if (portableRoot) app.setPath('temp', path.join(portableRoot, 'data', 'cache', 'temp'));
+
+// Writable state lives in the data ROOT the backend appends "workspace" to
+// (SOVEREIGN_DATA_ROOT -> <root>\workspace). Dev uses the repo; portable uses
+// <exeDir>\data; installed uses the per-user dir.
 function dataRoot() {
-  return isDev
-    ? path.join(__dirname, '..')
-    : app.getPath('userData');
+  if (isDev) return path.join(__dirname, '..');
+  return portableRoot ? path.join(portableRoot, 'data') : app.getPath('userData');
 }
 
 function workspaceDir() {
@@ -116,13 +127,32 @@ async function startBackend() {
     const fullArgs = [...args, '--host', '127.0.0.1', '--port', String(BACKEND_PORT)];
 
     console.log('Starting backend:', cmd, fullArgs.join(' '));
+    // Portable: redirect every temp/cache/config path (and HF_HOME) onto the
+    // drive so nothing leaks to the host. Directories must exist up front.
+    let portableEnv = {};
+    if (portableRoot) {
+      const data = path.join(portableRoot, 'data');
+      const cache = path.join(data, 'cache');
+      portableEnv = {
+        TEMP: path.join(cache, 'temp'), TMP: path.join(cache, 'temp'),
+        HF_HOME: path.join(cache, 'hf'),
+        XDG_CACHE_HOME: cache,
+        XDG_CONFIG_HOME: path.join(data, 'config'),
+        XDG_DATA_HOME: path.join(data, 'share'),
+      };
+      for (const d of [portableEnv.TEMP, portableEnv.HF_HOME, portableEnv.XDG_CONFIG_HOME, portableEnv.XDG_DATA_HOME]) {
+        try { fs.mkdirSync(d, { recursive: true }); } catch (e) { console.warn('mkdir', d, e.message); }
+      }
+    }
     backendProcess = spawn(cmd, fullArgs, {
       cwd: dir,
       windowsHide: true,
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1',
+        PYTHONDONTWRITEBYTECODE: '1',
         SOVEREIGN_DATA_ROOT: dataRoot(),
+        ...portableEnv,
       },
     });
   } catch (err) {

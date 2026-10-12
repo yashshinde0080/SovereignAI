@@ -20,7 +20,9 @@ SCAN_DIRS=(
   "$SRC/launch.sh" "$SRC/launch.bat" "$SRC/install.sh" "$SRC/setup_package.sh"
   "$SRC/scripts/build-release.sh" "$SRC/scripts/build-release.ps1" "$SRC/scripts/release_lib.py"
 )
-hits=$(grep -rInE '([A-Za-z]:[\\/]|/home/[A-Za-z]|/Users/[A-Za-z])' \
+# A real drive path has the drive + at least one subdir (two backslashes);
+# this avoids matching escaped newlines ('s:\n') and URLs ('app://') in strings.
+hits=$(grep -rInE '([A-Za-z]:\\[^ ]*\\|/home/[A-Za-z]|/Users/[A-Za-z])' \
         --include='*.py' --include='*.js' --include='*.ts' --include='*.tsx' \
         --include='*.sh' --include='*.bat' "${SCAN_DIRS[@]}" 2>/dev/null \
       | grep -vE 'url|http|127\.0\.0\.1|win32|__file__|SOVEREIGN_' || true)
@@ -57,7 +59,9 @@ grep -q "'127.0.0.1'" "$m" && ok "backend spawned on 127.0.0.1" \
   || fail "electron shell does not pin 127.0.0.1"
 grep -rqiE 'bind_localhost_only' "$SRC/backend/app" && ok "backend has localhost-only bind setting" \
   || fail "backend missing bind_localhost_only default"
-tele=$(grep -rIliE 'google-analytics|googletagmanager|sentry\.io|posthog|segment\.io|mixpanel|amplitude' \
+tele=$(grep -rIliE --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.venv \
+        --exclude-dir=__pycache__ --exclude-dir=out --exclude-dir=.next --exclude-dir=build_exe \
+        'google-analytics|googletagmanager|sentry\.io|posthog|segment\.io|mixpanel|amplitude' \
         "$SRC/backend/app" "$SRC/electron" "$SRC/frontend/app" "$SRC/frontend/lib" 2>/dev/null || true)
 [ -z "$tele" ] && ok "no telemetry SDK references" || { fail "telemetry references:"; printf '%s\n' "$tele"; }
 

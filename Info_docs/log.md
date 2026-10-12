@@ -70,7 +70,7 @@
 ## [2026-10-01] fix+test | RAG audit fixes: grounding, offline embedder, dedup, async, docx/md
 - RAG correctness: sentence splitter handles abbreviations/decimals/initials, paragraph + code-fence structure preserved, hyphenated PDF breaks joined, token-based overlap, len/3 token estimate; content-hash chunk dedup with renumbering
 - Offline/privacy: embedder loads CPU-only with local_files_only and HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE forced; unloaded after indexing so it never competes with the LLM for RAM
-- Quality: min-score floor (0.15), MMR rerank over top_k*3 candidates, [Source: file#chunk] labels, /v1/rag/query prompt now grounds instead of inviting parametric answers
+- Quality: min-score floor (0.15), MMR rerank over top_k*3 candidates, [Source: file#chunk] labels, `/v1/rag/query` prompt now grounds instead of inviting parametric answers
 - Perf: sqlite connection shared across threads (check_same_thread=False + writer lock); ingest/search/delete/rebuild off the event loop via asyncio.to_thread; Flat index default (exact, no training edge cases)
 - Plumbing: .md/.docx ingestion (docx via stdlib zipfile+xml), encoding detection ladder (utf-8/utf-8-sig/cp1252/latin-1)
 - Tests: 23 unit tests (chunker edges, dedup, retrieval) + tests/rag_eval.py (20 QA pairs: recall@1 75%, recall@5 95%, grounding 95% with cached all-MiniLM-L6-v2, offline)
@@ -104,7 +104,7 @@
 
 ## [2026-09-20] fix+test | Cloud API key stability + graceful decryption + test regressions
 - Cloud encryption: replaced machine-derived key (hostname + MAC) with persisted random key in workspace/database/.secret_key — prevents InvalidToken 500 storm when active NIC changes; key now travels with USB workspace
-- Registry: `_decrypt()` catches InvalidToken, logs warning, returns empty string (caller masks as ****) — no 500 on /v1/cloud/* endpoints; user re-saves key to fix
+- Registry: `_decrypt()` catches InvalidToken, logs warning, returns empty string (caller masks as ****) — no 500 on `/v1/cloud/*` endpoints; user re-saves key to fix
 - Registry: `update_provider()` now returns masked shape (api_key_masked) matching CloudProviderOut serialization — avoids "Field required" 500 on provider edit
 - Requirements: pinned httpx<0.28 (0.28 removed `app` kwarg used by starlette TestClient)
 - Tests: added test_undecryptable_key_degrades_gracefully (regression for old key orphaning); test_persisted_key_is_stable_across_instances (verifies shared secret); test for masked return shape on update_provider
@@ -196,5 +196,10 @@
 ## [2026-08-26] docs | Documentation updates + research references
 - Documentation updates: added research references to algorithms-and-formulas.md and research-results.md; updated log.md with new entry; verified 112 tests passing
 
-
-
+## [2026-10-12] chore+build | Portable release tooling + backend deps
+- Release/CI: added `.github/workflows/release.yml` — multi-OS native builds (Windows/macOS/Linux x64/arm64), manual dispatch + tag-gated GitHub Release (build never auto-publishes); CPU torch to keep bundles small
+- Scripts: added `scripts/build-release.ps1`, `scripts/build-release.sh`, `scripts/release_lib.py`, `scripts/check_portable.sh` (portable smoke: `/health` responds, DB under redirected data root, no host home/appdata leaks), `scripts/README_PORTABLE.txt`
+- Version/config: updated `VERSION`; `.gitignore` adjusted
+- Backend: `backend/pyproject.toml` adds `ipykernel`; `backend/uv.lock` refreshed (dependency lock update)
+- Core/infra: updates across `backend/app/database/connection.py`, `backend/app/database/manager.py`, `backend/app/engines/cloud/registry.py`, `backend/app/settings/database.py`, `backend/app/vectorstore/store.py`; `electron/main.js` portable boot adjustments
+- Commits: 9dcc9c64, 178bf908, 83fed9a8, 026a30b4

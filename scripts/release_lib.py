@@ -61,10 +61,15 @@ def _sorted_walk(stage: str):
             yield root, f
 
 
-def zip_dir(stage: str, out: str) -> str:
-    """Deflate the whole stage dir into out.zip with a single top-level folder."""
+def zip_dir(stage: str, out: str, top: str | None = None) -> str:
+    """Deflate the whole stage dir into out.zip with a single top-level folder.
+
+    `top` overrides the folder name inside the archive (defaults to the stage
+    dir's own name). Used by Script_zip.ps1 so a stage named `portable` does not
+    ship as a `portable/` folder in the release.
+    """
     stage = os.path.abspath(stage)
-    top = os.path.basename(stage.rstrip("/\\"))
+    top = top or os.path.basename(stage.rstrip("/\\"))
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         # Directory entries are written explicitly: os.walk yields files only,
@@ -168,6 +173,15 @@ def selfcheck() -> int:
             assert "SovereignAI-Test-Bundle/SovereignAI.exe" in names, names
             assert any(n.endswith("resources/frontend/index.html") for n in names), names
 
+        # --top overrides the folder name; empty dirs must still be entries.
+        os.makedirs(os.path.join(stage, "data", "cache"))
+        z2 = zip_dir(stage, os.path.join(d, "out", "b.zip"), "Custom-Top")
+        with zipfile.ZipFile(z2) as zf:
+            names2 = zf.namelist()
+            assert "Custom-Top/SovereignAI.exe" in names2, names2
+            assert "Custom-Top/data/cache/" in names2, names2
+            assert not any(n.startswith("SovereignAI-Test-Bundle") for n in names2), names2
+
         tg = tar_dir(stage, os.path.join(d, "out", "a.tar.gz"))
         with tarfile.open(tg) as tf:
             assert "SovereignAI-Test-Bundle/SovereignAI.exe" in tf.getnames()
@@ -201,6 +215,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("zip"); p.add_argument("stage"); p.add_argument("out")
+    p.add_argument("--top", default=None, help="top-level folder name inside the archive")
     p = sub.add_parser("tar"); p.add_argument("stage"); p.add_argument("out")
     p = sub.add_parser("finalize")
     p.add_argument("releases_root"); p.add_argument("app_name"); p.add_argument("version")
@@ -208,7 +223,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
 
     if a.cmd == "zip":
-        print("wrote", zip_dir(a.stage, a.out), os.path.getsize(a.out), "bytes")
+        print("wrote", zip_dir(a.stage, a.out, a.top), os.path.getsize(a.out), "bytes")
     elif a.cmd == "tar":
         print("wrote", tar_dir(a.stage, a.out), os.path.getsize(a.out), "bytes")
     elif a.cmd == "finalize":

@@ -203,7 +203,9 @@ $ sovereign chat
 ### Prerequisites
 
 - **Python** 3.10+
-- **Node.js** 18+
+- **Node.js** 20.9+ — required by Next.js 16 (`next` declares `node >=20.9.0`).
+  Running the frontend unit tests needs **23+**, because they execute `.ts`
+  files directly via Node's built-in TypeScript support.
 - **RAM** 8GB+ recommended
 
 ### Option A: One-Click Launch
@@ -233,6 +235,11 @@ cd frontend
 npm ci
 npm run dev
 
+# Lint / unit tests / production build
+npm run lint
+npm test            # node --test "lib/*.test.ts"
+npm run build       # static export -> frontend/out
+
 # 4. Electron Desktop (optional, new terminal)
 cd electron
 npm ci
@@ -253,6 +260,29 @@ python -m cli.main pull Qwen/Qwen2-0.5B
 ```
 
 ---
+
+## ⚙️ Configuration
+
+Everything works with sensible defaults — no configuration is required. To
+override anything, copy the template and uncomment what you need:
+
+```bash
+cd backend
+cp .env.example .env        # Windows: copy .env.example .env
+```
+
+`backend/.env.example` lists the real variables (all optional), including:
+
+| Variable | Purpose |
+|---|---|
+| `SOVEREIGN_DATA_ROOT` | Root for `workspace/`, models, databases and caches. Point at a folder to keep everything (including the SQLite DBs) on one drive. Set automatically in portable mode. |
+| `SOVEREIGN_LOG_LEVEL` | App log level (`DEBUG`/`INFO`/`WARNING`/`ERROR`). |
+| `SOVEREIGN_MAX_RAM_USAGE_PERCENT` | Fraction of RAM the engines may use. |
+| `SOVEREIGN_TRUST_REMOTE_CODE` | Runs model-repo Python. Leave `false` unless you trust the source. |
+| `SOVEREIGN_API_BASE` | Server URL used by the `sovereign` CLI. |
+
+`.env` is git-ignored — never commit real credentials. Settings changed in the
+UI are stored in the settings DB and take precedence over this file.
 
 ## 🔌 OpenAI-Compatible API
 

@@ -140,6 +140,7 @@ opencode.jsonc
 .zed/
 .codex
 .omp/
+.qoder/
 
 .agents/
 .vscode/

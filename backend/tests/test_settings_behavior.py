@@ -311,6 +311,37 @@ def test_log_audit_gated_by_audit_logging(tmp_path):
     assert len(svc.get_audit_log()) == 3
 
 
+# ── password verification robustness ──
+
+def test_verify_password_false_when_no_hash_configured(tmp_path):
+    """require_password with no stored hash must reject, not raise (was HTTP 500).
+
+    Regression: SecuritySettings.password_hash defaults to None, so
+    ``security.get("password_hash", "").encode()`` blew up with AttributeError.
+    """
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_security(SecuritySettings(require_password=True))  # password_hash=None
+    assert svc.verify_password("anything") is False
+
+
+def test_verify_password_true_when_disabled(tmp_path):
+    svc = SettingsService(str(tmp_path / "s.db"))
+    assert svc.verify_password("anything") is True
+
+
+def test_verify_password_malformed_hash_rejects(tmp_path):
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_security(SecuritySettings(require_password=True, password_hash="not-a-bcrypt-hash"))
+    assert svc.verify_password("anything") is False
+
+
+def test_verify_password_roundtrip(tmp_path):
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.set_password("hunter2!")
+    assert svc.verify_password("hunter2!") is True
+    assert svc.verify_password("wrong") is False
+
+
 # ── model manager: allowed_models + encrypt_models wiring ──
 
 async def test_model_manager_allowed_models_block(tmp_path):

@@ -18,6 +18,7 @@ class HardwareDetector:
         if self._hw_cache is not None:
             return self._hw_cache
         gpu_name, gpu_vram = self._query_gpu()
+        disk_speed = self._cached_disk_speed()
         profile = {
             "cpu_name": self._get_cpu_name(),
             "cpu_cores": psutil.cpu_count(logical=False) or 1,
@@ -27,8 +28,8 @@ class HardwareDetector:
             "ram_total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
             "gpu_name": gpu_name,
             "gpu_vram_gb": gpu_vram,
-            "disk_type": self._detect_disk_type(),
-            "disk_speed_mb_s": self._cached_disk_speed()
+            "disk_type": self._detect_disk_type(disk_speed),
+            "disk_speed_mb_s": disk_speed
         }
         self._hw_cache = profile
         return profile
@@ -75,30 +76,76 @@ class HardwareDetector:
             pass
         return platform.processor() or "Unknown CPU"
     
-    def _check_avx2(self) -> bool:
-        """Check AVX2 support"""
+    def _cpu_has(self, feature: str) -> bool:
+        """True when the CPU exposes an instruction-set feature.
+
+        Linux reads /proc/cpuinfo. Everywhere else (Windows/macOS) we ask
+        numpy's CPU feature table — numpy is already a hard dependency and that
+        table is what the interpreter itself detected, so no cpuid plumbing is
+        needed. Windows previously returned a hard-coded False here, which is
+        why the System page reported AVX2/AVX-512 as unsupported on CPUs that
+        support them.
+        """
         try:
             if platform.system() == "Linux":
                 with open("/proc/cpuinfo") as f:
-                    return "avx2" in f.read().lower()
-            elif platform.system() == "Windows":
-                return False  # conservative: no easy check without cpuid
+                    return feature.lower() in f.read().lower()
+            try:  # numpy >= 2.0
+                from numpy._core._multiarray_umath import __cpu_features__
+            except ImportError:  # numpy < 2.0
+                from numpy.core._multiarray_umath import __cpu_features__
+            return bool(__cpu_features__.get(feature))
         except Exception:
-            pass
-        return False
+            return False
+
+    def _check_avx2(self) -> bool:
+        """Check AVX2 support"""
+        return self._cpu_has("AVX2")
     
     def _check_avx512(self) -> bool:
         """Check AVX512 support"""
+        return self._cpu_has("AVX512F")
+    
+    def _detect_disk_type(self, speed_mb_s: float = 0.0) -> str:
+        """Detect disk type (SSD/HDD), cached to .hw_cache.json.
+
+        Linux answers from the rotational flag. Windows has no cheap equivalent
+        (Get-PhysicalDisk spawns PowerShell, ~1.5s), so the probe result is
+        cached next to the disk-speed entry — it runs once per machine rather
+        than on every launch. Falls back to the measured sequential write when
+        the probe cannot answer (HDDs top out well under 200 MB/s).
+        """
+        cache_key = "hardware_disk_type"
+        from app.config import settings
+        cache_file = settings.workspace_dir / ".hw_cache.json"
         try:
-            if platform.system() == "Linux":
-                with open("/proc/cpuinfo") as f:
-                    return "avx512" in f.read().lower()
+            if os.path.exists(cache_file):
+                with open(cache_file) as f:
+                    cached = json.load(f)
+                if cached.get(cache_key):
+                    return cached[cache_key]
         except Exception:
             pass
-        return False
-    
-    def _detect_disk_type(self) -> str:
-        """Detect disk type (SSD/HDD)"""
+
+        disk = self._probe_disk_type()
+        if disk == "Unknown" and speed_mb_s > 0:
+            disk = "SSD" if speed_mb_s > 200 else "HDD"
+
+        try:
+            os.makedirs(os.path.dirname(str(cache_file)), exist_ok=True)
+            cached = {}
+            if os.path.exists(cache_file):
+                with open(cache_file) as f:
+                    cached = json.load(f)
+            cached[cache_key] = disk
+            with open(cache_file, "w") as f:
+                json.dump(cached, f)
+        except Exception:
+            pass
+        return disk
+
+    def _probe_disk_type(self) -> str:
+        """One-shot platform probe; 'Unknown' when the platform has no answer."""
         try:
             if platform.system() == "Linux":
                 result = subprocess.run(
@@ -107,6 +154,19 @@ class HardwareDetector:
                 )
                 if result.returncode == 0:
                     return "HDD" if result.stdout.strip() == "1" else "SSD"
+            elif platform.system() == "Windows":
+                # MediaType is "SSD"/"HDD"/"Unspecified"; wmic is gone on
+                # newer Windows 11 builds, so use the Storage module.
+                result = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                     "(Get-PhysicalDisk -ErrorAction SilentlyContinue | "
+                     "Select-Object -First 1 -ExpandProperty MediaType)"],
+                    capture_output=True, text=True, timeout=30,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                media = (result.stdout or "").strip().upper()
+                if media in ("SSD", "HDD"):
+                    return media
         except Exception:
             pass
         return "Unknown"

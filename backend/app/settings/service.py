@@ -1,5 +1,4 @@
 import bcrypt
-import json
 import logging
 from typing import Optional
 from .database import SettingsDatabase
@@ -121,8 +120,17 @@ class SettingsService:
         security = self.get_security()
         if not security.get("require_password"):
             return True
-        stored_hash = security.get("password_hash", "").encode()
-        return bcrypt.checkpw(password.encode(), stored_hash)
+        # password_hash is Optional[str]: PUT /settings/security can enable
+        # require_password without ever setting one. Absent / empty / malformed
+        # hashes fail closed (no valid password) instead of raising, which used
+        # to surface as an HTTP 500 from /settings/security/verify-password.
+        stored_hash = security.get("password_hash") or ""
+        if not stored_hash:
+            return False
+        try:
+            return bcrypt.checkpw(password.encode(), stored_hash.encode())
+        except ValueError:
+            return False
 
     # ── Parental Controls ──
 

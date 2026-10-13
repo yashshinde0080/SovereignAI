@@ -154,3 +154,6 @@ backend/.venv-build/
 
 # Release artifacts (scripts/release.sh) — never committed
 releases/
+
+build_zip/
+build_exe/

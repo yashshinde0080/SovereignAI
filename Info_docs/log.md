@@ -1,3 +1,18 @@
+## [2026-10-13] feat+refactor+ci+docs | Portable release scripts + frontend CI + hardware detector fixes + security hardening
+- Portable release: new repo-root scripts `Script_portable.ps1` + `Script_zip.ps1` + shared library `scripts/portable_lib.ps1` — stage a self-contained Windows x64 bundle under `build_zip\portable\` (Electron 28 + frozen CPython backend + Next.js static export), verify bundle contract (required files/dirs, no shipped DB, no secrets, no repo paths), package into a versioned ZIP with SHA256SUMS.txt and build-report.txt; collision-safe naming (`-Force` to overwrite); Windows MAX_PATH budget reported
+- Portable docs: `Docs/PORTABLE_RELEASE.md` (318 lines, full authoring guide), `packaging/README_PORTABLE.txt` (end-user leaflet), `scripts/README_PORTABLE.txt` (build-script usage)
+- CI: added `.github/workflows/frontend.yml` — lint + unit tests + static export on push/PR touching `frontend/**` (previously no automated frontend checks); backend.yml unchanged
+- Backend security: `SettingsService.verify_password()` now fails closed (returns `False`) when `password_hash` is absent/None/malformed instead of raising `AttributeError` → HTTP 500; +4 regression tests (`test_settings_behavior.py`)
+- Hardware detector (Windows): AVX2/AVX-512 detection via numpy CPU feature table (was hard-coded unsupported); disk type via `Get-PhysicalDisk` PowerShell probe cached in `.hw_cache.json` (one probe per machine, then free); `ram_total_gb` now correct; +5 regression tests (`test_hardware_detector.py`)
+- Backend config: added `backend/.env.example` template (all optional vars documented)
+- Frontend deps: `next` 16.1.6 → 16.4.0 (clears critical Next.js advisory); `sharp` 0.34.5 → 0.35.5; lockfile regenerated, `npm ci` + `npm run build` clean; `npm audit --omit=dev`: 8 vulns (1 critical, 4 high) → 4 (0 critical, 1 high, build-time only)
+- Frontend tests: `npm test` now runs `node --test "lib/*.test.ts"` (3 files, 17 tests) instead of single `lib/maskedLm.test.ts` (6/17); package name fixed: "frotend" → "sovereign-ai-frontend"
+- AGENTS.md: corrected test command, Node prerequisite (20.9+ to build, 23+ for `.ts` tests), backend test count (26 files, 215 tests)
+- CHANGES.md: created with release-readiness audit summary
+- README: added Configuration section with `.env.example` pointer and Node.js version note
+- `.gitignore`: added `build_zip/`, `build_exe/`, `.qoder/`
+- Commits: 99bc9c91, d1282d06, 1d0e659b, 56436bab
+
 ## [2026-10-12] chore+build | Portable release tooling + backend deps
 - Release/CI: added `.github/workflows/release.yml` — multi-OS native builds (Windows/macOS/Linux x64/arm64), manual dispatch + tag-gated GitHub Release (build never auto-publishes); CPU torch to keep bundles small
 - Scripts: added `scripts/build-release.ps1`, `scripts/build-release.sh`, `scripts/release_lib.py`, `scripts/check_portable.sh` (portable smoke: `/health` responds, DB under redirected data root, no host home/appdata leaks), `scripts/README_PORTABLE.txt`

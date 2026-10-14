@@ -219,7 +219,19 @@ Do not rename this folder; the app looks for "data" next to the executable.
     Write-TextFile -Path (Join-Path $Stage 'data\README.txt') -Text $dataNote
 
     # ----------------------------------------------------------------------- #
-    # 8. Licenses / third-party notices
+    # 8. Brand logo (shipped flat next to the exe, so the portable bundle
+    #    carries the official logo as an inspectable file; the exe itself is
+    #    stamped with it -- see electron\assets\make_icon.py)
+    # ----------------------------------------------------------------------- #
+    $logoSource = Get-LogoPng -RepoRoot $Root
+    if (-not $logoSource) {
+        throw "No logo PNG in $Root - expected sovereignai.png (or sovereign.png). The portable bundle ships it as sovereignai.png."
+    }
+    Copy-Item -LiteralPath $logoSource -Destination (Join-Path $Stage 'sovereignai.png') -Force
+    Write-Log DATA "logo: $(Split-Path -Leaf $logoSource) -> sovereignai.png"
+
+    # ----------------------------------------------------------------------- #
+    # 9. Licenses / third-party notices
     # ----------------------------------------------------------------------- #
     $repoLicenses = Join-Path $Root 'LICENSES'
     if (Test-Path -LiteralPath $repoLicenses -PathType Container) {
@@ -229,7 +241,7 @@ Do not rename this folder; the app looks for "data" next to the executable.
     }
 
     # ----------------------------------------------------------------------- #
-    # 9. Launcher + end-user README
+    # 10. Launcher + end-user README
     # ----------------------------------------------------------------------- #
     Write-Log DATA "Writing portable launcher..."
     $launcher = @"
@@ -256,7 +268,7 @@ exit /b %errorlevel%
     Write-Log OK "launcher + README_PORTABLE.txt written"
 
     # ----------------------------------------------------------------------- #
-    # 10. Validation (structure, secrets, hardcoded repo path)
+    # 11. Validation (structure, secrets, hardcoded repo path)
     # ----------------------------------------------------------------------- #
     Write-Log VERIFY "Checking packaged runtime..."
     $problems = New-Object System.Collections.Generic.List[string]
@@ -292,7 +304,7 @@ exit /b %errorlevel%
     }
 
     # ----------------------------------------------------------------------- #
-    # 11. Reports
+    # 12. Reports
     # ----------------------------------------------------------------------- #
     $sizeMb = Get-PathSizeMb -Path $Stage
     $fileCount = (Get-ChildItem -LiteralPath $Stage -Recurse -File -Force | Measure-Object).Count
@@ -312,6 +324,7 @@ exit /b %errorlevel%
     Add-Report "staging size   : $sizeMb MB ($fileCount files)"
     Add-Report "portable data  : data\ (workspace\..., cache\, electron\) - created on this drive"
     Add-Report "launcher       : SovereignAI.bat -> SovereignAI.exe (Electron shell)"
+    Add-Report "logo           : sovereignai.png (next to the exe); exe icon stamped from it"
     Add-Report "longest path   : $maxRel chars; extract into a folder under $rootBudget chars (Windows MAX_PATH)"
     Add-Report "bundled        : Electron 28 runtime, frozen CPython backend, Next.js static export"
     Add-Report "not bundled    : model weights, GPU/CUDA torch, cloud API keys"

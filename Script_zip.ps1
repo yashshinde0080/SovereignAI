@@ -127,8 +127,10 @@ try {
         }
     } else {
         Write-Log BUILD "Preparing portable staging (Script_portable.ps1)..."
-        $portableArgs = @('-Configuration', $Configuration, '-Architecture', $Architecture)
-        if ($Clean) { $portableArgs += '-Clean' }
+        # Hashtable splat: an array of '-Name', value pairs bound '-Configuration'
+        # as the value of the first positional parameter and failed ValidateSet.
+        $portableArgs = @{ Configuration = $Configuration; Architecture = $Architecture }
+        if ($Clean) { $portableArgs['Clean'] = $true }
         & $PortableScript @portableArgs
         if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "Script_portable.ps1 exited with code $LASTEXITCODE" }
     }
@@ -190,6 +192,7 @@ try {
     $expected = @(
         "$artBase/SovereignAI.exe",
         "$artBase/SovereignAI.bat",
+        "$artBase/sovereignai.png",
         "$artBase/README_PORTABLE.txt",
         "$artBase/resources/backend/SovereignAIBackend.exe",
         "$artBase/resources/frontend/index.html",

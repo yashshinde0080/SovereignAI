@@ -47,6 +47,9 @@ $env:PSModulePath = (@(
     ) | Where-Object { Test-Path -LiteralPath $_ }) -join ';'
 Import-Module Microsoft.PowerShell.Utility -ErrorAction SilentlyContinue
 
+# Shared helpers -- Get-LogoPng resolves the official logo in the repo root.
+. (Join-Path $PSScriptRoot 'portable_lib.ps1')
+
 # --------------------------------------------------------------------------- #
 $Root        = Split-Path -Parent $PSScriptRoot
 $Releases    = Join-Path $Root 'releases'
@@ -138,6 +141,15 @@ if (Test-Path -LiteralPath (Join-Path $Root 'LICENSES')) {
 Assert-File (Join-Path $Stage 'LICENSE.electron.txt') 'Electron license (from electron-builder)'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README_PORTABLE.txt') -Destination (Join-Path $Stage 'README_PORTABLE.txt') -Force
 
+# Official logo, flat next to the exe. The exe itself already carries it as its
+# icon (electron/assets/make_icon.py -> rcedit / electron-builder).
+$logo = Get-LogoPng -RepoRoot $Root
+if (-not $logo) {
+    throw "No logo PNG in $Root - expected sovereignai.png (or sovereign.png). The bundle ships it as sovereignai.png."
+}
+Copy-Item -LiteralPath $logo -Destination (Join-Path $Stage 'sovereignai.png') -Force
+Write-Host "   logo: $(Split-Path -Leaf $logo) -> sovereignai.png"
+
 # ---- 3. launch scripts (paths relative to their own location) ------------ #
 Set-Content -LiteralPath (Join-Path $Stage 'Launch-SovereignAI.bat') -Encoding ASCII -Value @"
 @echo off
@@ -170,6 +182,7 @@ exit `$p.ExitCode
 if (-not $SkipChecks) {
     Write-Host '-- checks'
     Assert-File (Join-Path $Stage 'SovereignAI.exe') 'Staged app exe'
+    Assert-File (Join-Path $Stage 'sovereignai.png') 'Staged logo'
     Assert-File (Join-Path $Stage 'Launch-SovereignAI.bat') 'Launch .bat'
     Assert-File (Join-Path $Stage 'Launch-SovereignAI.ps1') 'Launch .ps1'
     Assert-File (Join-Path $Stage 'resources\backend\SovereignAIBackend.exe') 'Staged backend'
@@ -182,7 +195,7 @@ if (-not $SkipChecks) {
     $absolute = Select-String -Path (Join-Path $Stage 'Launch-SovereignAI.bat'), (Join-Path $Stage 'Launch-SovereignAI.ps1') `
         -Pattern '[A-Za-z]:\\' -ErrorAction SilentlyContinue
     if ($absolute) { throw "Absolute host path in a launcher: $($absolute[0].Line)" }
-    Write-Host '   ok: exe + launchers + resources/ + data/ present, no shipped DB, no absolute paths'
+    Write-Host '   ok: exe + logo + launchers + resources/ + data/ present, no shipped DB, no absolute paths'
 }
 
 # ---- 5. zip -------------------------------------------------------------- #

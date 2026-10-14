@@ -240,6 +240,18 @@ function Test-LauncherHygiene {
 # --------------------------------------------------------------------------- #
 # Portable bundle contract (the app's real layout, not a generic template)
 # --------------------------------------------------------------------------- #
+function Get-LogoPng {
+    <# The official SovereignAI logo, first match wins. Same candidate list as
+       electron\assets\make_icon.py (LOGO_CANDIDATES) -- keep the two in sync.
+       Returns $null when the repo root has no logo at all. #>
+    param([Parameter(Mandatory)][string]$RepoRoot)
+    foreach ($name in @('sovereignai.png', 'sovereign.png')) {
+        $candidate = Join-Path $RepoRoot $name
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    }
+    return $null
+}
+
 function Get-PortableTopName {
     <# Single source of truth for the ZIP's top-level folder (and the report).
        Keep it short: the frozen transformers runtime holds deep paths, and the
@@ -252,6 +264,7 @@ function Get-PortableRequiredFiles {
     @(
         'SovereignAI.exe',
         'SovereignAI.bat',
+        'sovereignai.png',
         'README_PORTABLE.txt',
         'resources\backend\SovereignAIBackend.exe',
         'resources\frontend\index.html'

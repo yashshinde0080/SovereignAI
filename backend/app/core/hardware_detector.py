@@ -35,7 +35,13 @@ class HardwareDetector:
         return profile
 
     def _query_gpu(self) -> tuple[Optional[str], Optional[float]]:
-        """Single nvidia-smi call for both name and VRAM."""
+        """GPU name + VRAM.
+
+        nvidia-smi first — the only source that reports real VRAM. It only
+        exists on NVIDIA driver installs, so an AMD/Intel/software adapter used
+        to report nothing at all (the dashboard showed "None"); fall back to a
+        vendor-agnostic adapter listing before giving up.
+        """
         try:
             result = subprocess.run(
                 ["nvidia-smi",
@@ -44,14 +50,59 @@ class HardwareDetector:
                 capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0:
-                parts = result.stdout.strip().split(",")
-                if len(parts) >= 2:
-                    return parts[0].strip(), round(float(parts[1].strip()) / 1024, 2)
-                elif parts:
-                    return parts[0].strip(), None
+                parts = [p.strip() for p in result.stdout.strip().split(",")]
+                # An empty/blank listing leaves parts == [''] — truthy, which is
+                # why an unnamed GPU used to be reported as "".
+                if parts and parts[0]:
+                    vram = None
+                    if len(parts) > 1 and parts[1]:
+                        try:
+                            vram = round(float(parts[1]) / 1024, 2)
+                        except ValueError:
+                            vram = None
+                    return parts[0], vram
         except Exception:
             pass
-        return None, None
+        return self._probe_gpu_name(), None
+
+    def _probe_gpu_name(self) -> Optional[str]:
+        """First real display adapter, or None. Vendor-agnostic (AMD/Intel/other).
+
+        Software fallbacks ("Microsoft Basic Display Adapter", RDP's remote
+        display) are skipped so a GPU-less session is not reported as a GPU.
+        """
+        try:
+            system = platform.system()
+            if system == "Windows":
+                result = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                     "(Get-CimInstance Win32_VideoController | "
+                     "Select-Object -ExpandProperty Name) -join '|'"],
+                    capture_output=True, text=True, timeout=30,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+                candidates = (result.stdout or "").split("|")
+            elif system == "Linux":
+                result = subprocess.run(
+                    ["lspci"], capture_output=True, text=True, timeout=5
+                )
+                candidates = [
+                    line.split(": ", 1)[-1]
+                    for line in (result.stdout or "").splitlines()
+                    if "VGA compatible controller" in line or "3D controller" in line
+                ]
+            else:
+                return None
+
+            for name in candidates:
+                name = name.strip()
+                lowered = name.lower()
+                if not name or "basic display" in lowered or "remote display" in lowered:
+                    continue
+                return name
+        except Exception:
+            pass
+        return None
     
     def _get_cpu_name(self) -> str:
         """Get CPU name"""

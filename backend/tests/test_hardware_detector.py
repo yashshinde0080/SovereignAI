@@ -2,12 +2,16 @@
 
 Regression coverage for the System page showing wrong CPU/Storage details:
 the Windows path used to hard-code AVX2/AVX-512 as unsupported and return
-"Unknown" for the disk type, even on CPUs/disks that report otherwise.
+"Unknown" for the disk type, even on CPUs/disks that report otherwise. The GPU
+cases cover the AMD/Intel fallback for machines with no nvidia-smi.
 """
 import platform
+import subprocess
+from types import SimpleNamespace
 
 import pytest
 
+from app.core import hardware_detector
 from app.core.hardware_detector import HardwareDetector
 
 
@@ -66,6 +70,77 @@ def test_disk_type_never_reports_unknown_when_a_speed_is_known(tmp_path, monkeyp
 
     monkeypatch.setattr(config.settings, "workspace_dir", tmp_path / "slow")
     assert hw._detect_disk_type(50.0) == "HDD"
+
+
+# --------------------------------------------------------------------------- #
+# GPU
+# --------------------------------------------------------------------------- #
+
+def _no_nvidia_smi(*args, **kwargs):
+    raise FileNotFoundError("nvidia-smi")
+
+
+def test_gpu_falls_back_when_nvidia_smi_is_absent(monkeypatch):
+    """AMD/Intel machines have no nvidia-smi; the card used to read "None"."""
+    hw = HardwareDetector()
+    monkeypatch.setattr(hardware_detector.subprocess, "run", _no_nvidia_smi)
+    monkeypatch.setattr(hw, "_probe_gpu_name", lambda: "AMD Radeon RX 6600")
+
+    assert hw._query_gpu() == ("AMD Radeon RX 6600", None)
+
+
+def test_gpu_falls_back_when_nvidia_smi_lists_nothing(monkeypatch):
+    hw = HardwareDetector()
+    monkeypatch.setattr(
+        hardware_detector.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(returncode=0, stdout=""),
+    )
+    monkeypatch.setattr(hw, "_probe_gpu_name", lambda: "Intel(R) UHD Graphics 630")
+
+    assert hw._query_gpu() == ("Intel(R) UHD Graphics 630", None)
+
+
+def test_probe_gpu_name_skips_software_adapters(monkeypatch):
+    """A GPU-less session must report nothing, not the Microsoft basic adapter."""
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        hardware_detector.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=0,
+            stdout="Microsoft Basic Display Adapter|Intel(R) UHD Graphics 620",
+        ),
+    )
+    assert HardwareDetector()._probe_gpu_name() == "Intel(R) UHD Graphics 620"
+
+
+def test_probe_gpu_name_returns_none_when_only_software_adapters(monkeypatch):
+    monkeypatch.setattr(platform, "system", lambda: "Windows")
+    monkeypatch.setattr(
+        hardware_detector.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=0,
+            stdout="Microsoft Basic Display Adapter|",
+        ),
+    )
+    assert HardwareDetector()._probe_gpu_name() is None
+
+
+def test_probe_gpu_name_never_raises_without_the_tool(monkeypatch):
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    monkeypatch.setattr(hardware_detector.subprocess, "run", _no_nvidia_smi)
+    assert HardwareDetector()._probe_gpu_name() is None
+
+
+def test_gpu_vram_is_only_reported_by_nvidia_smi(monkeypatch):
+    """A vendor-agnostic name must not come with a guessed VRAM figure."""
+    hw = HardwareDetector()
+    monkeypatch.setattr(
+        hardware_detector.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(
+            returncode=0, stdout="NVIDIA GeForce GTX 1650, 4096\n"
+        ),
+    )
+    assert hw._query_gpu() == ("NVIDIA GeForce GTX 1650", 4.0)
 
 
 def test_disk_type_caches_the_probe_result(tmp_path, monkeypatch):

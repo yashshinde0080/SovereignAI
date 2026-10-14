@@ -401,6 +401,33 @@ class VectorMetadataStore:
         )
         return cursor.fetchone()["c"]
 
+    def get_orphan_chunk_count(self) -> int:
+        """Chunk rows with no embedding row.
+
+        These list as documents but can never be returned by search. Caused by
+        an ingest that died between the chunk and embedding writes, or by an
+        embedding row overwritten on a vector_index collision during rebuild.
+        """
+        cursor = self._conn.execute(
+            """
+            SELECT COUNT(*) as c FROM chunks c
+            LEFT JOIN embeddings e ON e.chunk_id = c.chunk_id
+            WHERE e.chunk_id IS NULL
+            """
+        )
+        return cursor.fetchone()["c"]
+
+    def delete_all_embeddings(self):
+        """Drop every embedding row (chunks stay).
+
+        Used by rebuild, which renumbers every position: leaving the old rows
+        in place lets a stale vector_index collide with a new one, and
+        INSERT OR REPLACE would silently discard the wrong chunk's row.
+        """
+        with self._lock:
+            self._conn.execute("DELETE FROM embeddings")
+            self._conn.commit()
+
     def get_total_chunks(self) -> int:
         """Total number of chunks stored."""
         cursor = self._conn.execute(

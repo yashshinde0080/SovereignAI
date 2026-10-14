@@ -45,7 +45,7 @@ class Retriever:
         5. Return ranked results
         """
         if self.index.total_vectors == 0:
-            logger.warning("Index is empty. No results.")
+            logger.warning("[rag.search] index is empty; no results")
             return []
 
         # Step 1: Embed query
@@ -123,9 +123,13 @@ class Retriever:
         # reconstruct — no extra deps.
         results = self._mmr_rerank(results, top_k, query_vector[0])
 
+        # The query is user content: log its shape, never its text. A digest
+        # would still be a weak leak on a low-entropy query, so it is length
+        # only.
         logger.info(
-            f"Search returned {len(results)} results "
-            f"for query: '{query.query_text[:50]}...'"
+            f"[rag.search] {len(results)} results for a "
+            f"{len(query.query_text)}-char query "
+            f"(index={self.index.total_vectors} vectors)"
         )
         return results
 

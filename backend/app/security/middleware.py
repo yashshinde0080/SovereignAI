@@ -2,9 +2,27 @@
 import logging
 import secrets
 import time
+from typing import Optional
 from fastapi import Request, HTTPException
 
 logger = logging.getLogger("sovereign.api_requests")
+
+# Origins the packaged app and the dev server legitimately use. The renderer of
+# the Electron build runs on app://- and the browser UI on the Next.js dev
+# server, so both are cross-origin to 127.0.0.1:8000 and need CORS headers even
+# when the "Enable CORS" setting is off.
+ALLOWED_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000", "app://-")
+
+
+def cors_headers_allowed(origin: Optional[str], enable_cors: object) -> bool:
+    """True when a cross-origin response keeps its Access-Control-* headers.
+
+    Same-origin/CLI traffic sends no Origin and is never touched. "Enable CORS"
+    on widens the boundary to any origin; off limits it to ALLOWED_ORIGINS.
+    """
+    if not origin:
+        return True
+    return bool(enable_cors) or origin in ALLOWED_ORIGINS
 
 
 def _security(request: Request) -> dict:
@@ -62,11 +80,12 @@ async def lan_auth_middleware(request: Request, call_next):
             if scheme.lower() != "bearer" or not secrets.compare_digest(credential, token):
                 raise HTTPException(status_code=401, detail="Invalid or missing API token")
 
-    # enable_cors=False (default): strip CORS headers FastAPI's CORSMiddleware
-    # always added. Cheap, and keeps the "Enable CORS" switch honest without
-    # re-architecting middleware registration.
-    cors_on = sec.get("enable_cors")
-    if cors_on is False and response is not None:
+    # CORSMiddleware is registered wide-open so "Enable CORS" (and preflight)
+    # keeps working; narrow it back to the built-in origins while that switch is
+    # off. Previously this stripped the headers unconditionally, which blocked
+    # every fetch from the packaged app:// renderer (hardware profile included)
+    # while the non-CORS WebSocket metrics kept streaming.
+    if response is not None and not cors_headers_allowed(request.headers.get("origin"), sec.get("enable_cors")):
         for h in (
             "access-control-allow-origin",
             "access-control-allow-methods",

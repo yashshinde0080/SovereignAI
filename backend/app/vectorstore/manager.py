@@ -6,6 +6,7 @@ Document ingestion → Chunking → Embedding → Indexing → Search.
 
 import hashlib
 import logging
+import threading
 import numpy as np
 from typing import List, Optional
 
@@ -43,6 +44,11 @@ class VectorStoreManager:
         vs.shutdown()
     """
 
+    # Class-level fallback so an instance built without __init__ (tests build
+    # the manager attribute-by-attribute) still has a lock to write under.
+    # __init__ replaces it with a per-instance one.
+    _write_lock = threading.RLock()
+
     def __init__(self, config: Optional[VectorStoreConfig] = None):
         self.config = config or VectorStoreConfig()
         self.chunker = DocumentChunker(
@@ -62,6 +68,16 @@ class VectorStoreManager:
             embedding_pipeline=self.embedding_pipeline
         )
         self._initialized = False
+        # Embedding model the on-disk index was built with, when recorded.
+        self._index_embedding_model: Optional[str] = None
+        # Serializes every write path (ingest / delete / rebuild). Ingest is a
+        # read-modify-write across two stores: it reads the next FAISS slot and
+        # appends, then writes metadata rows. Unserialized, two concurrent
+        # uploads both pick the same slot range and both append — measured: 8
+        # parallel uploads left 24 FAISS vectors against 3 metadata rows, and 4
+        # of the 8 documents were unretrievable. Reentrant because
+        # delete_document() rebuilds.
+        self._write_lock = threading.RLock()
 
     def initialize(self):
         """
@@ -74,7 +90,22 @@ class VectorStoreManager:
         loaded = self.index_builder.load()
 
         if not loaded:
-            logger.info("No existing index. Will create on first ingest.")
+            logger.info("[rag.init] no existing index; will create on first ingest")
+
+        # Two different embedding models produce vectors that are not
+        # comparable, so sharing one index silently degrades retrieval to noise.
+        # The model name is recorded when the index is (re)built; a change is
+        # reported loudly instead of being averaged into the same file.
+        self._index_embedding_model = self.metadata_store.get_state("embedding_model")
+        if (self._index_embedding_model
+                and self._index_embedding_model != self.config.embedding_model):
+            logger.warning(
+                "[rag.init] index was built with embedding model %r but the "
+                "configured model is %r. Vectors from different models are not "
+                "comparable, so retrieval will be meaningless until the index "
+                "is rebuilt (POST /v1/rag/rebuild re-embeds every chunk).",
+                self._index_embedding_model, self.config.embedding_model,
+            )
 
         # Self-heal FAISS/metadata desync (stale vectors from deletes, or a
         # crash between metadata write and index save). Metadata is the source
@@ -83,16 +114,20 @@ class VectorStoreManager:
         # search silently returns nothing ("can't access sources").
         index_vectors = self.index_builder.total_vectors
         metadata_vectors = self.metadata_store.get_total_embeddings()
-        if index_vectors != metadata_vectors:
+        # A chunk row with no embedding row is invisible to the count check
+        # below but still lists as a document with nothing retrievable. Only a
+        # rebuild (which re-embeds from metadata) can repair it.
+        orphan_chunks = self.metadata_store.get_orphan_chunk_count()
+        if index_vectors != metadata_vectors or orphan_chunks:
             logger.warning(
-                "FAISS/metadata desync: index has %d vectors, "
-                "metadata has %d embeddings. Rebuilding from metadata.",
-                index_vectors, metadata_vectors,
+                "[rag.heal] desync: index=%d vectors, metadata=%d embeddings, "
+                "%d chunk(s) without embeddings. Rebuilding from metadata.",
+                index_vectors, metadata_vectors, orphan_chunks,
             )
             try:
                 self.rebuild_index()
             except Exception as e:
-                logger.error("Rebuild failed (%s); resetting index to match metadata.", e)
+                logger.error("[rag.heal] rebuild failed (%s); resetting index to match metadata.", e)
                 self.index_builder.reset()
 
         self._initialized = True
@@ -121,6 +156,15 @@ class VectorStoreManager:
         if document_id is None:
             document_id = self._generate_document_id(text, filename)
 
+        # One writer at a time: the dedup scan, the FAISS slot read, the index
+        # append and the metadata write are one logical transaction.
+        with self._write_lock:
+            return self._ingest_locked(text, filename, document_id, metadata)
+
+    def _ingest_locked(self, text: str, filename: str,
+                       document_id: str,
+                       metadata: Optional[dict]) -> str:
+        """Ingest body. The caller holds ``_write_lock``."""
         # Deterministic ID + INSERT OR REPLACE means a re-upload of the same
         # content would keep metadata flat while FAISS appends duplicate
         # vectors — desync. Skip instead.
@@ -146,15 +190,17 @@ class VectorStoreManager:
         hashes = [self.metadata_store.content_hash(c.content) for c in chunks]
         existing = self.metadata_store.get_existing_hashes(hashes)
         if existing:
-            chunks, hashes = zip(*[
-                (c, h) for c, h in zip(chunks, hashes) if h not in existing
-            ])
-            chunks, hashes = list(chunks), list(hashes)
+            # Keep the non-duplicates. `zip(*[])` used to raise "not enough
+            # values to unpack" whenever EVERY chunk was already indexed — a
+            # legitimate re-upload of known content failed with a 500.
+            kept = [(c, h) for c, h in zip(chunks, hashes) if h not in existing]
+            chunks = [c for c, _ in kept]
+            hashes = [h for _, h in kept]
             logger.info(
-                f"{filename}: skipped {len(existing)} duplicate chunks"
+                f"[rag.ingest] {filename}: skipped {len(existing)} duplicate chunks"
             )
         if not chunks:
-            logger.info(f"{filename}: all chunks duplicates; nothing indexed")
+            logger.info(f"[rag.ingest] {filename}: all chunks duplicates; nothing indexed")
             return document_id
 
         # Renumber sequentially after dedup so chunk_ids/indexes stay dense
@@ -171,18 +217,21 @@ class VectorStoreManager:
             for chunk in chunks:
                 chunk.metadata["filename"] = filename
 
-        # Step 2: Store chunks in metadata DB
-        self.metadata_store.insert_chunks_batch(chunks, hashes=hashes)
-
-        # Step 3: Generate embeddings
+        # Step 2: Generate embeddings. Deliberately BEFORE the chunk rows are
+        # written: chunks committed ahead of a failing embedder became orphan
+        # rows (listed as a document, unreachable by search, invisible to the
+        # index-vs-embedding count check). Nothing is persisted until the
+        # vectors exist.
         texts = [chunk.content for chunk in chunks]
         embeddings = self.embedding_pipeline.embed_texts(
             texts, batch_size=32, show_progress=True
         )
+        self._assert_dimension(embeddings)
+
+        # Step 3: Store chunks in metadata DB
+        self.metadata_store.insert_chunks_batch(chunks, hashes=hashes)
 
         # Step 4: Handle FAISS index
-        start_index = self.metadata_store.get_next_vector_index()
-
         # If index doesn't exist or needs training
         if self.index_builder.index is None:
             self.index_builder.create_index()
@@ -201,6 +250,12 @@ class VectorStoreManager:
                 self.config.index_type = "Flat"
                 self.index_builder.reset()
                 self.index_builder.create_index()
+
+        # FAISS slot of the first new vector, read from the index itself. The
+        # metadata MAX(vector_index)+1 agrees only while the two are in sync;
+        # under the write lock the index is authoritative, and using it here is
+        # what keeps the two from drifting apart on the next ingest.
+        start_index = self.index_builder.total_vectors
 
         # Add to FAISS
         self.index_builder.add_vectors(embeddings)
@@ -234,12 +289,41 @@ class VectorStoreManager:
             str(self.index_builder.total_vectors)
         )
 
+        # Record which embedding model produced these vectors, so a later
+        # model change is detectable rather than silently mixed in.
+        self.metadata_store.save_state("embedding_model", self.config.embedding_model)
+        self.metadata_store.save_state(
+            "embedding_dimension", str(self.config.embedding_dimension)
+        )
+        self._index_embedding_model = self.config.embedding_model
+
         logger.info(
-            f"Document ingested: {filename} "
-            f"({len(chunks)} chunks, "
-            f"{len(embedding_records)} embeddings)"
+            f"[rag.ingest] indexed {filename}: {len(chunks)} chunks, "
+            f"{len(embedding_records)} embeddings, "
+            f"index now {self.index_builder.total_vectors} vectors"
         )
         return document_id
+
+    def _assert_dimension(self, embeddings: np.ndarray):
+        """Fail with an actionable message when the embedder and the index
+        disagree about vector width.
+
+        FAISS raises a bare ``AssertionError`` with an empty message here, so
+        the cause was invisible. Also re-points the config at what the model
+        actually emits, since config.embedding_dimension is what creates the
+        index and stamps the embedding rows.
+        """
+        produced = int(embeddings.shape[1])
+        index_dim = self.index_builder.dimension
+        if index_dim is not None and index_dim != produced:
+            raise RuntimeError(
+                f"Embedding dimension mismatch: the stored index is "
+                f"{index_dim}-dimensional but the embedding model produced "
+                f"{produced}-dimensional vectors. The embedding model changed "
+                f"without rebuilding the index. POST /v1/rag/rebuild re-embeds "
+                f"the stored chunks at the new dimension."
+            )
+        self.config.embedding_dimension = produced
 
     def search(self, query_text: str,
                top_k: int = 5,
@@ -283,28 +367,30 @@ class VectorStoreManager:
         Rebuilds the index so FAISS positions stay in sync with metadata —
         otherwise stale vectors shift every future lookup off-by-N.
         """
-        self.metadata_store.delete_document_data(document_id)
-        self.rebuild_index()
-        logger.info(f"Document {document_id} deleted, index rebuilt.")
+        with self._write_lock:
+            self.metadata_store.delete_document_data(document_id)
+            self.rebuild_index()
+        logger.info(f"[rag.delete] {document_id} deleted, index rebuilt.")
 
     def rebuild_index(self):
         """
         Full index rebuild from metadata store.
         Use after document deletion.
         """
-        logger.info("Starting full index rebuild")
+        with self._write_lock:
+            self._rebuild_locked()
+
+    def _rebuild_locked(self):
+        """Rebuild body. The caller holds ``_write_lock``."""
+        logger.info("[rag.rebuild] starting full index rebuild")
 
         # Get all documents
         doc_ids = self.metadata_store.get_document_ids()
 
         if not doc_ids:
-            logger.info("No documents. Resetting index.")
+            logger.info("[rag.rebuild] no documents; resetting index")
             self.index_builder.reset()
             return
-
-        # Reset FAISS index
-        self.index_builder.reset()
-        self.index_builder.create_index()
 
         # Re-embed all chunks — single batch query instead of N separate queries
         all_embeddings = []
@@ -344,6 +430,13 @@ class VectorStoreManager:
         # Concatenate all embeddings
         combined = np.vstack(all_embeddings)
 
+        # Fresh index, built at the width the model actually emits. rebuild is
+        # the escape hatch for a changed embedding model, so it must not keep
+        # the old config.embedding_dimension that the dead index was built with.
+        self.config.embedding_dimension = int(combined.shape[1])
+        self.index_builder.reset()
+        self.index_builder.create_index()
+
         # Train if needed
         if not self.index_builder.is_trained:
             if combined.shape[0] >= self.config.nlist:
@@ -352,6 +445,12 @@ class VectorStoreManager:
                 self.config.index_type = "Flat"
                 self.index_builder.reset()
                 self.index_builder.create_index()
+
+        # Old embedding rows must go before the new positions are written: the
+        # rows are keyed on vector_index (UNIQUE) and a leftover row from a
+        # deleted document would otherwise be silently overwritten by a
+        # different chunk's new position, orphaning that chunk.
+        self.metadata_store.delete_all_embeddings()
 
         # Add all vectors
         self.index_builder.add_vectors(combined)
@@ -365,8 +464,15 @@ class VectorStoreManager:
         # Index-time only: free the embedder (same rationale as ingest)
         self.embedding_pipeline.unload_model()
 
+        self.metadata_store.save_state("embedding_model", self.config.embedding_model)
+        self.metadata_store.save_state(
+            "embedding_dimension", str(self.config.embedding_dimension)
+        )
+        self._index_embedding_model = self.config.embedding_model
+
         logger.info(
-            f"Index rebuilt: {self.index_builder.total_vectors} vectors"
+            f"[rag.rebuild] index rebuilt: {self.index_builder.total_vectors} "
+            f"vectors at dimension {self.config.embedding_dimension}"
         )
 
     def get_document_chunks(self, document_id: str) -> List[dict]:
@@ -377,14 +483,27 @@ class VectorStoreManager:
 
     def get_stats(self) -> dict:
         """Get vector store statistics."""
+        index_vectors = self.index_builder.total_vectors
+        total_chunks = self.metadata_store.get_total_chunks()
+        total_embeddings = self.metadata_store.get_total_embeddings()
         return {
-            "total_vectors": self.index_builder.total_vectors,
-            "total_chunks": self.metadata_store.get_total_chunks(),
-            "total_embeddings": self.metadata_store.get_total_embeddings(),
+            "total_vectors": index_vectors,
+            "total_chunks": total_chunks,
+            "total_embeddings": total_embeddings,
+            # Chunk rows with no embedding row: listed as documents but
+            # unreachable by search. Reported so /v1/rag/stats can surface them.
+            "orphan_chunks": self.metadata_store.get_orphan_chunk_count(),
+            # A desync the old check missed: it compared only index vs
+            # embeddings, so orphan chunks read as "in sync".
+            "in_sync": (index_vectors == total_embeddings
+                        and total_chunks == total_embeddings),
             "total_documents": len(self.metadata_store.get_document_ids()),
             "index_trained": self.index_builder.is_trained,
             "index_type": self.config.index_type,
             "embedding_model": self.config.embedding_model,
+            # Model the index on disk was actually built with, when recorded.
+            "index_embedding_model": self._index_embedding_model,
+            "index_dimension": self.index_builder.dimension,
             "embedding_dimension": self.config.embedding_dimension,
             "chunk_size": self.config.chunk_size,
         }

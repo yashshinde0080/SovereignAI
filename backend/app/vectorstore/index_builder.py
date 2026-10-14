@@ -123,7 +123,20 @@ class FAISSIndexBuilder:
                 "representative vectors."
             )
 
-        vectors = vectors.astype(np.float32)
+        vectors = np.asarray(vectors, dtype=np.float32)
+        if vectors.ndim != 2:
+            raise ValueError(
+                f"add_vectors expects a 2-D array, got shape {vectors.shape}"
+            )
+        # FAISS raises a bare AssertionError (empty message) when the widths
+        # disagree, which told the caller nothing. Name both widths instead.
+        if vectors.shape[1] != self._index.d:
+            raise ValueError(
+                f"Vector width mismatch: the index is {self._index.d}-dimensional "
+                f"but {vectors.shape[1]}-dimensional vectors were supplied. "
+                f"The embedding model changed; POST /v1/rag/rebuild re-embeds "
+                f"the stored chunks at the new dimension."
+            )
         n_vectors = vectors.shape[0]
 
         self._index.add(vectors)
@@ -148,7 +161,17 @@ class FAISSIndexBuilder:
             empty_i = np.array([], dtype=np.int64).reshape(0, top_k)
             return empty_d, empty_i
 
-        query_vectors = query_vectors.astype(np.float32)
+        query_vectors = np.asarray(query_vectors, dtype=np.float32)
+        if query_vectors.ndim != 2 or query_vectors.shape[1] != self._index.d:
+            # Same bare-AssertionError problem as add_vectors, on the read path:
+            # a query embedded by a different model must say so, not crash.
+            raise ValueError(
+                f"Query width mismatch: the index is {self._index.d}-dimensional "
+                f"but the query vector is "
+                f"{query_vectors.shape[1] if query_vectors.ndim == 2 else 'non-2-D'}"
+                f". The embedding model changed; POST /v1/rag/rebuild re-embeds "
+                f"the stored chunks at the new dimension."
+            )
 
         # Set nprobe for IVF indices
         if hasattr(self._index, 'nprobe'):
@@ -186,8 +209,12 @@ class FAISSIndexBuilder:
             self._total_vectors = self._index.ntotal
             self._is_trained = True  # If loaded, it's trained
 
+            # Log the width so a model change is visible in the log rather
+            # than surfacing later as an empty AssertionError. The manager
+            # compares it against what the embedder really emits.
             logger.info(
-                f"FAISS index loaded: {self._total_vectors} vectors"
+                f"FAISS index loaded: {self._total_vectors} vectors, "
+                f"dimension {self._index.d}"
             )
             return True
 
@@ -212,6 +239,11 @@ class FAISSIndexBuilder:
         self._index = None
         self._is_trained = False
         self._total_vectors = 0
+
+    @property
+    def dimension(self):
+        """Vector width of the loaded index, or None when there is no index."""
+        return int(self._index.d) if self._index is not None else None
 
     @property
     def total_vectors(self) -> int:

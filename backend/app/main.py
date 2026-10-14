@@ -87,10 +87,20 @@ async def lifespan(app: FastAPI):
     app.state.db = DatabaseManager()
     app.state.db.initialize()
 
-    # Initialize vector store
+    # Initialize vector store. RAG is optional infrastructure: an unwritable or
+    # corrupt index must not take the whole server (and chat with it) down. On
+    # failure the store stays None and every /v1/rag/* endpoint answers 503.
     from app.vectorstore.manager import VectorStoreManager
-    app.state.vector_store = VectorStoreManager()
-    app.state.vector_store.initialize()
+    app.state.vector_store = None
+    try:
+        app.state.vector_store = VectorStoreManager()
+        app.state.vector_store.initialize()
+    except Exception as exc:
+        app.state.vector_store = None
+        logger.error(
+            "[rag.init] vector store unavailable, RAG disabled: %s", exc,
+            exc_info=True,
+        )
 
     # Detect hardware (llmfit-powered, falls back to legacy)
     app.state.hardware_profile = detect_hardware()
@@ -178,7 +188,7 @@ async def lifespan(app: FastAPI):
         await app.state.model_manager.provider.cleanup()
     if hasattr(app.state, 'db'):
         app.state.db.shutdown()
-    if hasattr(app.state, 'vector_store'):
+    if getattr(app.state, 'vector_store', None) is not None:
         app.state.vector_store.shutdown()
     if hasattr(app.state, 'cloud_provider_registry'):
         app.state.cloud_provider_registry.close()
@@ -206,10 +216,14 @@ async def _openai_error_handler(request: Request, exc: HTTPException):
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS
+# CORS. Matched by regex, not allow_origins=["*"], so Starlette echoes the
+# caller's origin (with allow_credentials=True an explicit origin is required;
+# "*" is only valid for uncredentialed requests). Every origin is matched here
+# and lan_auth_middleware narrows the response back to ALLOWED_ORIGINS whenever
+# the "Enable CORS" switch is off (the default).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "app://-"],
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

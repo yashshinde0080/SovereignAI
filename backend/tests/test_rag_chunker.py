@@ -96,6 +96,32 @@ def test_token_estimate_len3(chunker):
     assert chunker._estimate_tokens("") == 1
 
 
+def test_overlong_segment_advances_by_a_stride_not_one_character():
+    """A long run with no sentence punctuation must not slide one char at a time.
+
+    Regression: _force_split used `pos = max(pos + 1, end - overlap)`, which
+    collapsed to a one-character step once `end` reached the end of the text.
+    Measured before the fix: a 1.7 KB segment produced 197 chunks, 195 of them
+    pure suffixes of their predecessor, and 39 under 40 chars. That is the
+    signature seen in a real indexed PDF (1812 chunks, median 35 chars) where
+    retrieval returned two-word fragments.
+    """
+    text = "│ ├── runtime │ └── launcher " * 60
+    chunks = DocumentChunker(512, 64).chunk_text(text, "d1")
+
+    # ~1.7 KB at 512-char windows with 192 chars of overlap is a handful of
+    # chunks, not hundreds.
+    assert len(chunks) < 15, f"{len(chunks)} chunks for {len(text)} chars"
+    assert min(len(c.content) for c in chunks) > 100
+    assert all(c.end_char - c.start_char >= 100 for c in chunks)
+
+    starts = [c.start_char for c in chunks]
+    assert starts == sorted(starts)
+    # Each window advances by at least the stride (chunk_size - overlap).
+    stride = 512 - 64 * 3
+    assert all(b - a >= stride for a, b in zip(starts, starts[1:])), starts
+
+
 def test_chunk_ids_sequential_after_split(chunker):
     text = "Word. " * 1000
     chunks = chunker.chunk_text(text, "d1")

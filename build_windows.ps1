@@ -175,6 +175,23 @@ function Get-SizeMb([string]$Path) {
     return [math]::Round($bytes / 1MB, 1)
 }
 
+# Wait for a started process to exit. Returns $true when it did (the caller
+# reads .ExitCode to tell a clean stop from a crash).
+function Wait-ProcessExit($Process, [int]$TimeoutSeconds) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while (-not $Process.HasExited -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 500
+        $Process.Refresh()
+    }
+    return $Process.HasExited
+}
+
+# Start a process without a console window and hand back the object.
+function Start-QuietProcess([string]$File, [string[]]$Arguments, [string]$WorkDir, [string]$StdOut, [string]$StdErr) {
+    return Start-Process -FilePath $File -ArgumentList $Arguments -WorkingDirectory $WorkDir `
+        -PassThru -NoNewWindow -RedirectStandardOutput $StdOut -RedirectStandardError $StdErr
+}
+
 function Get-Rcedit {
     # electron-builder's winCodeSign archive carries macOS symlinks, which 7-Zip
     # cannot create without admin/Developer Mode, so electron-builder's own
@@ -434,12 +451,41 @@ try {
                 -WorkingDirectory $BackendOut -PassThru -NoNewWindow `
                 -RedirectStandardOutput $stdout -RedirectStandardError $stderr
             $healthy = $false
+            $graceful = $false
             try {
                 $healthy = Wait-ForHealth -Port $SmokePort -TimeoutSeconds 180 -ProcessId $proc.Id
+
+                # A second backend on a busy port must refuse to start (exit 3)
+                # instead of racing the first one for the same SQLite file.
+                $second = Start-QuietProcess $exePath @("--host", "127.0.0.1", "--port", "$SmokePort") $BackendOut `
+                    (Join-Path $LogsDir "backend-second-$Timestamp.out.log") (Join-Path $LogsDir "backend-second-$Timestamp.err.log")
+                $secondExited = Wait-ProcessExit $second 90
+                $secondCode = if ($secondExited) { $second.ExitCode } else { -1 }
+                if (-not $secondExited) { Stop-ProcessTree $second.Id }
+                Write-Test "Backend/duplicate-refused" ($secondCode -eq 3) "second instance on busy port $SmokePort exited with code $secondCode (expected 3)"
+
+                # Graceful stop: the loopback endpoint must let the server close
+                # its databases and exit 0, not die on a hard kill.
+                try {
+                    Invoke-WebRequest -Uri "http://127.0.0.1:$SmokePort/v1/system/shutdown" -Method Post -UseBasicParsing -TimeoutSec 15 | Out-Null
+                } catch {
+                    Write-Report "graceful request: $($_.Exception.Message)"
+                }
+                $graceful = Wait-ProcessExit $proc 90
+                Write-Test "Backend/graceful-shutdown" ($graceful -and $proc.ExitCode -eq 0) "exit code $($proc.ExitCode) after POST /v1/system/shutdown"
             } finally {
                 if (-not $proc.HasExited) { Stop-ProcessTree $proc.Id }
                 Remove-Item Env:SOVEREIGN_DATA_ROOT -ErrorAction SilentlyContinue
             }
+
+            # A hard kill is what left "Event loop is closed" and locked DBs
+            # behind; a clean stop must leave neither.
+            $stderrText = if (Test-Path -LiteralPath $stderr) { Get-Content -LiteralPath $stderr -Raw } else { "" }
+            $shutdownErrors = ($stderrText -match "Event loop is closed") -or ($stderrText -match "Task was destroyed but it is pending")
+            Write-Test "Backend/clean-shutdown-log" (-not $shutdownErrors) "stderr free of closed-loop / pending-task errors"
+            $leftovers = @(Get-ChildItem -LiteralPath $SmokeDataRoot -Recurse -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '\.db-(journal|wal|shm)$' })
+            Write-Test "Backend/no-sqlite-lock-leftovers" ($leftovers.Count -eq 0) "no journal/WAL files left under $SmokeDataRoot"
 
             $dbCreated = Test-Path -LiteralPath (Join-Path $SmokeDataRoot "workspace\database\sovereign.db")
             $logSize = if (Test-Path -LiteralPath $stdout) { (Get-Item $stdout).Length } else { 0 }
@@ -540,6 +586,13 @@ try {
                 # Electron spawns the frozen backend on port 8000 and waits for /health.
                 $healthy = Wait-ForHealth -Port 8000 -TimeoutSeconds 180 -ProcessId 0
                 Write-Test "Installer/app-backend-start" $healthy "backend answered on port 8000 after the packaged app launched"
+
+                # A second launch must focus the running window, not start a
+                # second backend against the same database.
+                $null = Start-Process -FilePath $appExe -WorkingDirectory $unpacked -PassThru
+                Start-Sleep -Seconds 10
+                $instances = @(Get-Process -Name "SovereignAIBackend" -ErrorAction SilentlyContinue).Count
+                Write-Test "Installer/single-backend-instance" ($instances -eq 1) "a second app launch left $instances backend process(es) (expected 1)"
 
                 # Ask the renderer what it actually loaded: the packaged static
                 # export is only "working" if a page target points at app://.

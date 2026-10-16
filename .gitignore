@@ -23,7 +23,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Anchored to the repo root: an unanchored lib/ also swallowed frontend/lib,
+# which holds real source (api, utils, themeBoot, conversations, agentTools).
+/lib/
 lib64/
 parts/
 sdist/

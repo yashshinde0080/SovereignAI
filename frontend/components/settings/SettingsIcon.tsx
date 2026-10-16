@@ -23,7 +23,7 @@ export function SettingsIcon() {
               variant="ghost"
               size="icon"
               onClick={() => setOpen(true)}
-              className="h-9 w-9 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className="h-9 w-9 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <Settings className="h-5 w-5" />
             </Button>

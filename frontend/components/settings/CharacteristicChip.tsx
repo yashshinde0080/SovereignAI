@@ -20,8 +20,8 @@ export function CharacteristicChip({
       className={cn(
         "px-4 py-1.5 rounded-full text-sm font-medium transition-all border",
         selected
-          ? "bg-blue-600/20 text-blue-400 border-blue-500/50"
-          : "bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500 hover:text-slate-300"
+          ? "bg-accent/20 text-accent border-accent/50"
+          : "bg-card text-muted-foreground border-input hover:border-muted-foreground hover:text-foreground"
       )}
     >
       {label.charAt(0).toUpperCase() + label.slice(1)}

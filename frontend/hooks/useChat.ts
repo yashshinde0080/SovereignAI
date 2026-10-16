@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { Message, RagSource } from '@/types';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Message, RagSource, Agent } from '@/types';
 import { errMsg } from '@/lib/utils';
 import { useSettingsStore } from '@/store/settings';
 import {
@@ -12,10 +12,25 @@ import {
 } from '@/lib/chatRetention';
 import { encryptText, decryptText, isEncrypted } from '@/lib/chatCrypto';
 import { playChime } from '@/lib/sounds';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-const SESSION_KEY = 'sovereignai.chat.sessionId';
-const LEGACY_STORAGE_KEY = 'sovereignai.chat.messages.v1';
+import {
+  CONVERSATIONS_KEY,
+  LEGACY_SESSION_KEY_PREFIX,
+  activeConversation,
+  addConversation,
+  clearConversation,
+  createConversation,
+  createStore,
+  deleteConversation,
+  parseStore,
+  pruneEmpty,
+  renameConversation,
+  serializeStore,
+  sortedConversations,
+  withMessages,
+  type Conversation,
+  type ConversationStore,
+} from '@/lib/conversations';
+import { API_BASE } from '@/lib/apiBase';
 
 // Normalize persisted sources — older chats stored plain string filenames.
 function normalizeSources(sources: unknown): RagSource[] | undefined {
@@ -36,22 +51,6 @@ function normalizeSources(sources: unknown): RagSource[] | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function getSessionId(): string {
-  if (typeof window === 'undefined') return '';
-  try {
-    let id = window.sessionStorage.getItem(SESSION_KEY);
-    if (!id) {
-      id = `chat-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-      window.sessionStorage.setItem(SESSION_KEY, id);
-    }
-    return id;
-  } catch {
-    return '';
-  }
-}
-
-const STORAGE_KEY = `sovereignai.chat.messages.${getSessionId()}`;
-
 function settingsSnap() {
   const s = useSettingsStore.getState().settings;
   return {
@@ -71,31 +70,6 @@ function storageArea(): Storage | null {
   }
 }
 
-/** Read + decrypt stored history according to data_controls. */
-async function readStored(): Promise<string | null> {
-  const raw = storageArea()?.getItem(STORAGE_KEY) ?? null;
-  if (raw === null) return null;
-  if (!isEncrypted(raw)) return raw;
-  try {
-    return await decryptText(raw);
-  } catch {
-    return null; // undecryptable = treat as absent
-  }
-}
-
-async function loadMessages(): Promise<Message[]> {
-  if (typeof window === 'undefined') return [];
-  try {
-    const { dc } = settingsSnap();
-    if (!isHistoryEnabled(dc)) return []; // memory-only mode
-    const raw = await readStored();
-    if (!raw) return [];
-    return filterByRetention(sanitizeMessages(JSON.parse(raw)), dc?.data_retention);
-  } catch {
-    return [];
-  }
-}
-
 function sanitizeMessages(parsed: unknown): Message[] {
   if (!Array.isArray(parsed)) return [];
   return parsed
@@ -110,23 +84,106 @@ function sanitizeMessages(parsed: unknown): Message[] {
     .map((m) => ({ ...(m as Message), sources: normalizeSources((m as Record<string, unknown>).sources) }));
 }
 
-/** Persist history honoring save_chat_history / retention stamp / encryption. */
-async function persistMessages(messages: Message[]): Promise<void> {
+/** Decrypt (if needed) and read one stored blob, or null when absent/broken. */
+async function readStored(key: string, area: Storage): Promise<string | null> {
+  let raw: string | null = null;
+  try {
+    raw = area.getItem(key);
+  } catch {
+    return null;
+  }
+  if (raw === null) return null;
+  if (!isEncrypted(raw)) return raw;
+  try {
+    return await decryptText(raw);
+  } catch {
+    return null; // undecryptable = treat as absent
+  }
+}
+
+/**
+ * One-time import of the pre-multi-conversation blobs
+ * (`sovereignai.chat.messages.<sessionId>` and the even older `...v1`).
+ */
+async function migrateLegacyConversations(area: Storage): Promise<ConversationStore> {
+  const store = createStore();
+  const keys: string[] = [];
+  try {
+    for (let i = 0; i < area.length; i++) {
+      const key = area.key(i);
+      if (key && key.startsWith(LEGACY_SESSION_KEY_PREFIX)) keys.push(key);
+    }
+  } catch {
+    return store;
+  }
+
+  const messages: Message[] = [];
+  for (const key of keys) {
+    const text = await readStored(key, area);
+    if (!text) continue;
+    try {
+      messages.push(...sanitizeMessages(JSON.parse(text)));
+    } catch {
+      // ignore a single unreadable legacy blob
+    }
+  }
+  for (const key of keys) {
+    try {
+      area.removeItem(key);
+    } catch {
+      // non-fatal
+    }
+  }
+  return messages.length > 0
+    ? withMessages(store, store.activeId, messages)
+    : store;
+}
+
+async function loadStore(): Promise<ConversationStore> {
+  if (typeof window === 'undefined') return createStore();
+  const area = storageArea();
+  if (!area) return createStore();
+  try {
+    const { dc } = settingsSnap();
+    if (!isHistoryEnabled(dc)) return createStore(); // memory-only mode
+    const raw = await readStored(CONVERSATIONS_KEY, area);
+    const store = raw === null ? await migrateLegacyConversations(area) : parseStore(raw);
+    return pruneEmpty({
+      ...store,
+      items: store.items.map((c) => ({
+        ...c,
+        messages: filterByRetention(sanitizeMessages(c.messages), dc?.data_retention),
+      })),
+    });
+  } catch {
+    return createStore();
+  }
+}
+
+/** Persist every conversation honoring save_chat_history / retention stamp / encryption. */
+async function persistStore(store: ConversationStore): Promise<void> {
   const { dc } = settingsSnap();
   if (!isHistoryEnabled(dc)) return; // save off → don't persist
-  const store = storageArea();
-  if (!store) return;
-  const cleaned = messages
-    .filter((m) => m.content.trim())
-    .map((m) => ({ ...m, ts: m.ts ?? Date.now() }));
-  const json = JSON.stringify(cleaned);
+  const area = storageArea();
+  if (!area) return;
+  const now = Date.now();
+  const pruned = pruneEmpty({
+    ...store,
+    items: store.items.map((c) => ({
+      ...c,
+      messages: c.messages
+        .filter((m) => m.content.trim())
+        .map((m) => ({ ...m, ts: m.ts ?? now })),
+    })),
+  });
+  const json = serializeStore(pruned);
   try {
     if (dc?.encrypt_local_data === true) {
-      store.setItem(STORAGE_KEY, await encryptText(json));
+      area.setItem(CONVERSATIONS_KEY, await encryptText(json));
     } else {
       // Downgrade: overwrite any previously-encrypted blob with plaintext so
       // toggling the switch off leaves no unreadable ciphertext behind.
-      store.setItem(STORAGE_KEY, json);
+      area.setItem(CONVERSATIONS_KEY, json);
     }
   } catch {
     // non-fatal
@@ -166,14 +223,50 @@ export function useChat() {
   const [isLoading, setIsLoading] = useState(false);
   /** Live tok/s of the last/ongoing generation (show_token_speed). */
   const [tokenSpeed, setTokenSpeed] = useState<number | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState('');
+  const [loaded, setLoaded] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const messagesRef = useRef(messages);
+  // Single source of truth for the conversation store; state mirrors it for render.
+  const storeRef = useRef<ConversationStore>(createStore());
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
   const sessionStartRef = useRef(Date.now());
 
-  // Load settings, then restore history (settings decide storage + retention).
+  const commit = useCallback((next: ConversationStore) => {
+    // Drop empty threads (except the open one) on every write so repeatedly
+    // pressing "New conversation" can't pile up blank entries in the switcher.
+    const pruned = pruneEmpty(next);
+    storeRef.current = pruned;
+    setActiveId(pruned.activeId);
+    setConversations(sortedConversations(pruned));
+    return pruned;
+  }, []);
+
+  const commitAndPersist = useCallback(
+    (next: ConversationStore) => {
+      commit(next);
+      void persistStore(next);
+      return next;
+    },
+    [commit]
+  );
+
+  const currentAgentId = useCallback(
+    () => activeConversation(storeRef.current)?.agentId ?? null,
+    []
+  );
+
+  const showMessages = useCallback((msgs: Message[]) => {
+    messagesRef.current = msgs;
+    setMessages(msgs);
+    setTokenSpeed(null);
+  }, []);
+
+  // Load settings, then restore the conversation store (settings decide
+  // storage location, retention, and encryption).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -181,29 +274,25 @@ export function useChat() {
       if (!s.settings && !s.loading) {
         await s.load().catch(() => undefined);
       }
-      const restored = await loadMessages();
-      if (cancelled || restored.length === 0) return;
-      setMessages(restored);
-      // Legacy migration: one-time import of the pre-session-key blob.
-      try {
-        const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-        if (legacy) {
-          const migrated = sanitizeMessages(JSON.parse(legacy));
-          if (migrated.length > 0) window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-        }
-      } catch {
-        // ignore
-      }
+      const restored = await loadStore();
+      if (cancelled) return;
+      const next = commit(restored);
+      showMessages(activeConversation(next)?.messages ?? []);
+      setLoaded(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [commit, showMessages]);
 
+  // Sync the visible messages back into the active conversation and persist.
+  // Skipped while generating so a half-streamed reply is never written.
   useEffect(() => {
-    if (typeof window === 'undefined' || isLoading) return;
-    void persistMessages(messages);
-  }, [messages, isLoading]);
+    if (typeof window === 'undefined' || !loaded || isLoading) return;
+    const next = withMessages(storeRef.current, storeRef.current.activeId, messages);
+    commit(next);
+    void persistStore(next);
+  }, [messages, isLoading, loaded, commit]);
 
   const runCompletion = useCallback(async (messagesToSend: Message[]) => {
     const { general, parental } = settingsSnap();
@@ -221,15 +310,20 @@ export function useChat() {
     setIsLoading(true);
     setTokenSpeed(null);
 
-    // Saved general settings are the defaults; backend re-resolves request > saved > default.
+    // Saved general settings are the defaults; backend re-resolves request >
+    // agent > saved > default. With an agent selected we deliberately send no
+    // sampling values so the agent's own temperature/token limit takes effect.
+    const agentId = currentAgentId();
     const savedMaxTokens = Number(general?.max_tokens);
     const savedTemp = Number(general?.temperature);
     const savedTopP = Number(general?.top_p);
-    const sampling = {
-      ...(Number.isFinite(savedMaxTokens) && savedMaxTokens > 0 ? { max_tokens: savedMaxTokens } : {}),
-      ...(Number.isFinite(savedTemp) ? { temperature: savedTemp } : {}),
-      ...(Number.isFinite(savedTopP) && savedTopP > 0 && savedTopP <= 1 ? { top_p: savedTopP } : {}),
-    };
+    const sampling = agentId
+      ? {}
+      : {
+          ...(Number.isFinite(savedMaxTokens) && savedMaxTokens > 0 ? { max_tokens: savedMaxTokens } : {}),
+          ...(Number.isFinite(savedTemp) ? { temperature: savedTemp } : {}),
+          ...(Number.isFinite(savedTopP) && savedTopP > 0 && savedTopP <= 1 ? { top_p: savedTopP } : {}),
+        };
 
     // stream_responses=false → one blocking request (uses the non-SSE branch).
     const wantStream = general?.stream_responses !== false;
@@ -248,13 +342,15 @@ export function useChat() {
           stream: wantStream,
           use_rag: true,
           ...sampling,
+          agent_id: agentId,
           model: messagesToSend[0]?.model,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const err = new Error(errorData.detail || 'Chat request failed');
+        const detail = errorData?.error?.message || errorData.detail || 'Chat request failed';
+        const err = new Error(typeof detail === 'string' ? detail : 'Chat request failed');
         (err as Error & { status?: number }).status = response.status;
         throw err;
       }
@@ -398,7 +494,7 @@ export function useChat() {
       }
       setIsLoading(false);
     }
-  }, []);
+  }, [currentAgentId]);
 
   const stop = useCallback(() => {
     if (abortRef.current) {
@@ -432,9 +528,106 @@ export function useChat() {
     runCompletion(current.slice(0, lastUserIndex + 1));
   }, [runCompletion]);
 
+  /** Clear the current conversation in place, keeping its id and agent. */
   const clearMessages = useCallback(() => {
-    setMessages([]);
-  }, []);
+    abortRef.current?.abort();
+    commitAndPersist(clearConversation(storeRef.current, storeRef.current.activeId));
+    showMessages([]);
+  }, [commitAndPersist, showMessages]);
+
+  /** Start a brand new conversation, optionally bound to an agent. */
+  const newConversation = useCallback(
+    (agentId: string | null = currentAgentId()) => {
+      abortRef.current?.abort();
+      commitAndPersist(addConversation(storeRef.current, createConversation(agentId)));
+      showMessages([]);
+    },
+    [commitAndPersist, currentAgentId, showMessages]
+  );
+
+  /** Switch to another saved conversation; flushes the current one first. */
+  const openConversation = useCallback(
+    (id: string) => {
+      const current = storeRef.current;
+      if (id === current.activeId) return;
+      const target = current.items.find((c) => c.id === id);
+      if (!target) return;
+      abortRef.current?.abort();
+      const flushed = withMessages(current, current.activeId, messagesRef.current);
+      const next = commitAndPersist({ ...flushed, activeId: id });
+      showMessages(activeConversation(next)?.messages ?? []);
+    },
+    [commitAndPersist, showMessages]
+  );
+
+  const renameThread = useCallback(
+    (id: string, title: string) => {
+      commitAndPersist(renameConversation(storeRef.current, id, title));
+    },
+    [commitAndPersist]
+  );
+
+  const deleteThread = useCallback(
+    (id: string) => {
+      abortRef.current?.abort();
+      const next = commitAndPersist(deleteConversation(storeRef.current, id));
+      showMessages(activeConversation(next)?.messages ?? []);
+    },
+    [commitAndPersist, showMessages]
+  );
+
+  /**
+   * Bind an agent to the conversation. An untouched (empty) thread just
+   * rebinds; a thread with history in it starts a fresh conversation so the two
+   * personas can never share instructions or messages.
+   *
+   * Returns true when a new conversation was created (the UI can say so).
+   */
+  const selectAgent = useCallback(
+    (agentId: string | null): boolean => {
+      const current = storeRef.current;
+      const conv = activeConversation(current);
+      if (!conv) return false;
+      if (conv.agentId === agentId) return false;
+
+      if (conv.messages.length === 0) {
+        commitAndPersist({
+          ...current,
+          items: current.items.map((c) => (c.id === conv.id ? { ...c, agentId } : c)),
+        });
+        return false;
+      }
+
+      abortRef.current?.abort();
+      commitAndPersist(addConversation(current, createConversation(agentId)));
+      showMessages([]);
+      return true;
+    },
+    [commitAndPersist, showMessages]
+  );
+
+  /** Drop agents that no longer exist from restored conversations. */
+  const reconcileAgents = useCallback(
+    (agents: Agent[]) => {
+      const known = new Set(agents.map((a) => a.id));
+      const current = storeRef.current;
+      let changed = false;
+      const items = current.items.map((c) => {
+        if (c.agentId && !known.has(c.agentId)) {
+          changed = true;
+          return { ...c, agentId: null };
+        }
+        return c;
+      });
+      if (changed) commitAndPersist({ ...current, items });
+    },
+    [commitAndPersist]
+  );
+
+  const activeAgentId = useMemo(
+    () => conversations.find((c) => c.id === activeId)?.agentId ?? null,
+    [conversations, activeId]
+  );
 
   // export_format (data_controls): json | csv | markdown (default).
   const exportChat = useCallback(() => {
@@ -495,11 +688,20 @@ export function useChat() {
     messages,
     isLoading,
     tokenSpeed,
+    conversations,
+    activeConversationId: activeId,
+    activeAgentId,
     sendMessage,
     editAndResend,
     regenerate,
     stop,
     clearMessages,
+    newConversation,
+    openConversation,
+    renameThread,
+    deleteThread,
+    selectAgent,
+    reconcileAgents,
     exportChat,
   };
 }

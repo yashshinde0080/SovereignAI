@@ -41,7 +41,7 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background">
       <div className="w-full max-w-xs space-y-4 text-center">
         <div className="mx-auto w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
           <Lock className="h-6 w-6 text-primary" />
@@ -97,7 +97,7 @@ export function PinPrompt({ onUnlock, onCancel }: { onUnlock: () => void; onCanc
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/95">
       <div className="w-full max-w-xs space-y-4 text-center">
         <div className="mx-auto w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
           <Lock className="h-6 w-6 text-primary" />

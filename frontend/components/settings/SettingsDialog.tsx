@@ -146,9 +146,9 @@ const ALL_SECTIONS: SectionMeta[] = NAV_GROUPS.flatMap((g) => g.items);
 
 const HIGHLIGHT_CLASSES = [
   "ring-2",
-  "ring-blue-500/70",
+  "ring-accent/70",
   "ring-offset-2",
-  "ring-offset-slate-950",
+  "ring-offset-background",
   "rounded-md",
 ];
 
@@ -316,34 +316,36 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[90vw] max-w-[900px] h-[80vh] max-h-[680px] p-0 bg-slate-950 border-slate-800 text-white overflow-hidden flex flex-col sm:flex-row">
-        <div className="flex h-full w-full">
+      <DialogContent className="w-[95vw] max-w-[900px] h-[85vh] max-h-[720px] p-0 bg-background border-border text-foreground overflow-hidden">
+        {/* Narrow windows stack the nav above the content instead of squeezing
+            it into a sliver of a row — nothing gets clipped, both panes scroll. */}
+        <div className="flex flex-col sm:flex-row h-full w-full min-h-0">
           {/* Sidebar */}
-          <div className="w-[220px] shrink-0 border-r border-slate-800 flex flex-col">
+          <div className="w-full sm:w-[220px] shrink-0 max-h-[38%] sm:max-h-none border-b sm:border-b-0 sm:border-r border-border flex flex-col min-h-0">
             <DialogHeader className="p-4 pb-2">
               <DialogTitle className="text-lg font-semibold flex items-center gap-2">
-                <Settings className="h-5 w-5 text-blue-500" />
+                <Settings className="h-5 w-5 text-accent" />
                 Settings
               </DialogTitle>
             </DialogHeader>
-            <Separator className="bg-slate-800" />
+            <Separator className="bg-muted" />
             <div className="px-3 py-2">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
                   placeholder="Search settings..."
                   aria-label="Search settings"
-                  className="h-8 bg-slate-900 border-slate-700 pl-8 pr-7 text-sm"
+                  className="h-8 bg-card border-input pl-8 pr-7 text-sm"
                 />
                 {query && (
                   <button
                     type="button"
                     aria-label="Clear search"
                     onClick={() => setQuery("")}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-500 hover:text-white"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -354,7 +356,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
               {query.trim() ? (
                 <div className="flex flex-col gap-1 px-2 pb-2">
                   {results.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-slate-500">
+                    <p className="px-3 py-2 text-xs text-muted-foreground">
                       No matching settings.
                     </p>
                   ) : (
@@ -362,12 +364,12 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                       <button
                         key={`${field.section}.${field.label}`}
                         onClick={() => jumpTo(field)}
-                        className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-slate-800/60"
+                        className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60"
                       >
-                        <span className="text-sm text-slate-200">
+                        <span className="text-sm text-foreground">
                           {field.label}
                         </span>
-                        <span className="text-[10px] uppercase tracking-wider text-slate-500">
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
                           {sectionLabel(field.section)}
                         </span>
                       </button>
@@ -378,7 +380,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
               <nav className="flex flex-col gap-3 px-2">
                 {NAV_GROUPS.map((group) => (
                   <div key={group.label} className="flex flex-col gap-1">
-                    <p className="px-3 pt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    <p className="px-3 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                       {group.label}
                     </p>
                     {group.items.map(({ key, label, icon: Icon }) => (
@@ -388,8 +390,8 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                         className={cn(
                           "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full",
                           activeSection === key
-                            ? "bg-slate-800 text-white"
-                            : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                            ? "bg-muted text-foreground"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
@@ -401,34 +403,34 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
               </nav>
               )}
             </ScrollArea>
-            <Separator className="bg-slate-800" />
+            <Separator className="bg-muted" />
             <div className="p-3">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full text-slate-400 hover:text-red-400 hover:bg-red-950/20 justify-start gap-2"
+                    className="w-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 justify-start gap-2"
                   >
                     <RotateCcw className="h-4 w-4" />
                     Reset All Defaults
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent className="bg-slate-950 border-slate-800 text-white">
+                <AlertDialogContent className="bg-background border-border text-foreground">
                   <AlertDialogHeader>
                     <AlertDialogTitle>Reset all settings?</AlertDialogTitle>
-                    <AlertDialogDescription className="text-slate-400">
+                    <AlertDialogDescription className="text-muted-foreground">
                       Every section — including agents, personalization, security
                       and parental controls — will be restored to its default
                       values. This cannot be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
-                    <AlertDialogCancel className="bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800">
+                    <AlertDialogCancel className="bg-card border-input text-foreground hover:bg-muted">
                       Cancel
                     </AlertDialogCancel>
                     <AlertDialogAction
-                      className="bg-red-600 hover:bg-red-700"
+                      className="bg-destructive hover:bg-destructive/90"
                       onClick={resetAll}
                     >
                       Reset everything
@@ -440,20 +442,20 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
           </div>
 
           {/* Content */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-6 py-4 pr-12 border-b border-slate-800 shrink-0">
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+            <div className="px-6 py-4 pr-12 border-b border-border shrink-0">
               <h2 className="text-lg font-semibold">
                 {activeMeta?.label}
               </h2>
               {activeMeta?.description && (
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {activeMeta.description}
                 </p>
               )}
             </div>
             <ScrollArea className="flex-1 px-6 py-4" viewportRef={viewportRef}>
               {loading ? (
-                <div className="flex items-center justify-center h-full text-slate-500">
+                <div className="flex items-center justify-center h-full text-muted-foreground">
                   Loading settings...
                 </div>
               ) : (

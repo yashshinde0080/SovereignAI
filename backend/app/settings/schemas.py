@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal, Optional
 from enum import Enum
 
@@ -66,6 +68,11 @@ class ResponseLength(str, Enum):
 
 
 class AgentRole(str, Enum):
+    CEO = "ceo"
+    CTO = "cto"
+    SOFTWARE_ENGINEER = "software_engineer"
+    ML_ENGINEER = "ml_engineer"
+    RESEARCH_ANALYST = "research_analyst"
     DOCTOR = "doctor"
     ENGINEER = "engineer"
     LAWYER = "lawyer"
@@ -128,17 +135,52 @@ class GeneralSettings(BaseModel):
     auto_save_sessions: bool = True
 
 
+# Tool permissions an agent may be granted. Nothing here executes yet — the
+# chat path has no tool-calling loop, so the UI marks every entry unavailable
+# rather than pretending it runs. The set is validated on save so a caller
+# can't store arbitrary strings the future executor would have to trust.
+AGENT_TOOLS: tuple[str, ...] = (
+    "read_project_files",
+    "search_docs",
+    "analyze_code",
+    "run_tests",
+    "system_info",
+)
+
+_AGENT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
 class AgentConfig(BaseModel):
     id: str
-    name: str
+    name: str = Field(min_length=1, max_length=80)
     role: AgentRole
+    job_title: str = Field(default="", max_length=120)
     description: str = ""
     system_instruction: str = ""
+    responsibilities: str = ""
+    preferred_model: str = ""
+    welcome_message: str = Field(default="", max_length=500)
+    tool_permissions: list[str] = []
     is_active: bool = False
     icon: str = "bot"
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2048, ge=64, le=32768)
     enabled: bool = True
+
+    @field_validator("id")
+    @classmethod
+    def _valid_id(cls, v: str) -> str:
+        if not _AGENT_ID_RE.match(v):
+            raise ValueError("agent id must be 1-64 chars of letters, digits, _ or -")
+        return v
+
+    @field_validator("tool_permissions")
+    @classmethod
+    def _known_tools(cls, v: list[str]) -> list[str]:
+        unknown = sorted(set(v) - set(AGENT_TOOLS))
+        if unknown:
+            raise ValueError(f"unknown tool permission(s): {', '.join(unknown)}")
+        return list(dict.fromkeys(v))  # de-dupe, keep order
 
 
 class PersonalizationSettings(BaseModel):

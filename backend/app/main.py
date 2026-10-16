@@ -1,5 +1,6 @@
 """Main FastAPI Application"""
 import asyncio
+import inspect
 import logging
 import os
 import sys
@@ -179,19 +180,55 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown
+    # ── Shutdown ──────────────────────────────────────────────────────────
+    # Order matters, and every step is guarded. Producers stop first, then the
+    # consumers they write through: a raise anywhere used to skip the rest,
+    # which is exactly how a SQLite connection stays open ("database is
+    # locked") and an aiosqlite thread outlives the event loop ("RuntimeError:
+    # Event loop is closed").
     logger.info("Shutting down...")
-    sweep_task.cancel()
-    if app.state.active_engine:
-        await app.state.active_engine.unload()
-    if hasattr(app.state, 'model_manager') and hasattr(app.state.model_manager, 'provider'):
-        await app.state.model_manager.provider.cleanup()
-    if hasattr(app.state, 'db'):
-        app.state.db.shutdown()
-    if getattr(app.state, 'vector_store', None) is not None:
-        app.state.vector_store.shutdown()
-    if hasattr(app.state, 'cloud_provider_registry'):
-        app.state.cloud_provider_registry.close()
+
+    async def _stop(name, fn, *args):
+        """Run one teardown step; log a failure instead of aborting the rest."""
+        if fn is None:
+            return
+        try:
+            result = fn(*args)
+            if inspect.isawaitable(result):
+                await result
+            logger.debug("[shutdown] %s done", name)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("[shutdown] %s failed", name)
+
+    async def _cancel(task, name):
+        """Cancel a background task and wait for it to actually finish."""
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("[shutdown] %s raised", name)
+
+    # 1. Background producers.
+    await _cancel(sweep_task, "session sweep")
+    await _stop("model scan + registry", getattr(getattr(app.state, 'model_manager', None), 'shutdown', None))
+    await _stop("metrics poller", getattr(sys.modules.get('app.websocket.metrics'), 'stop_gpu_cache', None))
+    # 2. Inference engine.
+    await _stop("engine unload", getattr(getattr(app.state, 'active_engine', None), 'unload', None))
+    # 3. Pluggable parts.
+    await _stop("plugin unload", getattr(getattr(app.state, 'plugin_manager', None), 'unload_all', None))
+    await _stop("provider cleanup", getattr(getattr(getattr(app.state, 'model_manager', None), 'provider', None), 'cleanup', None))
+    # 4. Storage. Databases last: nothing is still scheduled to write to them.
+    await _stop("vector store", getattr(getattr(app.state, 'vector_store', None), 'shutdown', None))
+    await _stop("database", getattr(getattr(app.state, 'db', None), 'shutdown', None))
+    await _stop("cloud registry", getattr(getattr(app.state, 'cloud_provider_registry', None), 'close', None))
+    await _stop("settings database", getattr(getattr(getattr(app.state, 'settings_service', None), 'db', None), 'close', None))
+    logger.info("Shutdown complete")
 
 
 app = FastAPI(
@@ -250,9 +287,16 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Detailed Health Check"""
+    """Detailed Health Check.
+
+    `name`/`pid` are the identity a launcher checks before it adopts an
+    already-running server instead of spawning a second one.
+    """
     return {
         "status": "healthy",
+        "name": settings.app_name,
+        "version": settings.app_version,
+        "pid": os.getpid(),
         "model_loaded": app.state.active_model is not None,
         "current_model": app.state.active_model,
         "current_mode": app.state.active_mode

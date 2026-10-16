@@ -2,13 +2,18 @@
 import time
 
 import psutil
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
+from app.lib.server_lifecycle import request_shutdown
 from app.schemas.system import (
     HardwareProfile,
     SystemStatus,
     ResourceUsage
 )
+
+# Loopback client addresses. 127.0.0.1 covers 127.0.0.0/8 in practice (the
+# shell always uses 127.0.0.1) and ::1 the IPv6 form.
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
 
 
 router = APIRouter()
@@ -36,6 +41,23 @@ def _disk_rates_mb_s() -> tuple[float, float]:
             write_mb_s = max(0, io.write_bytes - prev_write) / (1024 ** 2) / elapsed
     _prev_disk_io = (now, io.read_bytes, io.write_bytes)
     return round(read_mb_s, 2), round(write_mb_s, 2)
+
+
+@router.post("/shutdown")
+async def shutdown(request: Request):
+    """Stop the server gracefully (used by the desktop shell when it quits).
+
+    The server then closes the databases and background tasks before exiting;
+    a hard kill (taskkill) skips all of that and is what leaves SQLite locked.
+    Loopback-only: with the API bound to the LAN, a remote caller must not be
+    able to stop someone else's server. Returns before the process has exited —
+    the caller polls for it.
+    """
+    client = request.client.host if request.client else ""
+    if client not in _LOOPBACK_HOSTS:
+        raise HTTPException(status_code=403, detail="Shutdown is only allowed from localhost")
+    request_shutdown()
+    return {"status": "shutting down"}
 
 
 @router.get("/hardware", response_model=HardwareProfile)

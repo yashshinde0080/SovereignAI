@@ -43,7 +43,10 @@ class DatabaseManager:
         # yanked; a stale WAL on exFAT/FAT32 can corrupt. Costs throughput, not
         # correctness. Upgrade path: revert to WAL for fixed-disk installs.
         journal_mode = "DELETE"
-        busy_timeout = 5000
+        # 10s: a stale backend the launcher has not adopted yet can still hold
+        # the write lock for a moment while it shuts down. 5s was not always
+        # enough and surfaced as "database is locked" during shutdown.
+        busy_timeout = 10000
         cache_size = -64000
 
         # Create connection pool

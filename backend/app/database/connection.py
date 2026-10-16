@@ -58,6 +58,11 @@ class ConnectionPool:
         # Enforce foreign keys
         conn.execute("PRAGMA foreign_keys = ON")
 
+        # Wait for a concurrent writer instead of failing instantly. The
+        # connect() timeout only covers the initial lock; this is what applies
+        # to every later statement (audit writes during shutdown included).
+        conn.execute(f"PRAGMA busy_timeout = {int(self.busy_timeout)}")
+
         # Journal mode: DELETE (portable/removable-safe; see manager.py note)
         conn.execute(f"PRAGMA journal_mode = {self.journal_mode}")
 

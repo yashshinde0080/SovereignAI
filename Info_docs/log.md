@@ -1,3 +1,21 @@
+## [2026-10-16] feat+refactor+test+build | Agent chat/personas + conversations + backend single-instance lifecycle + Electron runtime
+- Backend lifecycle: new `backend/app/lib/server_lifecycle.py` - single-instance startup with port preflight + atomic `backend.json` state file (port scan, graceful shutdown request via `/v1/system/shutdown`); wired into `backend/main.py` + `backend_entry.py`; `/v1/system` endpoints
+- Backend chat/settings: new `backend/app/lib/retention.py`; new `backend/app/settings/defaults.py` (166); extended schemas/service/router; websocket metrics + connection pool tweaks; `model_manager` auto-hooks
+- Backend tests: new `backend/tests/test_agent_chat.py` (522) and `backend/tests/test_backend_lifecycle.py` (185)
+- Frontend agents: `AgentSelector`, `ConversationMenu`, reworked `AgentCard`/`AgentSettings`/`CharacteristicChip`, agent tools (`lib/agentTools.ts`), types; conversations persistence (`lib/conversations.ts` + test) and retention (`lib/chatRetention.ts` + test); `maskedLm.ts` + test; `settingsSearch.ts` + test; `themeBoot.ts`; large `useChat.ts` refactor
+- Electron: new `runtime.js` + `runtime.test.js`; `main.js`/`preload.js`/`menu.js`/`tray.js` boot refactor; `package.json` bump
+- Build: `build-release.ps1` tidy, `build_windows.ps1` patch, `.gitignore` + `skills-lock.json` update
+- Commits: 2e823e84, 384ad8f7, a03bfab5, 7505b95d, 45908180
+
+## [2026-10-14] feat+test+build | RAG doctor CLI + RAG/system hardening + icons + portable bundle polish
+- Backend CLI: new `sovereign rag doctor` in-process diagnostic (storage, index-vs-metadata, chunking, embedding model/cache, dimension, retriever smoke, generation provider) in `backend/app/cli/main.py`
+- Backend hardening: `api/rag.py`, `api/system.py`, `core/hardware_detector.py`, `core/hardware_llmfit.py`, `engines/fullram/executor.py`, `security/middleware.py`, `main.py`; `services/vector_store.py` removed, logic folded into `vectorstore/manager.py`; `vectorstore` chunker/index_builder/retriever/store touched
+- Tests: new `test_rag_hardening.py` (551), `test_system_api.py` (125); `test_rag_chunker.py`, `test_settings_behavior.py`, `test_hardware_detector.py` updated
+- Icons: `electron/assets/make_icon.py` regenerated + rebuilt `icon.ico`/`icon.png`
+- Frontend: `app/system/page.tsx` polish
+- Build: `Script_portable.ps1`/`Script_zip.ps1` tweaks, `build_windows.ps1` NSIS fixes, `scripts/portable_lib.ps1` + `build-release.ps1`, added `sovereign.png`
+- Commits: 176459e1, 38e25be6, bf39cfbc, a85bb1be
+
 ## [2026-10-13] feat+refactor+ci+docs | Portable release scripts + frontend CI + hardware detector fixes + security hardening
 - Portable release: new repo-root scripts `Script_portable.ps1` + `Script_zip.ps1` + shared library `scripts/portable_lib.ps1` — stage a self-contained Windows x64 bundle under `build_zip\portable\` (Electron 28 + frozen CPython backend + Next.js static export), verify bundle contract (required files/dirs, no shipped DB, no secrets, no repo paths), package into a versioned ZIP with SHA256SUMS.txt and build-report.txt; collision-safe naming (`-Force` to overwrite); Windows MAX_PATH budget reported
 - Portable docs: `Docs/PORTABLE_RELEASE.md` (318 lines, full authoring guide), `packaging/README_PORTABLE.txt` (end-user leaflet), `scripts/README_PORTABLE.txt` (build-script usage)

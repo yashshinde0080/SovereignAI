@@ -1,6 +1,6 @@
 const { app, Menu, shell } = require('electron');
 
-function createMenu(mainWindow) {
+function createMenu(mainWindow, { modelsDir } = {}) {
   const isMac = process.platform === 'darwin';
 
   const template = [
@@ -30,12 +30,16 @@ function createMenu(mainWindow) {
             const { shell } = require('electron');
             const path = require('path');
             const fs = require('fs');
-            // Point at the backend's real models dir (portable: on the
-            // pendrive next to the app, not %APPDATA%).
-            const modelsPath = app.isPackaged
-              ? path.join(process.resourcesPath, 'workspace', 'models')
-              : path.join(__dirname, '..', 'workspace', 'models');
-            fs.mkdirSync(modelsPath, { recursive: true });
+            // The real models dir, resolved by the main process: it is under
+            // SOVEREIGN_DATA_ROOT (portable: on the drive next to the exe;
+            // installed: the per-user dir). process.resourcesPath is the
+            // read-only install directory and holds no models.
+            const modelsPath = modelsDir || path.join(__dirname, '..', 'workspace', 'models');
+            try {
+              fs.mkdirSync(modelsPath, { recursive: true });
+            } catch (err) {
+              console.warn('Could not create models dir:', err.message);
+            }
             await shell.openPath(modelsPath);
           }
         },

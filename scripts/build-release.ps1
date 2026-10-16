@@ -123,11 +123,14 @@ Copy-Item -Path (Join-Path $Unpacked '*') -Destination $Stage -Recurse -Force
 Get-ChildItem -LiteralPath (Join-Path $Stage 'resources\frontend') -Recurse -File -Filter '*.map' -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
-# Portable marker + writable-state dirs (main.js: data/ sibling => portable mode).
-foreach ($d in @('data\models', 'data\plugins', 'data\cache')) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $Stage $d) | Out-Null
+# Portable marker + writable-state dirs (electron/runtime.js: a data/ sibling
+# next to the exe switches portable mode on, and every cache/temp path is
+# created up front so the first launch never starts with an unwritable dir).
+# Single source of truth, shared with Script_portable.ps1.
+foreach ($rel in @(Get-PortableRequiredDirs)) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $Stage $rel) | Out-Null
 }
-Set-Content -LiteralPath (Join-Path $Stage 'data\models\README.txt') -Encoding ASCII -Value @"
+Set-Content -LiteralPath (Join-Path $Stage 'data\workspace\models\README.txt') -Encoding ASCII -Value @"
 Download or import models into this folder. No models are bundled.
 Kept on the drive so the package stays portable and license-clean.
 "@
@@ -187,8 +190,8 @@ if (-not $SkipChecks) {
     Assert-File (Join-Path $Stage 'Launch-SovereignAI.ps1') 'Launch .ps1'
     Assert-File (Join-Path $Stage 'resources\backend\SovereignAIBackend.exe') 'Staged backend'
     Assert-File (Join-Path $Stage 'resources\frontend\index.html') 'Staged frontend'
-    foreach ($d in @('data', 'data\models', 'data\plugins', 'data\cache')) {
-        if (-not (Test-Path -LiteralPath (Join-Path $Stage $d) -PathType Container)) { throw "Missing portable dir: $d" }
+    foreach ($rel in @(Get-PortableRequiredDirs)) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Stage $rel) -PathType Container)) { throw "Missing portable dir: $rel" }
     }
     $shippedDb = Get-ChildItem -LiteralPath $Stage -Recurse -File -Filter 'sovereign*.db*' -ErrorAction SilentlyContinue
     if ($shippedDb) { throw "A sovereign DB was staged (should be created on first run): $($shippedDb[0].FullName)" }

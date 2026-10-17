@@ -153,17 +153,17 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
     <div className="space-y-6 pb-6">
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+          <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
             Cloud / Online Providers
           </h3>
-          <p className="text-xs text-slate-500 mt-1 sm:max-w-md">
+          <p className="text-xs text-muted-foreground mt-1 sm:max-w-md">
             Connect external AI APIs (OpenAI, Anthropic, Gemini, custom endpoints).
             Keys are encrypted on your machine and never sent to the frontend.
           </p>
         </div>
         <Button
           size="sm"
-          className="bg-blue-600 hover:bg-blue-700 shrink-0"
+          className="bg-primary hover:bg-primary/90 shrink-0"
           onClick={() => setShowForm((v) => !v)}
         >
           <Plus className="h-4 w-4 mr-1" />
@@ -172,15 +172,15 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
       </div>
 
       {showForm && (
-        <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 space-y-3">
+        <div className="rounded-lg border border-border bg-card/50 p-4 space-y-3">
           <div className="grid sm:grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label className="text-sm text-slate-300">Provider Type</Label>
+              <Label className="text-sm text-foreground">Provider Type</Label>
               <Select value={form.provider_type} onValueChange={(v) => handleTypeChange(v as CloudProviderType)}>
-                <SelectTrigger className="bg-slate-900 border-slate-700">
+                <SelectTrigger className="bg-card border-input">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-700">
+                <SelectContent className="bg-card border-input">
                   {PROVIDER_TYPES.map((t) => (
                     <SelectItem key={t.value} value={t.value}>
                       {t.label}
@@ -190,9 +190,9 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-sm text-slate-300">Name</Label>
+              <Label className="text-sm text-foreground">Name</Label>
               <Input
-                className="bg-slate-900 border-slate-700"
+                className="bg-card border-input"
                 placeholder="My OpenAI"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -200,21 +200,21 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
             </div>
           </div>
           <div className="space-y-2">
-            <Label className="text-sm text-slate-300">API Key</Label>
+            <Label className="text-sm text-foreground">API Key</Label>
             <Input
               type="password"
-              className="bg-slate-900 border-slate-700 font-mono"
+              className="bg-card border-input font-mono"
               placeholder="sk-..."
               value={form.api_key}
               onChange={(e) => setForm((f) => ({ ...f, api_key: e.target.value }))}
             />
           </div>
           <div className="space-y-2">
-            <Label className="text-sm text-slate-300">
-              Base URL {form.provider_type !== "custom" && <span className="text-slate-500">(optional override)</span>}
+            <Label className="text-sm text-foreground">
+              Base URL {form.provider_type !== "custom" && <span className="text-muted-foreground">(optional override)</span>}
             </Label>
             <Input
-              className="bg-slate-900 border-slate-700 font-mono"
+              className="bg-card border-input font-mono"
               placeholder={
                 form.provider_type === "custom"
                   ? "http://localhost:11434/v1 (Ollama, vLLM, LiteLLM...)"
@@ -224,13 +224,13 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
               onChange={(e) => setForm((f) => ({ ...f, base_url: e.target.value }))}
             />
             {form.provider_type === "custom" && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Custom endpoints must be OpenAI-compatible (e.g. Ollama, vLLM, Groq, Together).
               </p>
             )}
           </div>
           <div className="flex justify-end">
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={handleAdd} disabled={saving}>
+            <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={handleAdd} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
               Save Provider
             </Button>
@@ -239,12 +239,12 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-8 text-slate-500">
+        <div className="flex items-center justify-center py-8 text-muted-foreground">
           <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading providers...
         </div>
       ) : providers.length === 0 ? (
-        <div className="text-center py-8 text-slate-500">
-          <Cloud className="h-8 w-8 mx-auto mb-2 text-slate-600" />
+        <div className="text-center py-8 text-muted-foreground">
+          <Cloud className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
           No cloud providers. Add an API key to use online models.
         </div>
       ) : (
@@ -252,17 +252,17 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
           {providers.map((p) => (
             <div
               key={p.id}
-              className="flex items-center gap-3 p-3 rounded-lg border border-slate-800 bg-slate-900/40"
+              className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card/40"
             >
-              <Cloud className="h-4 w-4 text-blue-400 shrink-0" />
+              <Cloud className="h-4 w-4 text-accent shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-200">{p.name}</span>
+                  <span className="text-sm font-medium text-foreground">{p.name}</span>
                   <Badge variant="outline" className="text-[10px]">
                     {typeLabel(p.provider_type)}
                   </Badge>
                 </div>
-                <div className="text-xs text-slate-500 font-mono truncate mt-0.5">
+                <div className="text-xs text-muted-foreground font-mono truncate mt-0.5">
                   {p.api_key_masked || "no key"}
                   {p.base_url ? ` · ${p.base_url}` : ""}
                 </div>
@@ -270,7 +270,7 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
               <Button
                 variant="outline"
                 size="sm"
-                className="border-slate-700 text-slate-300 hover:bg-slate-800 shrink-0"
+                className="border-input text-foreground hover:bg-muted shrink-0"
                 onClick={() => handleTest(p)}
                 disabled={testingId === p.id}
               >
@@ -282,13 +282,13 @@ export function CloudProvidersSettings({ onChanged }: CloudProvidersSettingsProp
                 <span className="ml-1 hidden sm:inline">Test</span>
               </Button>
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-slate-500">{p.is_enabled ? "On" : "Off"}</span>
+                <span className="text-xs text-muted-foreground">{p.is_enabled ? "On" : "Off"}</span>
                 <Switch checked={p.is_enabled} onCheckedChange={(v) => handleToggle(p, v)} />
               </div>
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-slate-500 hover:text-red-400 hover:bg-red-950/20 shrink-0"
+                className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 shrink-0"
                 onClick={() => handleDelete(p)}
                 title="Remove provider"
               >

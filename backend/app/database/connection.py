@@ -16,7 +16,7 @@ class ConnectionPool:
     WAL mode for concurrent reads.
     """
 
-    def __init__(self, db_path: str, journal_mode: str = "WAL",
+    def __init__(self, db_path: str, journal_mode: str = "DELETE",
                  busy_timeout: int = 5000, cache_size: int = -64000):
         self.db_path = db_path
         self.journal_mode = journal_mode
@@ -58,14 +58,19 @@ class ConnectionPool:
         # Enforce foreign keys
         conn.execute("PRAGMA foreign_keys = ON")
 
-        # WAL mode for concurrent reads
+        # Wait for a concurrent writer instead of failing instantly. The
+        # connect() timeout only covers the initial lock; this is what applies
+        # to every later statement (audit writes during shutdown included).
+        conn.execute(f"PRAGMA busy_timeout = {int(self.busy_timeout)}")
+
+        # Journal mode: DELETE (portable/removable-safe; see manager.py note)
         conn.execute(f"PRAGMA journal_mode = {self.journal_mode}")
 
         # Cache size (negative = KB)
         conn.execute(f"PRAGMA cache_size = {self.cache_size}")
 
-        # Synchronous mode - NORMAL for balance
-        conn.execute("PRAGMA synchronous = NORMAL")
+        # Synchronous FULL: fsync every commit so a yanked drive keeps the DB.
+        conn.execute("PRAGMA synchronous = FULL")
 
         # Temp store in memory
         conn.execute("PRAGMA temp_store = MEMORY")

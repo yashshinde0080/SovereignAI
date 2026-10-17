@@ -1,4 +1,5 @@
 import type { Metrics } from '@/types';
+import { WS_URL } from '@/lib/apiBase';
 
 export class MetricsWebSocket {
   private ws: WebSocket | null = null;
@@ -6,7 +7,7 @@ export class MetricsWebSocket {
   private reconnectInterval: number = 3000;
   private listeners: Set<(data: Metrics) => void> = new Set();
 
-  constructor(url: string = 'ws://127.0.0.1:8000/ws/metrics') {
+  constructor(url: string = WS_URL) {
     this.url = url;
   }
 

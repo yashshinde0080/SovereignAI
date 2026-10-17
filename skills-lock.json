@@ -7,6 +7,12 @@
       "skillPath": "skills/agent-kanban/SKILL.md",
       "computedHash": "13d25397db72aa4923679f370da18858701edbab1a1f584ead42b18e7a729b45"
     },
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/impeccable/SKILL.md",
+      "computedHash": "2b16bd26632e294094da7e6d2352dce4c1efec66d3b90c88f0e059b28e2d6e04"
+    },
     "obsidian-canvas-creator": {
       "source": "axtonliu/axton-obsidian-visual-skills",
       "sourceType": "github",

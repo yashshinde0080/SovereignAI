@@ -64,7 +64,7 @@ export function CloudModelList({ refreshKey = 0 }: CloudModelListProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Cloud className="h-4 w-4 text-blue-400" />
+          <Cloud className="h-4 w-4 text-accent" />
           <h3 className="text-sm font-semibold">Online Models</h3>
           <Badge variant="secondary" className="text-xs">
             {models.length}
@@ -94,7 +94,7 @@ export function CloudModelList({ refreshKey = 0 }: CloudModelListProps) {
               key={m.id}
               className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent/40 transition-colors"
             >
-              <Cloud className="h-4 w-4 text-blue-400 shrink-0" />
+              <Cloud className="h-4 w-4 text-accent shrink-0" />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium truncate">{m.name}</span>

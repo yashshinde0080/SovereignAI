@@ -1,3 +1,6 @@
+from typing import Optional
+from uuid import uuid4
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from .schemas import (
     GeneralSettings,
@@ -253,6 +256,41 @@ async def update_project_settings(settings: ProjectSettings):
 # AGENTS
 # ──────────────────────────────────────────────
 
+async def _validate_agent(request: Request, agent: AgentConfig, exclude_id: Optional[str] = None) -> None:
+    """Reject agent configs the frontend could get wrong: duplicate names and
+    a preferred model that resolves to nothing this install can run."""
+    if service.agent_name_taken(agent.name, exclude_id):
+        raise HTTPException(status_code=409, detail=f"An agent named '{agent.name}' already exists")
+
+    model = (agent.preferred_model or "").strip()
+    if not model:
+        return
+    if "/" in model:
+        provider_id = model.split("/", 1)[0]
+        registry = getattr(request.app.state, "cloud_provider_registry", None)
+        if registry is None or registry.get_provider(provider_id) is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Cloud provider '{provider_id}' is not configured",
+            )
+        return
+
+    manager = getattr(request.app.state, "model_manager", None)
+    if manager is None:
+        return  # bare app (tests) — nothing to check the model against
+    try:
+        installed = await manager.list_models()
+    except Exception:
+        return  # registry unavailable: don't block a save on an unrelated failure
+    names = {(m.get("name") or m.get("id") or "").lower() for m in installed} - {""}
+    # No local models installed yet is a valid state (configure agents first).
+    if names and model.lower() not in names:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Model '{model}' is not installed. Install it first, or clear the preferred model.",
+        )
+
+
 @router.get("/agents")
 async def get_all_agents():
     return service.get_all_agents()
@@ -273,7 +311,8 @@ async def get_agent(agent_id: str):
 
 
 @router.post("/agents", response_model=SettingsUpdateResponse)
-async def create_agent(agent: AgentConfig):
+async def create_agent(request: Request, agent: AgentConfig):
+    await _validate_agent(request, agent)
     success = service.create_agent(agent)
     if not success:
         raise HTTPException(status_code=409, detail="Agent with this ID already exists")
@@ -285,11 +324,35 @@ async def create_agent(agent: AgentConfig):
 
 
 @router.put("/agents/{agent_id}", response_model=SettingsUpdateResponse)
-async def update_agent(agent_id: str, agent: AgentConfig):
+async def update_agent(request: Request, agent_id: str, agent: AgentConfig):
+    if service.get_agent(agent_id) is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    await _validate_agent(request, agent, exclude_id=agent_id)
     success = service.update_agent(agent_id, agent)
     return SettingsUpdateResponse(
         success=success,
         message="Agent updated" if success else "Update failed",
+        updated_section="agents"
+    )
+
+
+@router.post("/agents/{agent_id}/duplicate", response_model=SettingsUpdateResponse)
+async def duplicate_agent(request: Request, agent_id: str, name: Optional[str] = None):
+    """Copy an agent's configuration under a new id — the new agent starts
+    enabled but inactive so it can't silently take over the active persona."""
+    source = service.get_agent(agent_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    base_name = (name or f"{source['name']} (copy)").strip()
+    if service.agent_name_taken(base_name):
+        raise HTTPException(status_code=409, detail=f"An agent named '{base_name}' already exists")
+    copy = AgentConfig(**{**source, "id": f"agent_{uuid4().hex[:12]}", "name": base_name, "is_active": False})
+    await _validate_agent(request, copy)
+    if not service.create_agent(copy):
+        raise HTTPException(status_code=409, detail="Could not duplicate this agent")
+    return SettingsUpdateResponse(
+        success=True,
+        message=f"Agent '{base_name}' created",
         updated_section="agents"
     )
 

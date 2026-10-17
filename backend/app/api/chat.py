@@ -21,32 +21,89 @@ from app.schemas.chat import (
 router = APIRouter()
 
 
-def _resolve_sampling(chat_request, settings_service) -> dict:
-    """Per-request sampling params: request value > saved general setting > schema default.
+def _resolve_sampling(chat_request, settings_service, agent: Optional[dict] = None) -> dict:
+    """Per-request sampling params.
 
-    Pydantic fields_set tells "client omitted the field" apart from "client sent
-    the default" — omitted fields fall back to the saved settings so the UI's
-    generation sliders take effect without per-request plumbing.
+    Precedence: explicit request field > selected agent > saved general setting
+    > schema default. Pydantic fields_set tells "client omitted the field" apart
+    from "client sent the default", so omitted fields fall back to the agent (so
+    a persona keeps its own temperature) and then to the saved settings.
     """
     out = {
         "max_tokens": chat_request.max_tokens,
         "temperature": chat_request.temperature,
         "top_p": chat_request.top_p,
     }
-    if settings_service is None:
-        return out
-    try:
-        general = settings_service.get_general() or {}
-    except Exception:
-        return out  # broken settings must never break chat
-    omitted = chat_request.model_fields_set
-    for key in out:
-        if key not in omitted and key in general:
-            try:
-                out[key] = general[key]
-            except (TypeError, KeyError):
-                pass
+    # Duck-typed request objects (tests, internal callers) may not be pydantic
+    # models — treat a missing field set as "nothing omitted".
+    omitted = getattr(chat_request, "model_fields_set", None) or set()
+
+    def apply(source: Optional[dict]) -> None:
+        if not source:
+            return
+        for key in out:
+            if key in omitted:
+                continue
+            value = source.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            out[key] = int(value) if key == "max_tokens" else float(value)
+
+    if settings_service is not None:
+        try:
+            apply(settings_service.get_general() or {})
+        except Exception:
+            pass  # broken settings must never break chat
+    apply(agent)
     return out
+
+
+def _resolve_agent(settings_service, agent_id: Optional[str]) -> Optional[dict]:
+    """Look up the agent a chat request names. None = plain default assistant.
+
+    Every failure is a hard error — a request that names an agent must never
+    silently fall back to the generic assistant and answer as the wrong persona.
+    """
+    if not agent_id:
+        return None
+    if settings_service is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Agent selection is unavailable: settings service is not initialized.",
+        )
+    agent = settings_service.get_agent(agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Unknown agent '{agent_id}'")
+    if not agent.get("enabled"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Agent '{agent['name']}' is disabled. Enable it in Settings \u2192 Agents.",
+        )
+    return agent
+
+
+async def _ensure_agent_model(app, agent: Optional[dict]) -> None:
+    """Load the selected agent's preferred model when none is loaded yet.
+
+    A model that is already loaded wins — swapping models mid-conversation is
+    slow and would drop the context the user is looking at. The UI surfaces the
+    mismatch when the agent's preference differs from the active model.
+    """
+    if agent is None:
+        return
+    preferred = (agent.get("preferred_model") or "").strip()
+    manager = getattr(app.state, "model_manager", None)
+    if not preferred or manager is None:
+        return
+    try:
+        await manager.load_model(preferred, mode="auto")
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Agent '{agent['name']}' requires model '{preferred}', which could not be loaded: {e}"
+            ),
+        )
 
 
 # ponytail: 4-word blocklist, extend when false positives/wild misses show up
@@ -94,12 +151,20 @@ def _parental_block(pc: Optional[dict], user_text: str) -> Optional[str]:
 async def chat_completions(request: Request, chat_request: ChatRequest):
     """Generate chat completion"""
     app = request.app
-    
-    # Check if model is loaded
+
+    settings_service = getattr(app.state, "settings_service", None)
+
+    # Resolve the selected agent first: its preferred model may still need to
+    # be loaded before there is an engine to answer with.
+    agent = _resolve_agent(settings_service, chat_request.agent_id)
+
+    # Check if a model is loaded (loading the agent's preferred model if needed)
+    if not app.state.active_engine:
+        await _ensure_agent_model(app, agent)
     if not app.state.active_engine:
         raise HTTPException(
             status_code=400,
-            detail={"error": {"message": "No model loaded. Use /v1/models/load first.", "type": "invalid_request_error", "param": None, "code": None}}
+            detail={"error": {"message": "No model loaded. Pick one in Models, set one as the agent's preferred model in Settings \u2192 Agents, or load via /v1/models/load.", "type": "invalid_request_error", "param": None, "code": None}}
         )
     
     # Build prompt from messages using tokenizer's template if possible
@@ -107,9 +172,6 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     tokenizer = getattr(app.state.active_engine, "tokenizer", None)
     
     messages_dicts = [{"role": msg.role, "content": msg.content} for msg in chat_request.messages]
-    
-    # Apply Personalization & Agent Settings
-    settings_service = getattr(app.state, "settings_service", None)
 
     # Parental controls: content gate + activity log (audit stores counts, never text)
     pc = None
@@ -128,7 +190,13 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
             pass  # logging must never block chat
 
     if settings_service:
-        system_prompt = settings_service.get_system_prompt()
+        # The agent selected for THIS request wins over the globally active one,
+        # so two conversations with different agents can't share instructions.
+        system_prompt = (
+            settings_service.build_system_prompt(agent)
+            if agent
+            else settings_service.get_system_prompt()
+        )
         
         if system_prompt:
             # If there's already a system message, prepend our settings-based prompt
@@ -236,7 +304,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     )
     
     if chat_request.stream:
-        sampling = _resolve_sampling(chat_request, settings_service)
+        sampling = _resolve_sampling(chat_request, settings_service, agent)
         return StreamingResponse(
             stream_response(
                 app.state.active_engine, input_data, chat_request, rag_metadata_out,
@@ -249,7 +317,7 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
     # Non-streaming response
     if await request.is_disconnected():
         raise HTTPException(status_code=499, detail="Client disconnected")
-    sampling = _resolve_sampling(chat_request, settings_service)
+    sampling = _resolve_sampling(chat_request, settings_service, agent)
     sem = getattr(app.state, "gen_semaphore", None)
     if sem is not None:
         await sem.acquire()

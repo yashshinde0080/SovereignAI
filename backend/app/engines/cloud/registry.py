@@ -33,9 +33,17 @@ class CloudProviderRegistry:
 
     def _get_connection(self) -> sqlite3.Connection:
         if self._conn is None:
-            self._conn = sqlite3.connect(self.db_path)
+            # check_same_thread=False + busy_timeout: the registry is built in
+            # the lifespan thread and read from request tasks, and a concurrent
+            # settings write must wait for the lock instead of raising
+            # "database is locked" (same choice as SettingsDatabase).
+            self._conn = sqlite3.connect(self.db_path, timeout=10.0, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA journal_mode=WAL")
+            # Same sovereign_settings.db as SettingsDatabase: keep the portable
+            # rollback-journal + FULL sync there (removable-drive safe), not WAL.
+            self._conn.execute("PRAGMA journal_mode=DELETE")
+            self._conn.execute("PRAGMA synchronous=FULL")
+            self._conn.execute("PRAGMA busy_timeout=10000")
         return self._conn
 
     def _init_db(self):

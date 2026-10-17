@@ -16,6 +16,10 @@ interface ChatWindowProps {
   modelName?: string;
   tokenSpeed?: number | null;
   showTokenSpeed?: boolean;
+  /** Selected agent identity, shown in the empty state so the persona is obvious. */
+  agentName?: string;
+  agentRole?: string;
+  agentWelcome?: string;
 }
 
 export function ChatWindow({
@@ -27,6 +31,9 @@ export function ChatWindow({
   modelName,
   tokenSpeed,
   showTokenSpeed,
+  agentName,
+  agentRole,
+  agentWelcome,
 }: ChatWindowProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -160,6 +167,9 @@ export function ChatWindow({
             modelName={modelName}
             tokenSpeed={tokenSpeed}
             showTokenSpeed={showTokenSpeed}
+            agentName={agentName}
+            agentRole={agentRole}
+            agentWelcome={agentWelcome}
           />
           {isLoading && (
             <div className="flex items-center gap-3 text-muted-foreground mt-3 mb-6">

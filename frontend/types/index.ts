@@ -145,8 +145,17 @@ export interface Agent {
   id: string;
   name: string;
   role: string;
+  /** Display job title, e.g. "Chief Executive Officer". Empty falls back to role. */
+  job_title: string;
   description: string;
   system_instruction: string;
+  /** Responsibilities and objectives, appended to the role prompt. */
+  responsibilities: string;
+  /** "" = use whatever model is loaded. "provider_id/model" for cloud models. */
+  preferred_model: string;
+  welcome_message: string;
+  /** Names from the backend tool allowlist; none execute yet. */
+  tool_permissions: string[];
   is_active: boolean;
   icon: string;
   temperature: number;

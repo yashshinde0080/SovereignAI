@@ -23,6 +23,9 @@ import { toast } from '@/components/ui/use-toast';
 import { Download, Trash2, FileText, X, Sparkles, Square, Cloud } from 'lucide-react';
 import { errMsg } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { AgentSelector } from '@/components/chat/AgentSelector';
+import { ConversationMenu } from '@/components/chat/ConversationMenu';
+import type { Agent } from '@/types';
 
 interface RAGDoc {
   id: string;
@@ -53,11 +56,20 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
     messages,
     isLoading,
     tokenSpeed,
+    conversations,
+    activeConversationId,
+    activeAgentId,
     sendMessage,
     editAndResend,
     regenerate,
     stop,
     clearMessages,
+    newConversation,
+    openConversation,
+    renameThread,
+    deleteThread,
+    selectAgent,
+    reconcileAgents,
     exportChat,
   } = useChat();
   const general = useSettingsStore((s) => s.settings?.general) as Record<string, unknown> | undefined;
@@ -67,16 +79,46 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [prefillText, setPrefillText] = useState<string | undefined>(undefined);
   const [providerName, setProviderName] = useState<string | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
+
+  // Agents drive the selector; a deleted agent must not stay bound to a
+  // restored conversation, so reconcile the saved threads against this list.
+  const refreshAgents = useCallback(async () => {
+    try {
+      const list = (await api.listAgents()) || [];
+      setAgents(list);
+      reconcileAgents(list);
+    } catch {
+      // backend unreachable — the selector simply stays empty, chat still works
+    }
+  }, [reconcileAgents]);
+
+  useEffect(() => {
+    refreshAgents();
+  }, [refreshAgents]);
+
+  // Agents are edited in Settings; refetch when that dialog closes.
+  const settingsOpen = useStore((s) => s.settingsOpen);
+  const settingsWasOpen = useRef(false);
+  useEffect(() => {
+    if (settingsWasOpen.current && !settingsOpen) refreshAgents();
+    settingsWasOpen.current = Boolean(settingsOpen);
+  }, [settingsOpen, refreshAgents]);
+
+  const activeAgent = agents.find((a) => a.id === activeAgentId) || null;
 
   // Listen for send events from empty-state suggestion cards (one-click send)
   useEffect(() => {
     const handler = (e: Event) => {
+      // Guarded: this path bypasses PromptInput's disabled state, so a
+      // suggestion click mid-generation must not queue a second request.
+      if (isLoading) return;
       const text = (e as CustomEvent<string>).detail;
       if (text) sendMessage(text);
     };
     window.addEventListener('chat:send', handler);
     return () => window.removeEventListener('chat:send', handler);
-  }, [sendMessage]);
+  }, [sendMessage, isLoading]);
 
   // The RAG index is global and chat queries it (use_rag: true), so the chips
   // mirror the full index. Load on mount, silently refresh after uploads.
@@ -163,6 +205,27 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
     setSuggestion(null);
   };
 
+  // An agent selected into a thread that already has messages starts a new
+  // conversation, so the two personas never share instructions or history.
+  const handleSelectAgent = (id: string | null) => {
+    const startedFresh = selectAgent(id);
+    setEditingIndex(null);
+    setSuggestion(null);
+    if (startedFresh) {
+      const agent = agents.find((a) => a.id === id);
+      toast({
+        title: `New conversation with ${agent?.name ?? 'the default assistant'}`,
+        description: 'Your previous messages stay in their own conversation.',
+      });
+    }
+  };
+
+  const handleNewConversation = () => {
+    newConversation(activeAgentId);
+    setEditingIndex(null);
+    setSuggestion(null);
+  };
+
   const handleEditMessage = useCallback((index: number) => {
     setEditingIndex(index);
   }, []);
@@ -185,10 +248,27 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
 
   return (
     <div className="flex flex-col h-full bg-background rounded-b-2xl">
-      {/* Chat action bar */}
-      {messages.length > 0 && (
-        <div className="flex items-center gap-1 px-4 py-2 border-b border-border/40">
-          <span className="text-[11px] text-muted-foreground mr-auto">{messages.length} message{messages.length !== 1 ? 's' : ''}</span>
+      {/* Identity + conversation bar: who answers, and which thread is open */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b border-border/40">
+        <AgentSelector
+          agents={agents}
+          agentId={activeAgentId}
+          onSelect={handleSelectAgent}
+          activeModel={model}
+          disabled={isLoading}
+        />
+        <ConversationMenu
+          conversations={conversations}
+          activeId={activeConversationId}
+          onNew={handleNewConversation}
+          onOpen={openConversation}
+          onRename={renameThread}
+          onDelete={deleteThread}
+          disabled={isLoading}
+        />
+        {messages.length > 0 && (
+          <div className="ml-auto flex items-center gap-1">
+          <span className="text-[11px] text-muted-foreground mr-1">{messages.length} message{messages.length !== 1 ? 's' : ''}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -232,8 +312,9 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         <ChatWindow
@@ -245,6 +326,9 @@ export function ChatModule({ model, initialAsk }: ChatModuleProps) {
           modelName={displayModel}
           tokenSpeed={tokenSpeed}
           showTokenSpeed={showTokenSpeed}
+          agentName={activeAgent?.name}
+          agentRole={activeAgent ? activeAgent.job_title || activeAgent.role.replace(/_/g, ' ') : undefined}
+          agentWelcome={activeAgent?.welcome_message || undefined}
         />
       </div>
 

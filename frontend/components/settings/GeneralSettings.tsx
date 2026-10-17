@@ -82,14 +82,14 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
     <div className="space-y-6">
       {/* Generation — saved defaults for every chat request (request overrides win) */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Generation
         </h3>
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Temperature</Label>
-            <p className="text-xs text-slate-500">{temperature.toFixed(1)} — lower is focused, higher is creative</p>
+            <Label className="text-sm text-foreground">Temperature</Label>
+            <p className="text-xs text-muted-foreground">{temperature.toFixed(1)} — lower is focused, higher is creative</p>
           </div>
           <Slider
             className="w-[160px]"
@@ -103,8 +103,8 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Top P</Label>
-            <p className="text-xs text-slate-500">{topP.toFixed(2)}</p>
+            <Label className="text-sm text-foreground">Top P</Label>
+            <p className="text-xs text-muted-foreground">{topP.toFixed(2)}</p>
           </div>
           <Slider
             className="w-[160px]"
@@ -118,12 +118,12 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Max Tokens</Label>
-            <p className="text-xs text-slate-500">Default reply length cap</p>
+            <Label className="text-sm text-foreground">Max Tokens</Label>
+            <p className="text-xs text-muted-foreground">Default reply length cap</p>
           </div>
           <Input
             type="number"
-            className="w-[160px] bg-slate-900 border-slate-700"
+            className="w-[160px] bg-card border-input"
             min={1}
             max={32768}
             value={maxTokens}
@@ -136,17 +136,17 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
       {/* Appearance */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Appearance
         </h3>
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">Theme</Label>
+          <Label className="text-sm text-foreground">Theme</Label>
           <Select value={form.theme} onValueChange={(v) => update("theme", v)}>
-            <SelectTrigger className="w-[160px] bg-slate-900 border-slate-700">
+            <SelectTrigger className="w-[160px] bg-card border-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectContent className="bg-card border-input">
               <SelectItem value="dark">Dark</SelectItem>
               <SelectItem value="light">Light</SelectItem>
               <SelectItem value="system">System</SelectItem>
@@ -155,15 +155,15 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
         </div>
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">Language</Label>
+          <Label className="text-sm text-foreground">Language</Label>
           <Select
             value={form.language}
             onValueChange={(v) => update("language", v)}
           >
-            <SelectTrigger className="w-[160px] bg-slate-900 border-slate-700">
+            <SelectTrigger className="w-[160px] bg-card border-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectContent className="bg-card border-input">
               <SelectItem value="en">English</SelectItem>
               <SelectItem value="es">Spanish</SelectItem>
               <SelectItem value="fr">French</SelectItem>
@@ -180,8 +180,8 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Font Size</Label>
-            <p className="text-xs text-slate-500">{form.font_size}px</p>
+            <Label className="text-sm text-foreground">Font Size</Label>
+            <p className="text-xs text-muted-foreground">{form.font_size}px</p>
           </div>
           <Slider
             className="w-[160px]"
@@ -196,20 +196,20 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
       {/* Runtime */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Runtime
         </h3>
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">Default Mode</Label>
+          <Label className="text-sm text-foreground">Default Mode</Label>
           <Select
             value={form.default_mode}
             onValueChange={(v) => update("default_mode", v)}
           >
-            <SelectTrigger className="w-[160px] bg-slate-900 border-slate-700">
+            <SelectTrigger className="w-[160px] bg-card border-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectContent className="bg-card border-input">
               <SelectItem value="auto">Auto</SelectItem>
               <SelectItem value="fullram">Full RAM</SelectItem>
               <SelectItem value="layerstream">Layer Stream (Experimental)</SelectItem>
@@ -220,14 +220,14 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Max Context Length</Label>
-            <p className="text-xs text-slate-500">
+            <Label className="text-sm text-foreground">Max Context Length</Label>
+            <p className="text-xs text-muted-foreground">
               {form.max_context_length.toLocaleString()} tokens
             </p>
           </div>
           <Input
             type="number"
-            className="w-[160px] bg-slate-900 border-slate-700"
+            className="w-[160px] bg-card border-input"
             min={512}
             max={131072}
             step={512}
@@ -239,9 +239,9 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
         </div>
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">Startup Model</Label>
+          <Label className="text-sm text-foreground">Startup Model</Label>
           <Input
-            className="w-[220px] bg-slate-900 border-slate-700"
+            className="w-[220px] bg-card border-input"
             placeholder="e.g. llama3:8b"
             value={form.startup_model || ""}
             onChange={(e) => update("startup_model", e.target.value)}
@@ -251,7 +251,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
       {/* Behavior */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Behavior
         </h3>
 
@@ -304,8 +304,8 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
         ].map(({ key, label, desc }) => (
           <div key={key} className="flex items-center justify-between">
             <div>
-              <Label className="text-sm text-slate-300">{label}</Label>
-              <p className="text-xs text-slate-500">{desc}</p>
+              <Label className="text-sm text-foreground">{label}</Label>
+              <p className="text-xs text-muted-foreground">{desc}</p>
             </div>
             <Switch
               checked={form[key as keyof typeof form] as boolean}
@@ -317,7 +317,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
 
       <Button
         onClick={() => onSave(form)}
-        className="w-full bg-blue-600 hover:bg-blue-700"
+        className="w-full bg-primary hover:bg-primary/90"
       >
         <Save className="h-4 w-4 mr-2" />
         Save General Settings

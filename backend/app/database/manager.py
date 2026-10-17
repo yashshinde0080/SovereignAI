@@ -39,8 +39,14 @@ class DatabaseManager:
         # (config/storage.toml was optional and never shipped; Settings defaults are authoritative)
         from app.config import settings
         self.db_path = str(settings.database_path)
-        journal_mode = "WAL"
-        busy_timeout = 5000
+        # ponytail: DELETE journal + synchronous FULL -- portable drives get
+        # yanked; a stale WAL on exFAT/FAT32 can corrupt. Costs throughput, not
+        # correctness. Upgrade path: revert to WAL for fixed-disk installs.
+        journal_mode = "DELETE"
+        # 10s: a stale backend the launcher has not adopted yet can still hold
+        # the write lock for a moment while it shuts down. 5s was not always
+        # enough and surfaced as "database is locked" during shutdown.
+        busy_timeout = 10000
         cache_size = -64000
 
         # Create connection pool
@@ -113,9 +119,10 @@ class DatabaseManager:
         logger.info("Database vacuumed")
 
     def checkpoint(self):
-        """Force WAL checkpoint."""
-        self._pool.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        self._pool.commit()
+        """Force WAL checkpoint (no-op when journal_mode is not WAL)."""
+        if self._pool.journal_mode.upper() == "WAL":
+            self._pool.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self._pool.commit()
 
     def backup(self, backup_path: str):
         """Create database backup."""

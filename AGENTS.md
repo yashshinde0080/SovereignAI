@@ -103,7 +103,7 @@ Client (React / Electron / CLI)
 | Dev server | `cd frontend && npm run dev` |
 | Build (static export → `frontend/out/`) | `cd frontend && npm run build` |
 | Lint | `cd frontend && npm run lint` |
-| Test | `cd frontend && node --test lib/maskedLm.test.ts` |
+| Test | `cd frontend && npm test` (→ `node --test "lib/*.test.ts"`, 3 files / 17 tests) |
 
 **Package manager:** npm (`package-lock.json` present).
 
@@ -176,11 +176,11 @@ Separate Next.js 14 app. Same npm scripts as frontend, different `package.json`.
 ## Runtime & Tooling Preferences
 
 - **Backend runtime:** Python 3.10+. No Bun/Node for backend.
-- **Frontend runtime:** Node 18+. npm only (no yarn/pnpm).
+- **Frontend runtime:** Node 20.9+ (Next.js 16 declares `node >=20.9.0`). Running the frontend unit tests needs Node 23+, since they execute `.ts` files via Node's built-in TypeScript support. npm only (no yarn/pnpm).
 - **Tailwind:** v4 via `@tailwindcss/postcss` (PostCSS plugin). `frontend/tailwind.config.js` is a **legacy v3 leftover** — `app/globals.css` `@theme inline` is the authoritative v4 path. Do not extend the v3 config for new work.
 - **Static export:** `next.config.ts` `output='export'`, `images.unoptimized`, `trailingSlash=true` — produces `frontend/out/` consumed by Electron.
 - **Electron:** loads `localhost:3000` in dev (`USE_DEV_SERVER=true`), else `app://` custom protocol serving `frontend/out`. Backend spawned as `uvicorn app.main:app` subprocess (non-blocking, boots after window).
-- **No Docker / no compose** — 100% local/offline. No `.env.example` (Settings reads `.env` if present, env prefix `SOVEREIGN_`).
+- **No Docker / no compose** — 100% local/offline. `.env` is git-ignored; a safe placeholder template lives at `backend/.env.example` (Settings reads `.env` from the backend working directory, env prefix `SOVEREIGN_`).
 - **`config/storage.toml`:** referenced by `app/main.py` + managers but **does NOT exist** — code falls back to `Settings` defaults. Optional.
 
 ## Non-Obvious Gotchas (Critical)
@@ -189,9 +189,9 @@ Separate Next.js 14 app. Same npm scripts as frontend, different `package.json`.
 
 `backend/app/engines/layerstream/` holds one `LayerStreamEngine` (`executor.py`). All legacy duplicates (`eviction.py`, `layer_by_layer_inference.py`, `ManualStreamEngine`) were deleted. The routed engine is `executor.py:LayerStreamEngine`.
 
-### 2. Test suite is real (17 files, ~134 tests)
+### 2. Test suite is real (26 files, 215 tests)
 
-`backend/tests/` has 17 files covering CLI, SSE, stream batching, think-strip, fuzzy model match, split-auto mode, layerstream loader, turboquant, OpenAI compat, plugin sandbox, cloud engine (`test_cloud.py` + `mock_cloud_server.py`), FullRAM executor (`test_fullram_executor.py`), and engine-factory/auth (`test_engine_factory_and_auth.py`). Fast loop: `python -m pytest -m "not slow"` (~30-60s). `@slow` tests (`test_layerstream_roundtrip.py`, `test_fullram_executor.py`) run real synthesized models offline. No `conftest.py` anywhere — all fixtures inline per-file.
+`backend/tests/` has 26 `test_*.py` files (215 tests; 5 marked `@slow`) covering CLI, SSE, stream batching, think-strip, fuzzy model match, split-auto mode, layerstream loader, turboquant, OpenAI compat, plugin sandbox, cloud engine (`test_cloud.py` + `mock_cloud_server.py`), FullRAM executor (`test_fullram_executor.py`), and engine-factory/auth (`test_engine_factory_and_auth.py`). Fast loop: `python -m pytest -m "not slow"` (~30-60s). `@slow` tests (`test_layerstream_roundtrip.py`, `test_fullram_executor.py`) run real synthesized models offline. No `conftest.py` anywhere — all fixtures inline per-file.
 
 ### 3. Engine selection is in `ModelManager`, not in engines
 

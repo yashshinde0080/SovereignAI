@@ -50,7 +50,7 @@ export function DataControlsSettings({
     <div className="space-y-6">
       {/* Storage */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Data Storage
         </h3>        {[
           {
@@ -76,8 +76,8 @@ export function DataControlsSettings({
         ].map(({ key, label, desc }) => (
           <div key={key} className="flex items-center justify-between">
             <div>
-              <Label className="text-sm text-slate-300">{label}</Label>
-              <p className="text-xs text-slate-500">{desc}</p>
+              <Label className="text-sm text-foreground">{label}</Label>
+              <p className="text-xs text-muted-foreground">{desc}</p>
             </div>
             <Switch
               checked={form[key as keyof typeof form] as boolean}
@@ -88,8 +88,8 @@ export function DataControlsSettings({
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Data Retention</Label>
-            <p className="text-xs text-slate-500">
+            <Label className="text-sm text-foreground">Data Retention</Label>
+            <p className="text-xs text-muted-foreground">
               How long to keep chat history
             </p>
           </div>
@@ -97,10 +97,10 @@ export function DataControlsSettings({
             value={form.data_retention}
             onValueChange={(v) => update("data_retention", v)}
           >
-            <SelectTrigger className="w-[160px] bg-slate-900 border-slate-700">
+            <SelectTrigger className="w-[160px] bg-card border-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectContent className="bg-card border-input">
               <SelectItem value="session_only">Session Only</SelectItem>
               <SelectItem value="1_day">1 Day</SelectItem>
               <SelectItem value="7_days">7 Days</SelectItem>
@@ -114,16 +114,16 @@ export function DataControlsSettings({
 
       {/* Privacy */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Privacy
         </h3>
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">
+            <Label className="text-sm text-foreground">
               Allow model training
             </Label>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Share data for model improvement (local only)
             </p>
           </div>
@@ -135,8 +135,8 @@ export function DataControlsSettings({
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Log API requests</Label>
-            <p className="text-xs text-slate-500">
+            <Label className="text-sm text-foreground">Log API requests</Label>
+            <p className="text-xs text-muted-foreground">
               Keep detailed request/response logs
             </p>
           </div>
@@ -149,20 +149,20 @@ export function DataControlsSettings({
 
       {/* Export */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Export
         </h3>
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">Export Format</Label>
+          <Label className="text-sm text-foreground">Export Format</Label>
           <Select
             value={form.export_format}
             onValueChange={(v) => update("export_format", v)}
           >
-            <SelectTrigger className="w-[160px] bg-slate-900 border-slate-700">
+            <SelectTrigger className="w-[160px] bg-card border-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectContent className="bg-card border-input">
               <SelectItem value="json">JSON</SelectItem>
               <SelectItem value="csv">CSV</SelectItem>
               <SelectItem value="markdown">Markdown</SelectItem>
@@ -183,7 +183,7 @@ export function DataControlsSettings({
 
       <Button
         onClick={() => onSave(form)}
-        className="w-full bg-blue-600 hover:bg-blue-700"
+        className="w-full bg-primary hover:bg-primary/90"
       >
         <Save className="h-4 w-4 mr-2" />
         Save Data Controls

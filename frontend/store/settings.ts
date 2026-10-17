@@ -2,8 +2,7 @@
 
 import { create } from 'zustand';
 import type { SettingsMap } from '@/types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+import { API_BASE } from '@/lib/apiBase';
 
 const DEBOUNCE_MS = 400;
 

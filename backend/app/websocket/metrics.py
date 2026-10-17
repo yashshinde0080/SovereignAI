@@ -2,7 +2,7 @@
 import asyncio
 import subprocess
 from fastapi import APIRouter, WebSocket
-from typing import Set, Dict
+from typing import Optional, Set, Dict
 import psutil
 
 router = APIRouter()
@@ -17,6 +17,7 @@ clients: Set[WebSocket] = set()
 _gpu_cache: Dict[str, float] = {"gpu_percent": 0, "gpu_vram_used": 0}
 _gpu_cache_lock = asyncio.Lock()
 _gpu_cache_started = False
+_gpu_cache_task: Optional[asyncio.Task] = None
 
 
 def _refresh_gpu_cache_sync() -> Dict[str, float]:
@@ -52,10 +53,27 @@ async def _gpu_cache_loop():
 
 async def _ensure_gpu_cache():
     """Start the background GPU poller once."""
-    global _gpu_cache_started
+    global _gpu_cache_started, _gpu_cache_task
     if not _gpu_cache_started:
         _gpu_cache_started = True
-        asyncio.ensure_future(_gpu_cache_loop())
+        _gpu_cache_task = asyncio.ensure_future(_gpu_cache_loop())
+
+
+async def stop_gpu_cache():
+    """Stop the shared GPU poller and wait for it (shutdown only).
+
+    Fire-and-forget left it running past loop close, where its next
+    ``asyncio.to_thread`` hop raised "Event loop is closed".
+    """
+    global _gpu_cache_started, _gpu_cache_task
+    task, _gpu_cache_task, _gpu_cache_started = _gpu_cache_task, None, False
+    if task is None or task.done():
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 async def _get_gpu_stats() -> Dict[str, float]:

@@ -1,26 +1,43 @@
-## [2026-10-03] feat+refactor | Settings overhaul: generation defaults, theme boot, send_on_enter, chat retention, sampling fallback, live reload
-- Backend settings: `_resolve_sampling()` — request params > saved general > schema defaults; `default_mode` validated as Literal[auto,fullram,layerstream,cloud]; corrupt JSON blobs degrade to defaults; settings router broadcasts changes via existing `/ws/metrics` (no new endpoint); `update_general` triggers model reload when startup_model/mode differ, blocked 409 if generation in flight
-- Backend settings: `SettingsService.get_section_safe()` + `_safe()` guard for corrupt DB; `SettingsDatabase.get_section()` catches ValueError/TypeError on bad JSON
-- Frontend settings: new `useSettingsStore` (Zustand) — optimistic updates, debounced saves (400ms), reset + flush pending; `GeneralSettings` gains temperature/top_p/max_tokens sliders, theme live-apply + persist, send_on_enter toggle
-- Chat: retention logic — `isHistoryEnabled`/`isSessionOnly`/`filterByRetention`; storage backend switches `localStorage`↔`sessionStorage` based on `clear_on_exit`; messages get `ts` epoch stamp for expiry; sampling defaults pulled from saved general settings (temperature 0.7, top_p 0.9, max_tokens 512)
-- Theme: `bootTheme` inline script in `layout.tsx` reads localStorage before first paint — no flash, no layout jump; backend reconcile on load
-- Tests: `test_settings_behavior.py` (235 lines) — sampling precedence, schema bounds, persistence across restart, corrupt JSON fallback, reload guard, broadcast safety
-- Files: 13 files changed, ~620 insertions(+), ~30 deletions(-) across backend chat.py, settings/, frontend store/settings.ts, hooks/useChat.ts, components/settings/, types, lib/themeBoot.ts
-- Commits: 44cf352, 9c14c95, 35263c8
+## [2026-10-16] feat+refactor+test+build | Agent chat/personas + conversations + backend single-instance lifecycle + Electron runtime
+- Backend lifecycle: new `backend/app/lib/server_lifecycle.py` - single-instance startup with port preflight + atomic `backend.json` state file (port scan, graceful shutdown request via `/v1/system/shutdown`); wired into `backend/main.py` + `backend_entry.py`; `/v1/system` endpoints
+- Backend chat/settings: new `backend/app/lib/retention.py`; new `backend/app/settings/defaults.py` (166); extended schemas/service/router; websocket metrics + connection pool tweaks; `model_manager` auto-hooks
+- Backend tests: new `backend/tests/test_agent_chat.py` (522) and `backend/tests/test_backend_lifecycle.py` (185)
+- Frontend agents: `AgentSelector`, `ConversationMenu`, reworked `AgentCard`/`AgentSettings`/`CharacteristicChip`, agent tools (`lib/agentTools.ts`), types; conversations persistence (`lib/conversations.ts` + test) and retention (`lib/chatRetention.ts` + test); `maskedLm.ts` + test; `settingsSearch.ts` + test; `themeBoot.ts`; large `useChat.ts` refactor
+- Electron: new `runtime.js` + `runtime.test.js`; `main.js`/`preload.js`/`menu.js`/`tray.js` boot refactor; `package.json` bump
+- Build: `build-release.ps1` tidy, `build_windows.ps1` patch, `.gitignore` + `skills-lock.json` update
+- Commits: 2e823e84, 384ad8f7, a03bfab5, 7505b95d, 45908180
 
-## [2026-10-04] feat+refactor+test | Security/Parental Controls + Settings UX overhaul + Concurrency + Lock screen + Electron boot flags
-- Backend security/middleware: `lan_auth_middleware` now does dual duty — (1) auth boundary (opt-in Bearer when `bind_localhost_only=false` + `api_token` set; localhost stays free), (2) request logging (`log_api_requests` in data_controls) emits one INFO line per request (method, path, status, ms) without bodies; CORS headers stripped when `enable_cors=false` (cheap switch honesty without re-registering middleware)
-- Backend chat.py: parental controls content gate — `restrict_topics` substring match + 4-word explicit blocklist (`porn|nsfw|xxx`), returns 403; activity log writes `chat_request` audit rows (counts only, never text); context cap `_trim_history()` keeps system messages whole, drops oldest turns past `max_context_length * 4` chars (~4 chars/token rough budget); per-request generation semaphore (`max_concurrent_requests` from security, default 4) gates engine call only (RAG/tokenizer un-gated)
-- Backend model_manager: `encrypt_models` (security) toggles `ModelEncryption` construction; parental `allowed_models` non-empty = allowlist for local model loads (normalized match); settings service `log_audit()` gated by `audit_logging` (updates always logged, other actions honor switch)
-- Backend settings: new `parental_controls` section (enabled, restrict_topics[], block_explicit_content, allowed_models[], disable_custom_instructions, max_session_duration_minutes, require_pin_for_settings); new `data_controls` additions (encrypt_local_data, auto_delete_sessions, export_format json|csv|markdown); `security` additions (disable_external_plugins, max_concurrent_requests, session_timeout_minutes, require_password, enable_cors)
-- Frontend useChat: async history load (decrypts if `encrypt_local_data` on), legacy migration, session expiration check (`max_session_duration_minutes`), token speed display (`show_token_speed`), non-streaming mode support (`stream_responses=false`), export format selector (json/csv/markdown), notification+sound on completion (when tab backgrounded), encryption downgrade on toggle-off (overwrites ciphertext with plaintext)
-- Frontend ClientLayout: full-app lock screen (`require_password`) verified against backend bcrypt hash, session timeout auto-lock (`session_timeout_minutes`), settings PIN prompt (`require_pin_for_settings`); all unlock state in sessionStorage (per-tab)
-- Frontend SettingsDialog: grouped nav (Application / AI & Models / Privacy & Data / Access & Safety) with descriptions, search box with jump-to-field highlighting, AlertDialog confirmation for "Reset All Defaults", Cloud API mode in default_mode select, section descriptions, scroll-to-top on section switch
-- Frontend components: `show_status_bar` toggle hides metrics strip (model row stays), `show_token_speed` toggle, `font_size`/`language` instant apply, LockScreen + PinPrompt components (verify via backend endpoints)
-- Electron main.js: reads `auto_start_backend` and `minimize_to_tray` from settings DB at startup (byte-scan sovereign_settings.db + -wal, zero-dep, no backend needed); skips backend spawn when `auto_start_backend=false`
-- Tests: `test_settings_behavior.py` expanded — context trimming, parental block (topics + explicit + None passthrough), retention map, audit gating, model_manager allowed_models + encrypt_models, middleware CORS strip/keep, log_api_requests
-- Files: ~25 files changed across backend api/chat, security, services/model_manager, settings/, frontend hooks/useChat, components/layout, components/settings, components/chat, components/task, lib/chatCrypto, lib/sounds, lib/settingsSearch, electron/main.js, tests
-- Commits: 21cd8cc, 4bc29af, 69d372a, 77d4b9d, 13d2dbc, 495bf96, 77e3c11, cbe080d, bd60bfb, c41f1b8
+## [2026-10-14] feat+test+build | RAG doctor CLI + RAG/system hardening + icons + portable bundle polish
+- Backend CLI: new `sovereign rag doctor` in-process diagnostic (storage, index-vs-metadata, chunking, embedding model/cache, dimension, retriever smoke, generation provider) in `backend/app/cli/main.py`
+- Backend hardening: `api/rag.py`, `api/system.py`, `core/hardware_detector.py`, `core/hardware_llmfit.py`, `engines/fullram/executor.py`, `security/middleware.py`, `main.py`; `services/vector_store.py` removed, logic folded into `vectorstore/manager.py`; `vectorstore` chunker/index_builder/retriever/store touched
+- Tests: new `test_rag_hardening.py` (551), `test_system_api.py` (125); `test_rag_chunker.py`, `test_settings_behavior.py`, `test_hardware_detector.py` updated
+- Icons: `electron/assets/make_icon.py` regenerated + rebuilt `icon.ico`/`icon.png`
+- Frontend: `app/system/page.tsx` polish
+- Build: `Script_portable.ps1`/`Script_zip.ps1` tweaks, `build_windows.ps1` NSIS fixes, `scripts/portable_lib.ps1` + `build-release.ps1`, added `sovereign.png`
+- Commits: 176459e1, 38e25be6, bf39cfbc, a85bb1be
+
+## [2026-10-13] feat+refactor+ci+docs | Portable release scripts + frontend CI + hardware detector fixes + security hardening
+- Portable release: new repo-root scripts `Script_portable.ps1` + `Script_zip.ps1` + shared library `scripts/portable_lib.ps1` — stage a self-contained Windows x64 bundle under `build_zip\portable\` (Electron 28 + frozen CPython backend + Next.js static export), verify bundle contract (required files/dirs, no shipped DB, no secrets, no repo paths), package into a versioned ZIP with SHA256SUMS.txt and build-report.txt; collision-safe naming (`-Force` to overwrite); Windows MAX_PATH budget reported
+- Portable docs: `Docs/PORTABLE_RELEASE.md` (318 lines, full authoring guide), `packaging/README_PORTABLE.txt` (end-user leaflet), `scripts/README_PORTABLE.txt` (build-script usage)
+- CI: added `.github/workflows/frontend.yml` — lint + unit tests + static export on push/PR touching `frontend/**` (previously no automated frontend checks); backend.yml unchanged
+- Backend security: `SettingsService.verify_password()` now fails closed (returns `False`) when `password_hash` is absent/None/malformed instead of raising `AttributeError` → HTTP 500; +4 regression tests (`test_settings_behavior.py`)
+- Hardware detector (Windows): AVX2/AVX-512 detection via numpy CPU feature table (was hard-coded unsupported); disk type via `Get-PhysicalDisk` PowerShell probe cached in `.hw_cache.json` (one probe per machine, then free); `ram_total_gb` now correct; +5 regression tests (`test_hardware_detector.py`)
+- Backend config: added `backend/.env.example` template (all optional vars documented)
+- Frontend deps: `next` 16.1.6 → 16.4.0 (clears critical Next.js advisory); `sharp` 0.34.5 → 0.35.5; lockfile regenerated, `npm ci` + `npm run build` clean; `npm audit --omit=dev`: 8 vulns (1 critical, 4 high) → 4 (0 critical, 1 high, build-time only)
+- Frontend tests: `npm test` now runs `node --test "lib/*.test.ts"` (3 files, 17 tests) instead of single `lib/maskedLm.test.ts` (6/17); package name fixed: "frotend" → "sovereign-ai-frontend"
+- AGENTS.md: corrected test command, Node prerequisite (20.9+ to build, 23+ for `.ts` tests), backend test count (26 files, 215 tests)
+- CHANGES.md: created with release-readiness audit summary
+- README: added Configuration section with `.env.example` pointer and Node.js version note
+- `.gitignore`: added `build_zip/`, `build_exe/`, `.qoder/`
+- Commits: 99bc9c91, d1282d06, 1d0e659b, 56436bab
+
+## [2026-10-12] chore+build | Portable release tooling + backend deps
+- Release/CI: added `.github/workflows/release.yml` — multi-OS native builds (Windows/macOS/Linux x64/arm64), manual dispatch + tag-gated GitHub Release (build never auto-publishes); CPU torch to keep bundles small
+- Scripts: added `scripts/build-release.ps1`, `scripts/build-release.sh`, `scripts/release_lib.py`, `scripts/check_portable.sh` (portable smoke: `/health` responds, DB under redirected data root, no host home/appdata leaks), `scripts/README_PORTABLE.txt`
+- Version/config: updated `VERSION`; `.gitignore` adjusted
+- Backend: `backend/pyproject.toml` adds `ipykernel`; `backend/uv.lock` refreshed (dependency lock update)
+- Core/infra: updates across `backend/app/database/connection.py`, `backend/app/database/manager.py`, `backend/app/engines/cloud/registry.py`, `backend/app/settings/database.py`, `backend/app/vectorstore/store.py`; `electron/main.js` portable boot adjustments
+- Commits: 9dcc9c64, 178bf908, 83fed9a8, 026a30b4
 
 ## [2026-10-10] feat+refactor | Windows installer overhaul: real install test, exe stamping, GPU opt-in, frozen backend entry
 - Build script: `build_windows.ps1` rewritten — creates unpacked app first, stamps exe icon/version via `rcedit` (from electron-builder cache), then packs NSIS installer; adds `-TestInstall` flag for real silent install → launch → restart → uninstall cycle with shortcut verification; `-DebugPort` for Chromium renderer check; PowerShell 5.1 module path pin; `Stop-AppProcesses` cleanup; proper NSIS size ceiling test (<2 GB); reports + SHA256 checksums
@@ -60,6 +77,30 @@
 - Files: frontend/components/settings/SettingsDialog.tsx, GeneralSettings.tsx, SecuritySettings.tsx
 - Commits: 0735261, 07976a9
 
+## [2026-10-04] feat+refactor+test | Security/Parental Controls + Settings UX overhaul + Concurrency + Lock screen + Electron boot flags
+- Backend security/middleware: `lan_auth_middleware` now does dual duty — (1) auth boundary (opt-in Bearer when `bind_localhost_only=false` + `api_token` set; localhost stays free), (2) request logging (`log_api_requests` in data_controls) emits one INFO line per request (method, path, status, ms) without bodies; CORS headers stripped when `enable_cors=false` (cheap switch honesty without re-registering middleware)
+- Backend chat.py: parental controls content gate — `restrict_topics` substring match + 4-word explicit blocklist (`porn|nsfw|xxx`), returns 403; activity log writes `chat_request` audit rows (counts only, never text); context cap `_trim_history()` keeps system messages whole, drops oldest turns past `max_context_length * 4` chars (~4 chars/token rough budget); per-request generation semaphore (`max_concurrent_requests` from security, default 4) gates engine call only (RAG/tokenizer un-gated)
+- Backend model_manager: `encrypt_models` (security) toggles `ModelEncryption` construction; parental `allowed_models` non-empty = allowlist for local model loads (normalized match); settings service `log_audit()` gated by `audit_logging` (updates always logged, other actions honor switch)
+- Backend settings: new `parental_controls` section (enabled, restrict_topics[], block_explicit_content, allowed_models[], disable_custom_instructions, max_session_duration_minutes, require_pin_for_settings); new `data_controls` additions (encrypt_local_data, auto_delete_sessions, export_format json|csv|markdown); `security` additions (disable_external_plugins, max_concurrent_requests, session_timeout_minutes, require_password, enable_cors)
+- Frontend useChat: async history load (decrypts if `encrypt_local_data` on), legacy migration, session expiration check (`max_session_duration_minutes`), token speed display (`show_token_speed`), non-streaming mode support (`stream_responses=false`), export format selector (json/csv/markdown), notification+sound on completion (when tab backgrounded), encryption downgrade on toggle-off (overwrites ciphertext with plaintext)
+- Frontend ClientLayout: full-app lock screen (`require_password`) verified against backend bcrypt hash, session timeout auto-lock (`session_timeout_minutes`), settings PIN prompt (`require_pin_for_settings`); all unlock state in sessionStorage (per-tab)
+- Frontend SettingsDialog: grouped nav (Application / AI & Models / Privacy & Data / Access & Safety) with descriptions, search box with jump-to-field highlighting, AlertDialog confirmation for "Reset All Defaults", Cloud API mode in default_mode select, section descriptions, scroll-to-top on section switch
+- Frontend components: `show_status_bar` toggle hides metrics strip (model row stays), `show_token_speed` toggle, `font_size`/`language` instant apply, LockScreen + PinPrompt components (verify via backend endpoints)
+- Electron main.js: reads `auto_start_backend` and `minimize_to_tray` from settings DB at startup (byte-scan sovereign_settings.db + -wal, zero-dep, no backend needed); skips backend spawn when `auto_start_backend=false`
+- Tests: `test_settings_behavior.py` expanded — context trimming, parental block (topics + explicit + None passthrough), retention map, audit gating, model_manager allowed_models + encrypt_models, middleware CORS strip/keep, log_api_requests
+- Files: ~25 files changed across backend api/chat, security, services/model_manager, settings/, frontend hooks/useChat, components/layout, components/settings, components/chat, components/task, lib/chatCrypto, lib/sounds, lib/settingsSearch, electron/main.js, tests
+- Commits: 21cd8cc, 4bc29af, 69d372a, 77d4b9d, 13d2dbc, 495bf96, 77e3c11, cbe080d, bd60bfb, c41f1b8
+
+## [2026-10-03] feat+refactor | Settings overhaul: generation defaults, theme boot, send_on_enter, chat retention, sampling fallback, live reload
+- Backend settings: `_resolve_sampling()` — request params > saved general > schema defaults; `default_mode` validated as Literal[auto,fullram,layerstream,cloud]; corrupt JSON blobs degrade to defaults; settings router broadcasts changes via existing `/ws/metrics` (no new endpoint); `update_general` triggers model reload when startup_model/mode differ, blocked 409 if generation in flight
+- Backend settings: `SettingsService.get_section_safe()` + `_safe()` guard for corrupt DB; `SettingsDatabase.get_section()` catches ValueError/TypeError on bad JSON
+- Frontend settings: new `useSettingsStore` (Zustand) — optimistic updates, debounced saves (400ms), reset + flush pending; `GeneralSettings` gains temperature/top_p/max_tokens sliders, theme live-apply + persist, send_on_enter toggle
+- Chat: retention logic — `isHistoryEnabled`/`isSessionOnly`/`filterByRetention`; storage backend switches `localStorage`↔`sessionStorage` based on `clear_on_exit`; messages get `ts` epoch stamp for expiry; sampling defaults pulled from saved general settings (temperature 0.7, top_p 0.9, max_tokens 512)
+- Theme: `bootTheme` inline script in `layout.tsx` reads localStorage before first paint — no flash, no layout jump; backend reconcile on load
+- Tests: `test_settings_behavior.py` (235 lines) — sampling precedence, schema bounds, persistence across restart, corrupt JSON fallback, reload guard, broadcast safety
+- Files: 13 files changed, ~620 insertions(+), ~30 deletions(-) across backend chat.py, settings/, frontend store/settings.ts, hooks/useChat.ts, components/settings/, types, lib/themeBoot.ts
+- Commits: 44cf352, 9c14c95, 35263c8
+
 ## [2026-10-02] fix+refactor | RAG patch: 503 on missing vectorstore, single embed+search pass, 404/500 distinction, .md/.docx upload
 - Backend rag.py: added `_ensure_vector_store()` helper returning 503 when store not initialized (was AttributeError crash); `/query` now uses `build_context()` once (was: `search()` + `build_context()` — two embed+FAISS passes); `/rebuild` runs in worker thread via `asyncio.to_thread` (was inline blocking); `/documents/{doc_id}` DELETE now returns 404 for unknown doc, 500 for rebuild failure (was all 404)
 - Backend vectorstore/store.py: `delete_document_data()` raises `ValueError` if document doesn't exist (rowcount check) — callers distinguish 404 from real failure
@@ -70,7 +111,7 @@
 ## [2026-10-01] fix+test | RAG audit fixes: grounding, offline embedder, dedup, async, docx/md
 - RAG correctness: sentence splitter handles abbreviations/decimals/initials, paragraph + code-fence structure preserved, hyphenated PDF breaks joined, token-based overlap, len/3 token estimate; content-hash chunk dedup with renumbering
 - Offline/privacy: embedder loads CPU-only with local_files_only and HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE forced; unloaded after indexing so it never competes with the LLM for RAM
-- Quality: min-score floor (0.15), MMR rerank over top_k*3 candidates, [Source: file#chunk] labels, /v1/rag/query prompt now grounds instead of inviting parametric answers
+- Quality: min-score floor (0.15), MMR rerank over top_k*3 candidates, [Source: file#chunk] labels, `/v1/rag/query` prompt now grounds instead of inviting parametric answers
 - Perf: sqlite connection shared across threads (check_same_thread=False + writer lock); ingest/search/delete/rebuild off the event loop via asyncio.to_thread; Flat index default (exact, no training edge cases)
 - Plumbing: .md/.docx ingestion (docx via stdlib zipfile+xml), encoding detection ladder (utf-8/utf-8-sig/cp1252/latin-1)
 - Tests: 23 unit tests (chunker edges, dedup, retrieval) + tests/rag_eval.py (20 QA pairs: recall@1 75%, recall@5 95%, grounding 95% with cached all-MiniLM-L6-v2, offline)
@@ -104,7 +145,7 @@
 
 ## [2026-09-20] fix+test | Cloud API key stability + graceful decryption + test regressions
 - Cloud encryption: replaced machine-derived key (hostname + MAC) with persisted random key in workspace/database/.secret_key — prevents InvalidToken 500 storm when active NIC changes; key now travels with USB workspace
-- Registry: `_decrypt()` catches InvalidToken, logs warning, returns empty string (caller masks as ****) — no 500 on /v1/cloud/* endpoints; user re-saves key to fix
+- Registry: `_decrypt()` catches InvalidToken, logs warning, returns empty string (caller masks as ****) — no 500 on `/v1/cloud/*` endpoints; user re-saves key to fix
 - Registry: `update_provider()` now returns masked shape (api_key_masked) matching CloudProviderOut serialization — avoids "Field required" 500 on provider edit
 - Requirements: pinned httpx<0.28 (0.28 removed `app` kwarg used by starlette TestClient)
 - Tests: added test_undecryptable_key_degrades_gracefully (regression for old key orphaning); test_persisted_key_is_stable_across_instances (verifies shared secret); test for masked return shape on update_provider
@@ -142,6 +183,7 @@
 - Info_docs/working/10-rag-vector-store.md: path updated
 
 ## [2026-09-13] fix+perf | Hybrid LayerStream crash fix + CPU device cache + repo hygiene
+
 ## [2026-09-13] fix | RAG FAISS/metadata desync self-heal + frontend lint/escaping cleanup
 - Backend RAG fix: `delete_document()` now rebuilds the index instead of only logging a warning — stale FAISS vectors used to collide with fresh ingests (every search returned zero sources, "can't access sources"). `rebuild_index()` assigns `vector_index` cumulatively (was `len(all_embeddings)` which produced off-by-N duplicates). `ingest_text()` skips duplicate re-uploads (deterministic ID + INSERT OR REPLACE previously kept metadata flat while FAISS appended). Startup self-heals an existing desync (metadata is source of truth; rebuild or reset).
 - Backend RAG: new `/v1/rag/stats` health endpoint (FAISS vs metadata counts, `in_sync` flag); upload now distinguishes 503 (PDF plugin/vector store unavailable) from 400 (unhandled type); `query_documents` uses `input_data` kwarg + `output`/`text` fallback for the engine call. Deleted dead `fullram/kv_cache.py`.

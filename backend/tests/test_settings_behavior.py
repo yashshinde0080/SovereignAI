@@ -311,6 +311,37 @@ def test_log_audit_gated_by_audit_logging(tmp_path):
     assert len(svc.get_audit_log()) == 3
 
 
+# ── password verification robustness ──
+
+def test_verify_password_false_when_no_hash_configured(tmp_path):
+    """require_password with no stored hash must reject, not raise (was HTTP 500).
+
+    Regression: SecuritySettings.password_hash defaults to None, so
+    ``security.get("password_hash", "").encode()`` blew up with AttributeError.
+    """
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_security(SecuritySettings(require_password=True))  # password_hash=None
+    assert svc.verify_password("anything") is False
+
+
+def test_verify_password_true_when_disabled(tmp_path):
+    svc = SettingsService(str(tmp_path / "s.db"))
+    assert svc.verify_password("anything") is True
+
+
+def test_verify_password_malformed_hash_rejects(tmp_path):
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.update_security(SecuritySettings(require_password=True, password_hash="not-a-bcrypt-hash"))
+    assert svc.verify_password("anything") is False
+
+
+def test_verify_password_roundtrip(tmp_path):
+    svc = SettingsService(str(tmp_path / "s.db"))
+    svc.set_password("hunter2!")
+    assert svc.verify_password("hunter2!") is True
+    assert svc.verify_password("wrong") is False
+
+
 # ── model manager: allowed_models + encrypt_models wiring ──
 
 async def test_model_manager_allowed_models_block(tmp_path):
@@ -335,61 +366,58 @@ async def test_encrypt_models_flag_off_disables_helper(tmp_path):
     assert mm._encrypt_models_enabled() is False
 
 
-# ── middleware: log_api_requests + enable_cors strip ──
+# ── middleware: log_api_requests + enable_cors narrowing ──
 
-async def test_middleware_cors_strip(tmp_path):
+async def _cors_response(origin, enable_cors, tmp_path):
+    """Run lan_auth_middleware over a response carrying CORS headers, as
+    CORSMiddleware emits after its allow-list matches."""
     from app.security.middleware import lan_auth_middleware
     from starlette.responses import JSONResponse
 
     svc = SettingsService(str(tmp_path / "s.db"))
-    svc.update_security(SecuritySettings(enable_cors=False))
+    svc.update_security(SecuritySettings(enable_cors=enable_cors))
 
     async def call_next(request):
         resp = JSONResponse({"ok": True})
-        resp.headers["access-control-allow-origin"] = "*"
+        resp.headers["access-control-allow-origin"] = (origin or "*").lower()
         resp.headers["access-control-allow-methods"] = "GET, POST"
         return resp
 
+    headers = [(b"origin", origin.encode())] if origin else []
     scope = {
         "type": "http",
         "method": "GET",
         "path": "/v1/system/status",
-        "headers": [],
+        "headers": headers,
         "query_string": b"",
         "server": ("t", 80),
         "client": ("127.0.0.1", 1),
         "scheme": "http",
         "app": type("App", (), {"state": type("S", (), {"settings_service": svc})()})(),
     }
-    req = Request(scope, lambda: None)
-    resp = await lan_auth_middleware(req, call_next)
+    return await lan_auth_middleware(Request(scope, lambda: None), call_next)
+
+
+async def test_middleware_cors_strips_unlisted_origin_when_disabled(tmp_path):
+    resp = await _cors_response("https://evil.example", False, tmp_path)
     assert "access-control-allow-origin" not in resp.headers
     assert "access-control-allow-methods" not in resp.headers
 
 
-async def test_middleware_cors_kept_when_enabled(tmp_path):
-    from app.security.middleware import lan_auth_middleware
-    from starlette.responses import JSONResponse
+async def test_middleware_cors_keeps_the_packaged_app_origin(tmp_path):
+    """Regression: the Electron renderer fetches from app://-. Stripping its
+    CORS headers made every request fail with "Failed to fetch", so the System
+    page showed Unknown / 0 GB / None for hardware the backend does detect."""
+    resp = await _cors_response("app://-", False, tmp_path)
+    assert resp.headers["access-control-allow-origin"] == "app://-"
 
-    svc = SettingsService(str(tmp_path / "s.db"))
-    svc.update_security(SecuritySettings(enable_cors=True))
 
-    async def call_next(request):
-        resp = JSONResponse({"ok": True})
-        resp.headers["access-control-allow-origin"] = "*"
-        return resp
-
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/v1/system/status",
-        "headers": [],
-        "query_string": b"",
-        "server": ("t", 80),
-        "client": ("127.0.0.1", 1),
-        "scheme": "http",
-        "app": type("App", (), {"state": type("S", (), {"settings_service": svc})()})(),
-    }
-    req = Request(scope, lambda: None)
-    resp = await lan_auth_middleware(req, call_next)
+async def test_middleware_cors_keeps_same_origin_requests_alone(tmp_path):
+    # No Origin header => not a CORS response; nothing to strip.
+    resp = await _cors_response(None, False, tmp_path)
     assert resp.headers["access-control-allow-origin"] == "*"
+
+
+async def test_middleware_cors_kept_when_enabled(tmp_path):
+    resp = await _cors_response("https://evil.example", True, tmp_path)
+    assert resp.headers["access-control-allow-origin"] == "https://evil.example"

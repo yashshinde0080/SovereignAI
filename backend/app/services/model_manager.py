@@ -137,6 +137,23 @@ class ModelManager:
         # still loads correctly after the scan finishes.
         self._scan_task: Optional[asyncio.Task] = None
         self._scan_task = asyncio.ensure_future(self.scan_installed())
+
+    async def shutdown(self):
+        """Stop the background scan and close the registry connection.
+
+        aiosqlite runs every statement on its own thread. Left open, that thread
+        wakes up after the loop is gone and raises "RuntimeError: Event loop is
+        closed" during interpreter teardown (and the scan task itself is
+        reported as "Task was destroyed but it is pending").
+        """
+        task = getattr(self, "_scan_task", None)
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        await self.registry.close()
     
     async def scan_installed(self):
         """Scan models directory for installed models and sync with registry"""

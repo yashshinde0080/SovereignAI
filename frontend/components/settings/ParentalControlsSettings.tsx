@@ -112,14 +112,14 @@ export function ParentalControlsSettings({
     <div className="space-y-6">
       {/* Master Toggle */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 rounded-lg bg-slate-900 border border-slate-800">
+        <div className="flex items-center justify-between p-4 rounded-lg bg-card border border-border">
           <div className="flex items-center gap-3">
             <ShieldAlert className="h-5 w-5 text-amber-500" />
             <div>
-              <Label className="text-sm text-slate-300 font-semibold">
+              <Label className="text-sm text-foreground font-semibold">
                 Enable Parental Controls
               </Label>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Restrict content and features for safety
               </p>
             </div>
@@ -135,16 +135,16 @@ export function ParentalControlsSettings({
         <>
           {/* PIN Protection */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
               PIN Protection
             </h3>
 
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm text-slate-300">
+                <Label className="text-sm text-foreground">
                   Require PIN for settings
                 </Label>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   Prevent changes without PIN
                 </p>
               </div>
@@ -157,7 +157,7 @@ export function ParentalControlsSettings({
             <div className="flex gap-2">
               <Input
                 type="password"
-                className="bg-slate-900 border-slate-700 flex-1"
+                className="bg-card border-input flex-1"
                 placeholder="Set PIN (min 4 digits)"
                 value={newPin}
                 onChange={(e) => setNewPin(e.target.value)}
@@ -166,7 +166,7 @@ export function ParentalControlsSettings({
               <Button
                 variant="secondary"
                 size="sm"
-                className="bg-slate-800"
+                className="bg-muted"
                 onClick={handleSetPin}
               >
                 <Lock className="h-4 w-4 mr-1" />
@@ -177,22 +177,22 @@ export function ParentalControlsSettings({
 
           {/* Content Filtering */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
               Content Filtering
             </h3>
 
             <div className="flex items-center justify-between">
-              <Label className="text-sm text-slate-300">
+              <Label className="text-sm text-foreground">
                 Content filter level
               </Label>
               <Select
                 value={form.content_filter_level}
                 onValueChange={(v) => update("content_filter_level", v)}
               >
-                <SelectTrigger className="w-[160px] bg-slate-900 border-slate-700">
+                <SelectTrigger className="w-[160px] bg-card border-input">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-slate-700">
+                <SelectContent className="bg-card border-input">
                   <SelectItem value="off">Off</SelectItem>
                   <SelectItem value="low">Low</SelectItem>
                   <SelectItem value="medium">Medium</SelectItem>
@@ -204,10 +204,10 @@ export function ParentalControlsSettings({
 
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm text-slate-300">
+                <Label className="text-sm text-foreground">
                   Block explicit content
                 </Label>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   Filter out adult or violent content
                 </p>
               </div>
@@ -219,10 +219,10 @@ export function ParentalControlsSettings({
 
             {/* Restricted Topics */}
             <div className="space-y-2">
-              <Label className="text-sm text-slate-300">Restricted Topics</Label>
+              <Label className="text-sm text-foreground">Restricted Topics</Label>
               <div className="flex gap-2">
                 <Input
-                  className="bg-slate-900 border-slate-700 flex-1"
+                  className="bg-card border-input flex-1"
                   placeholder="Add topic to restrict"
                   value={topicInput}
                   onChange={(e) => setTopicInput(e.target.value)}
@@ -231,7 +231,7 @@ export function ParentalControlsSettings({
                 <Button
                   variant="secondary"
                   size="sm"
-                  className="bg-slate-800"
+                  className="bg-muted"
                   onClick={addTopic}
                 >
                   Add
@@ -241,7 +241,7 @@ export function ParentalControlsSettings({
                 {form.restrict_topics.map((topic: string) => (
                   <span
                     key={topic}
-                    className="px-3 py-1 rounded-full bg-red-950/30 text-red-400 text-xs cursor-pointer hover:bg-red-900/40 transition-colors border border-red-500/20"
+                    className="px-3 py-1 rounded-full bg-destructive/10 text-destructive text-xs cursor-pointer hover:bg-destructive/15 transition-colors border border-destructive/20"
                     onClick={() => removeTopic(topic)}
                   >
                     {topic} ×
@@ -253,16 +253,16 @@ export function ParentalControlsSettings({
 
           {/* Restrictions */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+            <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
               Restrictions
             </h3>
 
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm text-slate-300">
+                <Label className="text-sm text-foreground">
                   Max session duration
                 </Label>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   {form.max_session_duration_minutes === 0
                     ? "No limit"
                     : `${form.max_session_duration_minutes} minutes`}
@@ -282,10 +282,10 @@ export function ParentalControlsSettings({
 
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm text-slate-300">
+                <Label className="text-sm text-foreground">
                   Disable custom instructions
                 </Label>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-muted-foreground">
                   Prevent modifying system prompts
                 </p>
               </div>
@@ -300,8 +300,8 @@ export function ParentalControlsSettings({
             {/* The following div is replaced as per user instruction */}
             <div key="activity_log" className="flex items-center justify-between">
               <div>
-                <Label className="text-sm text-slate-300">Activity log</Label>
-                <p className="text-xs text-slate-500">Log all conversations for review</p>
+                <Label className="text-sm text-foreground">Activity log</Label>
+                <p className="text-xs text-muted-foreground">Log all conversations for review</p>
               </div>
               <Switch
                 checked={form.activity_log}
@@ -311,12 +311,12 @@ export function ParentalControlsSettings({
 
             {/* Allowed Models */}
             <div className="space-y-2">
-              <Label className="text-sm text-slate-300">
+              <Label className="text-sm text-foreground">
                 Allowed Models (empty = all)
               </Label>
               <div className="flex gap-2">
                 <Input
-                  className="bg-slate-900 border-slate-700 flex-1"
+                  className="bg-card border-input flex-1"
                   placeholder="e.g. llama3:8b"
                   value={modelInput}
                   onChange={(e) => setModelInput(e.target.value)}
@@ -325,7 +325,7 @@ export function ParentalControlsSettings({
                 <Button
                   variant="secondary"
                   size="sm"
-                  className="bg-slate-800"
+                  className="bg-muted"
                   onClick={addModel}
                 >
                   Add
@@ -335,7 +335,7 @@ export function ParentalControlsSettings({
                 {form.allowed_models.map((model: string) => (
                   <span
                     key={model}
-                    className="px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs cursor-pointer hover:bg-red-900/30 hover:text-red-400 transition-colors"
+                    className="px-3 py-1 rounded-full bg-muted text-foreground text-xs cursor-pointer hover:bg-destructive/15 hover:text-destructive transition-colors"
                     onClick={() => removeModel(model)}
                   >
                     {model} ×
@@ -349,7 +349,7 @@ export function ParentalControlsSettings({
 
       <Button
         onClick={() => onSave(form)}
-        className="w-full bg-blue-600 hover:bg-blue-700"
+        className="w-full bg-primary hover:bg-primary/90"
       >
         <Save className="h-4 w-4 mr-2" />
         Save Parental Controls

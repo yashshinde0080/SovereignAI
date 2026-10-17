@@ -42,6 +42,7 @@ dependencies = [
     "gguf>=0.10.0",
     "llama-cpp-python>=0.3.34",
     "ik-llama-cpp-python>=0.1.0",
+    "ipykernel",
 ]
 
 [dependency-groups]

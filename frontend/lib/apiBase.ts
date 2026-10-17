@@ -8,8 +8,8 @@
 type SovereignRuntime = { apiBase?: string; wsUrl?: string };
 
 const runtime = (globalThis as { sovereignRuntime?: SovereignRuntime }).sovereignRuntime;
-
+// Prefer the runtime-injected address, then env var for dev, then default.
 export const API_BASE =
   runtime?.apiBase || process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-
-export const WS_URL = runtime?.wsUrl || `${API_BASE.replace(/^http/, 'ws')}/ws/metrics`;
+// Derive WS_URL from the final API_BASE so it always matches the active port.
+export const WS_URL = `$${API_BASE.replace(/^http/, 'ws')}/ws/metrics`;

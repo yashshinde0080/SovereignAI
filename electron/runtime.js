@@ -104,6 +104,7 @@ function resolveRoots({ isPackaged, exePath, env = {}, appDataDir, devRoot = nul
   };
 }
 
+
 const stateFilePath = (dataRoot) => path.join(dataRoot, 'workspace', STATE_FILENAME);
 
 /** Last backend this install started, or null. Stale entries are harmless:

@@ -1,3 +1,16 @@
+## [2026-10-18] docs | Capabilities & status reports
+- Docs: new `CAPABILITIES_REPORT.md` (124 lines) — what the project can do: 3 engines (FullRAM / LayerStream / CloudAPI), 3 UIs, REST API surface, model management, settings, security, RAG, plugins, CLI, tests (289 fast + 5 slow = 294 passing), benchmarks, Electron, landing page; plus limitations section (TurboQuant default-OFF, RAG/chat-e2e/plugin-sandbox coverage gaps)
+- Docs: new `REPORT_SUMMARY.md` (88 lines) — test suite status, project overview, architecture diagram, key directories, dev commands, dependencies, gotchas, test gaps
+- Commits: e62adfc9
+
+## [2026-10-17] feat+refactor+style | Landing cinematic scroll rework + legal/SEO pages + frontend theme retoken
+- Landing: `ScrollSequence.tsx` rewritten (+228/-482) — six content sections mapped to frame bands over one 1200vh scroll container; staged frame loading (24 critical frames gate first paint, rest warm in background); rAF-throttled scroll read + persistent lerp loop; `prefers-reduced-motion` support; loading screen with SVG progress ring; per-section anchor spans so nav links land on the right scroll band; scroll progress rail + scroll hint
+- Landing: `Navbar.tsx` reworked — nav items now label+href (Overview/Engines/Architecture/Security/Deploy), brand links to #overview, CTA now "View on GitHub" → repo URL, `aria-label`; new `Footer.tsx` (©, Privacy, Terms, GitHub); `layout.tsx` metadataBase/OG/Twitter metadata, Inter font, skip-link
+- Landing: new `privacy/` + `terms/` + `not-found.tsx` pages; `robots.ts` + `sitemap.ts`; `lib/site.ts` SITE_URL (env `NEXT_PUBLIC_SITE_URL`); `icon.svg` replaces deleted `favicon.ico`; deleted one-off `api/rename-frames` dev route; dropped deprecated `@studio-freight/lenis` from lockfile
+- Landing: `globals.css` (+376) — seq-panel/seq-btn/doc/skip-link/footer/nav-links classes, smooth scroll + reduced-motion guard, `:focus-visible` outlines, mobile breakpoints
+- Frontend: `globals.css` theme retoken — removed `tw-animate-css` + `@tailwindcss/typography` imports, neutral scale + red primary (oklch), flat shadows (opacity 0), radius 0, explicit `--brand #3C3489` / `--brand-accent #1D9E75`; `lib/apiBase.ts` WS_URL now derived from the final API_BASE; `electron/runtime.js` whitespace-only
+- Commits: f4438103, db3305b2
+
 ## [2026-10-16] feat+refactor+test+build | Agent chat/personas + conversations + backend single-instance lifecycle + Electron runtime
 - Backend lifecycle: new `backend/app/lib/server_lifecycle.py` - single-instance startup with port preflight + atomic `backend.json` state file (port scan, graceful shutdown request via `/v1/system/shutdown`); wired into `backend/main.py` + `backend_entry.py`; `/v1/system` endpoints
 - Backend chat/settings: new `backend/app/lib/retention.py`; new `backend/app/settings/defaults.py` (166); extended schemas/service/router; websocket metrics + connection pool tweaks; `model_manager` auto-hooks

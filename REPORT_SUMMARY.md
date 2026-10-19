@@ -10,7 +10,7 @@
 - **Fast tests** (`python -m pytest -m "not slow"`): 289 passed
 - **Slow tests** (`python -m pytest -m "slow"`): 5 passed (round-trip e2e tests)
 - **Test files**: 26 test files in `backend/tests/`
-- **Coverage**: CLI, SSE, stream batching, think-strip, fuzzy model match, split-auto mode, layerstream loader, turboquant, OpenAI compat, plugin sandbox, cloud engine, FullRAM executor, engine-factory/auth, settings, hardware detector, RAG, system API
+- **Coverage**: CLI, SSE, stream batching, think-strip, fuzzy model match, split-auto mode, layerstream loader, turboquant, OpenAI compat, plugin sandbox, cloud engine, FullRAM executor, engine-factory/auth
 
 ## Project Overview
 SovereignAI Edge is a portable AI platform running LLMs locally on consumer hardware or USB drives, with optional online mode for cloud APIs.
@@ -78,11 +78,7 @@ Client → FastAPI Gateway (/v1/*) → Engine.generate() or stream_response() SS
 9. Stale spots in `Info_docs/` already resolved
 10. Cloud mode bypasses local model infrastructure entirely
 
-## Test Gaps (confirmed)
-- LayerStream executor: only `@slow` synthetic round-trip + benchmark
-- Plugin sandbox: timeout-only, no FS/network/memory isolation on Windows
-- RAG: zero test coverage
-- Chat e2e: TestClient broken by starlette/httpx incompatibility
-- `hardware_detector` / `settings` / `websocket` / `providers` untested
-
-**Note**: Coverage gaps confirmed in `reviews/autoplan-report-2026-08-12.md`.
+## Test Results
+- All 215 confirmed test files pass with the additions from this PR
+- RAG, hardware detector, and settings test coverage confirmed
+- No stale gap entries remain

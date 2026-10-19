@@ -151,11 +151,16 @@ try {
             if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
                 $buildOk = $false; $buildErr = "build_windows.ps1 exited with code $LASTEXITCODE"
             }
+            if ($buildOk -and -not (Select-String -LiteralPath $buildLog -SimpleMatch 'BUILD STATUS: SUCCESS' -Quiet)) {
+                $buildOk = $false; $buildErr = 'build_windows.ps1 reported BUILD STATUS: FAILED'
+            }
         } catch {
             $buildOk = $false; $buildErr = $_.Exception.Message
+            $script:BuildFailed = $true
         } finally {
             $ErrorActionPreference = $prev
             Pop-Location
+            if ($script:BuildFailed) { exit 1 }
         }
         if (-not $buildOk) { throw "Build step failed: $buildErr (log: $buildLog)" }
         Write-Log OK "build complete (log: $buildLog)"

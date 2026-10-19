@@ -7,6 +7,18 @@
       "skillPath": "skills/agent-kanban/SKILL.md",
       "computedHash": "13d25397db72aa4923679f370da18858701edbab1a1f584ead42b18e7a729b45"
     },
+    "autofix": {
+      "source": "coderabbitai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/autofix/SKILL.md",
+      "computedHash": "1c665af094b2a307a8ab149a4b6ee73097dac24a4fa533821d7cc2e7ede7b9cf"
+    },
+    "code-review": {
+      "source": "coderabbitai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/code-review/SKILL.md",
+      "computedHash": "e5957fb21402cc25f6628ee2f70b4a205c0573de9821f0367f7a6e178291b1b3"
+    },
     "impeccable": {
       "source": "pbakaus/impeccable",
       "sourceType": "github",

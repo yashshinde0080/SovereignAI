@@ -188,8 +188,10 @@ function Wait-ProcessExit($Process, [int]$TimeoutSeconds) {
 
 # Start a process without a console window and hand back the object.
 function Start-QuietProcess([string]$File, [string[]]$Arguments, [string]$WorkDir, [string]$StdOut, [string]$StdErr) {
-    return Start-Process -FilePath $File -ArgumentList $Arguments -WorkingDirectory $WorkDir `
+    $p = Start-Process -FilePath $File -ArgumentList $Arguments -WorkingDirectory $WorkDir `
         -PassThru -NoNewWindow -RedirectStandardOutput $StdOut -RedirectStandardError $StdErr
+    $null = $p.Handle   # keeps ExitCode readable after exit
+    return $p
 }
 
 function Get-Rcedit {
@@ -450,6 +452,7 @@ try {
                 -ArgumentList @("--host", "127.0.0.1", "--port", "$SmokePort") `
                 -WorkingDirectory $BackendOut -PassThru -NoNewWindow `
                 -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+            $null = $proc.Handle   # keeps ExitCode readable after exit
             $healthy = $false
             $graceful = $false
             try {

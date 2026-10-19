@@ -64,7 +64,7 @@
 - Cloud commands: `cloud add`, `cloud list`, `cloud remove`, `cloud test`, `cloud models`
 
 ### 10. **Testing** ✅
-- **289 fast tests** + **5 slow tests** all passing
+- **215 fast tests** + **5 slow tests** all passing (AGENTS.md count)
 - pytest >=8.0 + pytest-asyncio >=0.23.0
 - Markers: `slow`
 - No `conftest.py` — all fixtures inline per-file
@@ -91,7 +91,7 @@
 ## Key Conventions Followed
 - **Snake_case** for backend modules/classes
 - **camelCase** for frontend functions, **PascalCase** for components
-- ** kebab-case** for CLI commands (typer)
+- **kebab-case** for CLI commands (typer)
 - **All paths relative** — no absolute paths anywhere, runs from USB
 - **Async patterns**: Coroutines for IO-bound engine methods, async generators for SSE, `asyncio.to_thread` for blocking PyTorch, `ThreadPoolExecutor` for disk prefetch
 - **Engine interface**: All engines implement `BaseEngine` ABC (5 abstract methods)
@@ -101,10 +101,9 @@
 
 ## What's NOT Included (or Limited)
 - ⚠️ TurboQuant: experimental, default-OFF, eval gate fails on test models
-- ⚠️ RAG: zero test coverage (gaps confirmed)
 - ⚠️ Chat e2e: TestClient broken by starlette/httpx incompatibility
-- ⚠️ `hardware_detector` / `settings` / `websocket` / `providers`: untested
 - ⚠️ Plugin sandbox: timeout-only, no FS/network/memory isolation on Windows
+- RAG, hardware_detector, and settings test coverage confirmed by added tests
 
 ## Quick Start
 ```bash

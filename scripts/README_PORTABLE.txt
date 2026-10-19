@@ -12,7 +12,7 @@ An SSD/NVMe is recommended; on a spinning HDD LayerStream is slow.
 
 ## Where your data lives
 Everything writable stays on **this drive** under `data/`:
-- `data/models` — model weights you download (none are bundled)
+- `data/workspace/models` — model weights you download (none are bundled)
 - `data/workspace` — settings DB, chat sessions, RAG index (created on first run)
 - `data/cache` — temp/HF cache (temp redirected here, not to the host)
 

@@ -296,16 +296,13 @@ class DocumentChunker:
             # Advance by one full stride (chunk_size minus the overlap budget),
             # so consecutive windows share only the overlap.
             #
-            # The old `max(pos + 1, end - self._overlap_chars)` collapsed to a
-            # one-character slide whenever `end - overlap <= pos` — which is
-            # always true once `end` reaches len(text), i.e. for the tail of
-            # every oversized segment. That emitted one near-duplicate chunk per
-            # character: measured on a 1.7 KB segment with no sentence
-            # punctuation (PDF tables/box drawing), 197 chunks of which 195 were
-            # pure suffixes of the previous one. It is why a small indexed PDF
-            # could hold thousands of two-word fragments that retrieve as noise.
+            # Stop after emitting the tail chunk: if end has reached
+            # len(text), advancing further would emit an empty or duplicate
+            # chunk. Ensure forward progress by at least one character.
+            if end >= len(text):
+                break  # tail emitted; no more one-char suffix chunks
             stride = max(1, self.chunk_size - self._overlap_chars)
-            pos = max(pos + stride, end - self._overlap_chars)
+            pos = max(pos + 1, end - self._overlap_chars)
 
         return chunks
 

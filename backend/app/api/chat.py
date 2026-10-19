@@ -95,15 +95,13 @@ async def _ensure_agent_model(app, agent: Optional[dict]) -> None:
     manager = getattr(app.state, "model_manager", None)
     if not preferred or manager is None:
         return
-    try:
-        await manager.load_model(preferred, mode="auto")
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Agent '{agent['name']}' requires model '{preferred}', which could not be loaded: {e}"
-            ),
-        )
+    registry = getattr(app.state, "cloud_provider_registry", None)
+    is_cloud = (
+        "/" in preferred
+        and registry is not None
+        and registry.get_provider(preferred.split("/", 1)[0]) is not None
+    )
+    await manager.load_model(preferred, mode="cloud" if is_cloud else "auto")
 
 
 # ponytail: 4-word blocklist, extend when false positives/wild misses show up
@@ -302,6 +300,12 @@ async def chat_completions(request: Request, chat_request: ChatRequest):
         if getattr(app.state.active_engine, "mode", None) == "cloud"
         else prompt
     )
+    # Auto-detect cloud preferred model and switch mode
+    if "/" in preferred:
+        registry = getattr(app.state, "cloud_provider_registry", None)
+        is_cloud = registry is not None and registry.get_provider(preferred.split("/", 1)[0]) is not None
+    else:
+        is_cloud = False
     
     if chat_request.stream:
         sampling = _resolve_sampling(chat_request, settings_service, agent)

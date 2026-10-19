@@ -5,6 +5,7 @@ import psutil
 from fastapi import APIRouter, HTTPException, Request
 
 from app.lib.server_lifecycle import request_shutdown
+from app.security.middleware import ALLOWED_ORIGINS
 from app.schemas.system import (
     HardwareProfile,
     SystemStatus,
@@ -53,6 +54,9 @@ async def shutdown(request: Request):
     able to stop someone else's server. Returns before the process has exited —
     the caller polls for it.
     """
+    origin = request.headers.get("origin")
+    if origin and origin not in ALLOWED_ORIGINS:
+        raise HTTPException(status_code=403, detail="Cross-site shutdown requests are refused")
     client = request.client.host if request.client else ""
     if client not in _LOOPBACK_HOSTS:
         raise HTTPException(status_code=403, detail="Shutdown is only allowed from localhost")

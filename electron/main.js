@@ -52,6 +52,10 @@ const cacheReady = roots.cacheReady;
 // "in use" and silently degrade the session (cache/session creation failures).
 // Safe to clear here: requestSingleInstanceLock() below proves no other
 // instance of this app is running.
+app.setPath('userData', roots.userDataDir);
+
+// Clear profile locks only after this process holds the single-instance
+// lock. Clearing the files only when the lock owner is dead is correct.
 for (const lock of ['SingletonLock', 'SingletonSocket', 'SingletonCookie', 'lockfile']) {
   try {
     fs.rmSync(path.join(roots.userDataDir, lock), { force: true });
@@ -59,8 +63,6 @@ for (const lock of ['SingletonLock', 'SingletonSocket', 'SingletonCookie', 'lock
     console.warn(`Could not clear stale profile lock ${lock}:`, err.message);
   }
 }
-
-app.setPath('userData', roots.userDataDir);
 if (roots.tempDir && cacheReady) app.setPath('temp', roots.tempDir);
 
 // GPU is only disabled when it genuinely cannot work (documented fallback):

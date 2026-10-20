@@ -1,3 +1,14 @@
+## [2026-10-20]
+- No git commits; working tree clean
+
+## [2026-10-19] ci+docs+feat | Release workflow, portable build scripts, API + Electron polish
+- CI: updated `.github/workflows/release.yml` (e1988ac5)
+- Backend: updated `backend/app/api/chat.py`, `backend/app/api/system.py`, and `backend/app/vectorstore/chunker.py` (b0952ffb)
+- Desktop/Web: updated `electron/main.js` and `frontend/lib/apiBase.ts` (fe12cbf0)
+- Docs: fixed `scripts/README_PORTABLE.txt` (6e335f18)
+- Docs/Build: updated `CAPABILITIES_REPORT.md`, `REPORT_SUMMARY.md`, `Script_portable.ps1`, `build_windows.ps1`, and `skills-lock.json` (65477974)
+- Commits: 65477974, 6e335f18, fe12cbf0, b0952ffb, e1988ac5
+
 ## [2026-10-18] docs | Capabilities & status reports
 - Docs: new `CAPABILITIES_REPORT.md` (124 lines) — what the project can do: 3 engines (FullRAM / LayerStream / CloudAPI), 3 UIs, REST API surface, model management, settings, security, RAG, plugins, CLI, tests (289 fast + 5 slow = 294 passing), benchmarks, Electron, landing page; plus limitations section (TurboQuant default-OFF, RAG/chat-e2e/plugin-sandbox coverage gaps)
 - Docs: new `REPORT_SUMMARY.md` (88 lines) — test suite status, project overview, architecture diagram, key directories, dev commands, dependencies, gotchas, test gaps

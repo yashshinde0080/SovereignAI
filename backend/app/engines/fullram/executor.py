@@ -72,14 +72,29 @@ class FullRAMEngine(BaseEngine):
                 "ignore_mismatched_sizes": True
             }
             
+            # transformers renamed torch_dtype -> dtype in 4.56. `from_pretrained`
+            # only strips kwargs it recognises, so the wrong one for the
+            # installed version falls through into the model constructor and
+            # every load dies with "...__init__() got an unexpected keyword
+            # argument 'dtype'". requirements pin 4.45.2 (torch_dtype).
+            import transformers as _transformers
+            try:
+                _tf_version = tuple(
+                    int(p) for p in _transformers.__version__.split(".")[:2]
+                )
+            except ValueError:
+                # e.g. "5.3.0.dev0" is fine, but be defensive about odd builds
+                _tf_version = (4, 45)
+            _dtype_key = "dtype" if _tf_version >= (4, 56) else "torch_dtype"
+
             if self.device == "cuda":
                 model_kwargs["device_map"] = "auto"
-                model_kwargs["dtype"] = torch.float16
+                model_kwargs[_dtype_key] = torch.float16
             else:
                 model_kwargs["device_map"] = "cpu"
                 # ponytail: float16 on CPU halves load time vs float32.
                 # transformers dequantizes to compute dtype on-the-fly.
-                model_kwargs["dtype"] = torch.float16
+                model_kwargs[_dtype_key] = torch.float16
                 
             if self.model_path.endswith(".gguf") or self.model_path.endswith(".gguf.enc"):
                 model_dir = os.path.dirname(self.model_path)

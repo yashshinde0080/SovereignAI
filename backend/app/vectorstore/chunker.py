@@ -43,8 +43,13 @@ class DocumentChunker:
 
     @property
     def _overlap_chars(self) -> int:
-        """Token-based overlap converted to chars via the len/3 estimate."""
-        return self.chunk_overlap * 3
+        """Token-based overlap converted to chars via the len/3 estimate.
+
+        Capped below chunk_size: an overlap budget that reaches the window
+        stride leaves the window nothing to advance by, which turns every
+        step into a one-character slide (see _force_split).
+        """
+        return min(self.chunk_overlap * 3, max(0, self.chunk_size - 32))
 
     def chunk_text(self, text: str,
                    document_id: str) -> List[TextChunk]:
@@ -288,7 +293,15 @@ class DocumentChunker:
                 ))
                 idx += 1
 
-            # Move with overlap (token budget → chars via len/3)
+            # Advance by one full stride (chunk_size minus the overlap budget),
+            # so consecutive windows share only the overlap.
+            #
+            # Stop after emitting the tail chunk: if end has reached
+            # len(text), advancing further would emit an empty or duplicate
+            # chunk. Ensure forward progress by at least one character.
+            if end >= len(text):
+                break  # tail emitted; no more one-char suffix chunks
+            stride = max(1, self.chunk_size - self._overlap_chars)
             pos = max(pos + 1, end - self._overlap_chars)
 
         return chunks

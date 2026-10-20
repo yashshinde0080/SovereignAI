@@ -4,35 +4,80 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { createMenu } = require('./menu');
 const { createTray } = require('./tray');
+const {
+  DEFAULT_PORT,
+  apiBaseFor,
+  ensureWritableDir,
+  probeBackend,
+  resolveEndpoint,
+  resolveRoots,
+  stopProcessTree,
+  wsUrlFor,
+} = require('./runtime');
 
 let mainWindow;
 let backendProcess;
 let backendStarting = false;
+// Only a backend this process spawned is ever stopped — an adopted one belongs
+// to another instance.
+let backendOwned = false;
 let tray;
+// Resolved before the window exists: the renderer gets the port through
+// additionalArguments, so it must be known at BrowserWindow construction time.
+let backendPort = null;
+let quitting = false;
 
-const BACKEND_PORT = 8000;
 const FRONTEND_PORT = 3000;
 const BACKEND_HEALTH_TIMEOUT_MS = 120000;
+const BACKEND_STOP_TIMEOUT_MS = 15000;
 
 const isDev = !app.isPackaged;
 
-// Pin user data to %APPDATA%\SovereignAI; Electron would otherwise use the npm
-// package name ("sovereign-ai-desktop"). Must run before anything reads a path.
-app.setPath('userData', path.join(app.getPath('appData'), 'SovereignAI'));
+// ── Writable directories (before anything reads a path) ─────────────────────
+// A cached profile path that cannot be created is what produced Chromium's
+// "Unable to create cache" / "Access is denied" and "Gpu Cache Creation
+// failed": the install directory (Program Files) is read-only, so userData,
+// session data and the GPU shader cache all have to live in a writable place.
+const roots = resolveRoots({
+  isPackaged: app.isPackaged,
+  exePath: app.isPackaged ? app.getPath('exe') : null,
+  env: process.env,
+  appDataDir: app.getPath('appData'),
+  devRoot: path.join(__dirname, '..'),
+});
 
-// Writable state lives in the per-user data dir when packaged: the install
-// directory under Program Files (or wherever the user picked) is not writable.
-// Dev keeps using the repo so existing data is untouched.
-// NOTE: this is the data ROOT -- the backend appends "workspace" itself
-// (SOVEREIGN_DATA_ROOT -> <root>\workspace).
-function dataRoot() {
-  return isDev
-    ? path.join(__dirname, '..')
-    : app.getPath('userData');
+const cacheReady = roots.cacheReady;
+
+// Stale Chromium profile locks from a previous force-kill make the profile look
+// "in use" and silently degrade the session (cache/session creation failures).
+// Safe to clear here: requestSingleInstanceLock() below proves no other
+// instance of this app is running.
+app.setPath('userData', roots.userDataDir);
+
+// Clear profile locks only after this process holds the single-instance
+// lock. Clearing the files only when the lock owner is dead is correct.
+for (const lock of ['SingletonLock', 'SingletonSocket', 'SingletonCookie', 'lockfile']) {
+  try {
+    fs.rmSync(path.join(roots.userDataDir, lock), { force: true });
+  } catch (err) {
+    console.warn(`Could not clear stale profile lock ${lock}:`, err.message);
+  }
+}
+if (roots.tempDir && cacheReady) app.setPath('temp', roots.tempDir);
+
+// GPU is only disabled when it genuinely cannot work (documented fallback):
+// an explicit opt-out, or a cache directory that could not be created. The
+// shader disk cache is the part that needs a writable userData dir, so dropping
+// just that keeps hardware acceleration on everywhere it can be.
+if (process.env.SOVEREIGN_DISABLE_GPU === '1' || !cacheReady) {
+  console.warn('Disabling GPU acceleration (no writable cache directory).');
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
+  app.commandLine.appendSwitch('disable-software-rasterizer');
 }
 
 function workspaceDir() {
-  return path.join(dataRoot(), 'workspace');
+  return roots.workspaceDir;
 }
 
 // Read a boolean general setting straight from the settings DB files, before
@@ -88,20 +133,16 @@ function resolveBackendCommand() {
   return { cmd: python, args: ['main.py'] };
 }
 
-function pingHealth() {
-  return net.fetch(`http://127.0.0.1:${BACKEND_PORT}/health`)
-    .then((res) => res.ok)
-    .catch(() => false);
-}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Wait for /health to answer, not for a stdout string: line-buffering differs
-// between a console python and a frozen exe.
-async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS) {
+// Wait for a healthy SovereignAI that answers on `port`. Identity-checked: a
+// foreign process on the port must not read as "our backend is up".
+async function waitForBackend(port, timeoutMs = BACKEND_HEALTH_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await pingHealth()) return true;
-    if (!backendProcess) return false; // died during startup
-    await new Promise((r) => setTimeout(r, 500));
+    if (await probeBackend(port)) return true;
+    if (!backendProcess && !backendStarting) return false; // died during startup
+    await sleep(500);
   }
   return false;
 }
@@ -113,18 +154,38 @@ async function startBackend() {
   try {
     const { cmd, args } = resolveBackendCommand();
     const dir = backendDir();
-    const fullArgs = [...args, '--host', '127.0.0.1', '--port', String(BACKEND_PORT)];
+    const fullArgs = [...args, '--host', '127.0.0.1', '--port', String(backendPort)];
 
     console.log('Starting backend:', cmd, fullArgs.join(' '));
+    // Portable: redirect every temp/cache/config path (and HF_HOME) onto the
+    // drive so nothing leaks to the host. Directories were created above.
+    let portableEnv = {};
+    if (roots.portableRoot) {
+      const cache = path.join(roots.dataRoot, 'cache');
+      portableEnv = {
+        TEMP: path.join(cache, 'temp'), TMP: path.join(cache, 'temp'),
+        HF_HOME: path.join(cache, 'hf'),
+        XDG_CACHE_HOME: cache,
+        XDG_CONFIG_HOME: path.join(roots.dataRoot, 'config'),
+        XDG_DATA_HOME: path.join(roots.dataRoot, 'share'),
+      };
+      for (const d of [portableEnv.TEMP, portableEnv.HF_HOME, portableEnv.XDG_CONFIG_HOME, portableEnv.XDG_DATA_HOME]) {
+        ensureWritableDir(d);
+      }
+    }
     backendProcess = spawn(cmd, fullArgs, {
       cwd: dir,
       windowsHide: true,
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1',
-        SOVEREIGN_DATA_ROOT: dataRoot(),
+        PYTHONDONTWRITEBYTECODE: '1',
+        SOVEREIGN_DATA_ROOT: roots.dataRoot,
+        SOVEREIGN_API_PORT: String(backendPort),
+        ...portableEnv,
       },
     });
+    backendOwned = true;
   } catch (err) {
     console.error('Failed to start backend:', err.message);
     backendStarting = false;
@@ -143,29 +204,50 @@ async function startBackend() {
     console.log(`Backend exited with code ${code}`);
     backendProcess = null;
     backendStarting = false;
+    backendOwned = false;
   });
 
-  const ok = await waitForBackend();
+  const ok = await waitForBackend(backendPort);
   backendStarting = false;
   return ok;
 }
 
-function stopBackend() {
+/**
+ * Stop the backend this process started, gracefully.
+ *
+ * Hard-terminating (taskkill /F) skips the server's shutdown: SQLite never
+ * closes, the audit write never lands, and the aiosqlite thread dies on a
+ * closed event loop. So ask the loopback-only /v1/system/shutdown endpoint
+ * first and only force-kill if it does not exit in time.
+ */
+async function stopBackend({ timeoutMs = BACKEND_STOP_TIMEOUT_MS } = {}) {
   const proc = backendProcess;
-  if (!proc) return;
   backendProcess = null;
+  backendStarting = false;
+  if (!proc) return;
+
+  if (!backendOwned) {
+    console.log('Backend was reused, not started by this instance — leaving it running.');
+    return;
+  }
+  backendOwned = false;
   console.log('Stopping backend...');
+
   try {
-    if (process.platform === 'win32') {
-      // /T kills the tree, /pid scopes it to the child we spawned — unrelated
-      // python/node processes on the machine are never touched.
-      spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true });
-    } else {
-      proc.kill('SIGTERM');
-      setTimeout(() => { try { proc.kill('SIGKILL'); } catch (_) {} }, 5000);
-    }
+    await fetch(`${apiBaseFor(backendPort)}/v1/system/shutdown`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(3000),
+    });
   } catch (err) {
-    console.warn('Could not stop backend:', err.message);
+    console.warn('Graceful shutdown request failed:', err.message);
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && proc.exitCode === null) await sleep(250);
+
+  if (proc.exitCode === null) {
+    console.warn('Backend did not exit in time — terminating it.');
+    stopProcessTree(proc.pid, { force: true });
   }
 }
 
@@ -179,6 +261,9 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The renderer learns the real backend port here: it can fall back to a
+      // free port, so it cannot be baked into the build.
+      additionalArguments: [`--sovereign-api-base=${apiBaseFor(backendPort || DEFAULT_PORT)}`],
     },
     icon: path.join(__dirname, 'assets', 'icon.png'),
     titleBarStyle: 'hiddenInset',
@@ -224,24 +309,44 @@ async function loadFrontend() {
   if (isDev) mainWindow.webContents.openDevTools();
 }
 
-async function bootBackendAndUi() {
-  const autoStart = readGeneralFlag('auto_start_backend', true) !== false;
-  if (!autoStart) {
+/**
+ * Start (or adopt) exactly one backend for the endpoint chosen before the
+ * window was created. Never spawns a second process.
+ */
+async function prepareBackend(endpoint) {
+  if (endpoint.port === null) {
+    dialog.showErrorBox(
+      'No free port for the local engine',
+      `Ports ${DEFAULT_PORT}-${DEFAULT_PORT + 20} are all in use. Close the ` +
+      `application holding them, or set SOVEREIGN_API_PORT to a free port and ` +
+      `start SovereignAI again.\n\nNo process was terminated.`
+    );
+    return false;
+  }
+
+  if (endpoint.reuse) {
+    console.log(`Reusing the backend already running on ${apiBaseFor(endpoint.port)}`);
+    return true;
+  }
+  if (endpoint.moved) {
+    console.log(`Port ${DEFAULT_PORT} is in use by another application; using ${endpoint.port}`);
+  }
+
+  if (readGeneralFlag('auto_start_backend', true) === false) {
     console.log('auto_start_backend=false — skipping backend spawn');
-    await loadFrontend();
-    return;
+    return false;
   }
 
-  let healthy = false;
   try {
-    healthy = (await startBackend()) === true;
+    return (await startBackend()) === true;
   } catch (err) {
-    healthy = false;
+    console.error('Backend start failed:', err.message);
+    return false;
   }
+}
 
-  if (!healthy) {
-    if (await pingHealth()) healthy = true; // already running elsewhere
-  }
+async function bootBackendAndUi(endpoint) {
+  const healthy = await prepareBackend(endpoint);
 
   // Load the UI either way: it retries /status and reconnects metricsWs, so a
   // late backend self-heals instead of leaving a dead window.
@@ -251,7 +356,7 @@ async function bootBackendAndUi() {
     const logHint = path.join(workspaceDir(), 'logs');
     dialog.showErrorBox(
       'Backend did not start',
-      `The local engine did not answer on port ${BACKEND_PORT} within ` +
+      `The local engine did not answer on ${apiBaseFor(backendPort || DEFAULT_PORT)} within ` +
       `${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)}s.\n\n` +
       `Check for details in:\n${logHint}\n\n` +
       `Models and data live in:\n${workspaceDir()}`
@@ -261,6 +366,16 @@ async function bootBackendAndUi() {
 
 // IPC Handlers
 ipcMain.handle('get-app-path', () => app.getAppPath());
+
+// The renderer's real backend address (see preload.js / additionalArguments).
+ipcMain.handle('get-runtime-config', () => ({
+  apiBase: apiBaseFor(backendPort || DEFAULT_PORT),
+  wsUrl: wsUrlFor(backendPort || DEFAULT_PORT),
+  port: backendPort || DEFAULT_PORT,
+  dataRoot: roots.dataRoot,
+  workspaceDir: workspaceDir(),
+  portable: Boolean(roots.portableRoot),
+}));
 
 ipcMain.handle('show-notification', (event, { title, body }) => {
   if (Notification.isSupported()) {
@@ -287,20 +402,43 @@ ipcMain.handle('show-save-dialog', async (event, options) => {
 });
 
 ipcMain.handle('restart-backend', async () => {
-  stopBackend();
-  await new Promise((r) => setTimeout(r, 1000));
-  const ok = await startBackend();
-  return { success: ok === true };
+  await stopBackend();
+  const endpoint = await resolveEndpoint(roots.dataRoot, { env: { ...process.env, SOVEREIGN_API_PORT: backendPort } });
+  // A different port would need a new BrowserWindow: the renderer's address is
+  // fixed in additionalArguments at window creation.
+  const samePort = endpoint.port === backendPort;
+  backendPort = endpoint.port || backendPort;
+  if (!samePort) {
+    console.warn(`Backend restarted on a different port (${backendPort}); reload the window to use it.`);
+  }
+  const ok = endpoint.reuse || (await startBackend()) === true;
+  return { success: ok === true, port: backendPort, portChanged: !samePort };
 });
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: true } }
 ]);
 
+// Exactly one app instance: a second launch focuses the first window instead of
+// starting a second backend against the same database.
+if (!app.requestSingleInstanceLock()) {
+  console.log('Another SovereignAI instance is already running — exiting this one.');
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 // App lifecycle
 app.whenReady().then(async () => {
   try {
     console.log('Starting SovereignAI...');
+    console.log(`Data root: ${roots.dataRoot}${roots.portableRoot ? ' (portable)' : ''}`);
 
     // Custom protocol for the Next.js static export
     protocol.handle('app', (request) => {
@@ -331,11 +469,17 @@ app.whenReady().then(async () => {
       return net.fetch(pathToFileURL(filePath).href);
     });
 
+    // Port resolution first: the window needs it, and it decides whether a
+    // backend is spawned at all.
+    const endpoint = await resolveEndpoint(roots.dataRoot);
+    backendPort = endpoint.port;
+
     createWindow();
-    createMenu(mainWindow);
+    createMenu(mainWindow, { modelsDir: path.join(workspaceDir(), 'models') });
+    // The tray is optional chrome — never let it abort startup.
     tray = createTray(mainWindow);
 
-    bootBackendAndUi().catch((err) => {
+    bootBackendAndUi(endpoint).catch((err) => {
       console.error('Backend/UI boot failed:', err);
       dialog.showErrorBox('Startup Error', `Failed to start backend: ${err.message}`);
     });
@@ -343,6 +487,7 @@ app.whenReady().then(async () => {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
+        loadFrontend().catch((err) => console.error('Could not reload the UI:', err));
       } else {
         mainWindow.show();
       }
@@ -354,16 +499,24 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('before-quit', () => {
+// One quit path for `before-quit` and `window-all-closed`: the backend is
+// asked to stop and awaited, so it can close its databases first.
+function quitApp(event) {
   app.isQuitting = true;
-  stopBackend();
-});
+  if (quitting) return;
+  quitting = true;
+  if (event) event.preventDefault();
+  stopBackend()
+    .catch((err) => console.error('Error while stopping the backend:', err))
+    .finally(() => app.quit());
+}
 
+app.on('before-quit', (event) => quitApp(event));
+
+// Subscribing to this event is also what disables Electron's automatic quit,
+// which gives stopBackend() the time it needs to close the databases.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    stopBackend();
-    app.quit();
-  }
+  if (process.platform !== 'darwin') quitApp();
 });
 
 // Handle uncaught exceptions

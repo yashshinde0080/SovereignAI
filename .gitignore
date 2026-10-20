@@ -23,7 +23,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# Anchored to the repo root: an unanchored lib/ also swallowed frontend/lib,
+# which holds real source (api, utils, themeBoot, conversations, agentTools).
+/lib/
 lib64/
 parts/
 sdist/
@@ -140,6 +142,7 @@ opencode.jsonc
 .zed/
 .codex
 .omp/
+.qoder/
 
 .agents/
 .vscode/
@@ -151,3 +154,9 @@ opencode.json
 # Packaging output + build-only virtualenv (see build_windows.ps1)
 build_exe/
 backend/.venv-build/
+
+# Release artifacts (scripts/release.sh) — never committed
+releases/
+
+build_zip/
+build_exe/

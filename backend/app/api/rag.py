@@ -268,19 +268,18 @@ async def query_documents(request: Request, query: QueryRequest):
 
 @router.get("/stats")
 async def rag_stats(request: Request):
-    """Vector store health — FAISS vs metadata counts. in_sync=false means desync
-    (search would silently return nothing until the startup self-heal runs)."""
-    vector_store: VectorStoreManager = request.app.state.vector_store
-    stats = vector_store.get_stats()
-    stats["in_sync"] = stats["total_vectors"] == stats["total_embeddings"]
-    return stats
+    """Vector store health. in_sync=false means FAISS, embedding rows and chunk
+    rows disagree (search returns fewer sources than the document list implies)
+    until the next startup self-heal or POST /v1/rag/rebuild."""
+    vector_store = _ensure_vector_store(request)
+    return vector_store.get_stats()
 
 
 @router.post("/rebuild")
 async def rebuild_index(request: Request):
     """Manual vector-store rebuild from metadata (fixes FAISS/metadata desync
-    without a restart)."""
-    vector_store: VectorStoreManager = request.app.state.vector_store
+    without a restart, and re-embeds after an embedding-model change)."""
+    vector_store = _ensure_vector_store(request)
     try:
         # to_thread: re-embeds everything — keep the event loop serving.
         # (ConnectionPool hands each thread its own conn; the vectorstore's
@@ -288,15 +287,13 @@ async def rebuild_index(request: Request):
         await asyncio.to_thread(vector_store.rebuild_index)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Rebuild failed: {e}")
-    stats = vector_store.get_stats()
-    stats["in_sync"] = stats["total_vectors"] == stats["total_embeddings"]
-    return stats
+    return vector_store.get_stats()
 
 
 @router.get("/documents", response_model=DocumentList)
 async def list_documents(request: Request):
     """List indexed documents"""
-    vector_store: VectorStoreManager = request.app.state.vector_store
+    vector_store = _ensure_vector_store(request)
     documents = vector_store.list_documents()
     return DocumentList(documents=documents)
 
@@ -304,7 +301,7 @@ async def list_documents(request: Request):
 @router.get("/documents/{doc_id}/chunks")
 async def get_document_chunks(request: Request, doc_id: str):
     """Get all chunks (content previews) for a document."""
-    vector_store: VectorStoreManager = request.app.state.vector_store
+    vector_store = _ensure_vector_store(request)
     chunks = vector_store.get_document_chunks(doc_id)
     if not chunks:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -325,7 +322,7 @@ async def get_document_chunks(request: Request, doc_id: str):
 async def delete_document(request: Request, doc_id: str):
     """Delete document from index. 404 = unknown doc, 500 = rebuild failure
     (the old code reported every failure as 404)."""
-    vector_store: VectorStoreManager = request.app.state.vector_store
+    vector_store = _ensure_vector_store(request)
     if not vector_store.get_document_chunks(doc_id):
         raise HTTPException(status_code=404, detail="Document not found")
     try:

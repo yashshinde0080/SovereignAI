@@ -100,14 +100,14 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
     <div className="space-y-6">
       {/* Authentication */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Authentication
         </h3>
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Require password</Label>
-            <p className="text-xs text-slate-500">
+            <Label className="text-sm text-foreground">Require password</Label>
+            <p className="text-xs text-muted-foreground">
               Protect app access with a password
             </p>
           </div>
@@ -121,7 +121,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
           <div className="flex gap-2">
             <Input
               type="password"
-              className="bg-slate-900 border-slate-700 flex-1"
+              className="bg-card border-input flex-1"
               placeholder="Set new password (min 6 characters)"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -129,7 +129,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
             <Button
               variant="secondary"
               size="sm"
-              className="bg-slate-800"
+              className="bg-muted"
               onClick={handleSetPassword}
             >
               <Lock className="h-4 w-4 mr-1" />
@@ -140,10 +140,10 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">
+            <Label className="text-sm text-foreground">
               Session timeout (minutes)
             </Label>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               {form.session_timeout_minutes === 0
                 ? "No timeout"
                 : `${form.session_timeout_minutes} minutes`}
@@ -162,16 +162,16 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
 
       {/* Network */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Network
         </h3>
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">
+            <Label className="text-sm text-foreground">
               Bind to localhost only
             </Label>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Only allow local connections (127.0.0.1)
             </p>
           </div>
@@ -183,9 +183,9 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
 
         {!form.bind_localhost_only && (
           <div className="space-y-3">
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-red-950/20 border border-red-500/20">
-              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-red-400">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+              <p className="text-xs text-destructive">
                 Warning: Disabling localhost-only binding exposes the API to
                 your network. Any client on the LAN can reach it — set an API
                 token below; requests without{" "}
@@ -194,15 +194,15 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
               </p>
             </div>
             <div>
-              <Label className="text-sm text-slate-300">API Token</Label>
+              <Label className="text-sm text-foreground">API Token</Label>
               <Input
                 type="password"
-                className="bg-slate-900 border-slate-700"
+                className="bg-card border-input"
                 placeholder="Empty = no token enforcement"
                 value={form.api_token ?? ""}
                 onChange={(e) => update("api_token", e.target.value)}
               />
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Required by LAN clients (curl, scripts, other devices). Keep it
                 secret — it grants full API access.
               </p>
@@ -211,10 +211,10 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
         )}
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">API Port</Label>
+          <Label className="text-sm text-foreground">API Port</Label>
           <Input
             type="number"
-            className="w-[120px] bg-slate-900 border-slate-700"
+            className="w-[120px] bg-card border-input"
             min={1024}
             max={65535}
             value={form.api_port}
@@ -226,8 +226,8 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">Enable CORS</Label>
-            <p className="text-xs text-slate-500">
+            <Label className="text-sm text-foreground">Enable CORS</Label>
+            <p className="text-xs text-muted-foreground">
               Allow cross-origin requests
             </p>
           </div>
@@ -239,10 +239,10 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
 
         {form.enable_cors && (
           <div className="space-y-2">
-            <Label className="text-sm text-slate-300">Allowed Origins</Label>
+            <Label className="text-sm text-foreground">Allowed Origins</Label>
             <div className="flex gap-2">
               <Input
-                className="bg-slate-900 border-slate-700 flex-1"
+                className="bg-card border-input flex-1"
                 placeholder="http://localhost:3000"
                 value={originsInput}
                 onChange={(e) => setOriginsInput(e.target.value)}
@@ -251,7 +251,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
               <Button
                 variant="secondary"
                 size="sm"
-                className="bg-slate-800"
+                className="bg-muted"
                 onClick={addOrigin}
               >
                 Add
@@ -261,7 +261,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
               {form.allowed_origins.map((origin: string) => (
                 <span
                   key={origin}
-                  className="px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs cursor-pointer hover:bg-red-900/30 hover:text-red-400 transition-colors"
+                  className="px-3 py-1 rounded-full bg-muted text-foreground text-xs cursor-pointer hover:bg-destructive/15 hover:text-destructive transition-colors"
                   onClick={() => removeOrigin(origin)}
                 >
                   {origin} ×
@@ -274,7 +274,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
 
       {/* Protection */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Protection
         </h3>
 
@@ -297,8 +297,8 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
         ].map(({ key, label, desc }) => (
           <div key={key} className="flex items-center justify-between">
             <div>
-              <Label className="text-sm text-slate-300">{label}</Label>
-              <p className="text-xs text-slate-500">{desc}</p>
+              <Label className="text-sm text-foreground">{label}</Label>
+              <p className="text-xs text-muted-foreground">{desc}</p>
             </div>
             <Switch
               checked={form[key as keyof typeof form] as boolean}
@@ -309,10 +309,10 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
 
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-sm text-slate-300">
+            <Label className="text-sm text-foreground">
               Max concurrent requests
             </Label>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               {form.max_concurrent_requests} simultaneous requests
             </p>
           </div>
@@ -329,7 +329,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
 
       <Button
         onClick={() => onSave(form)}
-        className="w-full bg-blue-600 hover:bg-blue-700"
+        className="w-full bg-primary hover:bg-primary/90"
       >
         <Save className="h-4 w-4 mr-2" />
         Save Security Settings

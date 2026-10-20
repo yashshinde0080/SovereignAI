@@ -2,21 +2,24 @@ const { Tray, Menu, nativeImage, app } = require('electron');
 const path = require('path');
 
 function createTray(mainWindow) {
-  const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
-  
-  // Create tray icon (16x16 or 22x22 for Linux)
-  let trayIcon;
+  // assets/icon.png ships in the package (tray-icon.png never did, so the tray
+  // got an empty image and either threw — which aborted the whole startup — or
+  // produced an invisible icon the user could only force-quit).
+  const iconPath = path.join(__dirname, 'assets', 'icon.png');
+
+  // The tray is optional chrome: a missing/undecodable icon must not stop the app.
+  let tray;
   try {
-    trayIcon = nativeImage.createFromPath(iconPath);
+    let trayIcon = nativeImage.createFromPath(iconPath);
+    if (trayIcon.isEmpty()) throw new Error(`empty tray icon: ${iconPath}`);
     if (process.platform === 'darwin') {
       trayIcon = trayIcon.resize({ width: 16, height: 16 });
     }
+    tray = new Tray(trayIcon);
   } catch (error) {
-    console.error('Failed to load tray icon:', error);
+    console.error('Tray unavailable:', error.message);
     return null;
   }
-
-  const tray = new Tray(trayIcon);
 
   const contextMenu = Menu.buildFromTemplate([
     {

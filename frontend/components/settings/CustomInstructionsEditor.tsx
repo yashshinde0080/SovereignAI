@@ -18,17 +18,17 @@ export function CustomInstructionsEditor({
   return (
     <div className="space-y-3">
       <div>
-        <Label className="text-sm text-slate-300 font-semibold">
+        <Label className="text-sm text-foreground font-semibold">
           Custom Instructions
         </Label>
-        <p className="text-xs text-slate-500 mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           These instructions are prepended to every conversation. Use them to
           define how the AI should behave, what to focus on, or what to avoid.
         </p>
       </div>
 
       <Textarea
-        className="bg-slate-900 border-slate-700 min-h-[200px] font-mono text-sm leading-relaxed"
+        className="bg-card border-input min-h-[200px] font-mono text-sm leading-relaxed"
         placeholder={`Example instructions:
 
 - Always respond in bullet points
@@ -42,7 +42,7 @@ export function CustomInstructionsEditor({
         disabled={disabled}
       />
 
-      <div className="flex items-center justify-between text-xs text-slate-500">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{value.length} characters</span>
         <span>Applied to all conversations</span>
       </div>

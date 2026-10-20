@@ -115,7 +115,7 @@ function ConsoleContent() {
              <span className="font-semibold px-2 py-0.5 bg-secondary rounded-full text-secondary-foreground">Task: {activeIsGen && activeTask === 'unknown' ? 'Generative Chat' : activeTask.replace(/_/g, ' ')}</span>
 
              {activeMode === 'cloud' ? (
-               <span className="font-semibold px-2 py-0.5 bg-blue-500/15 text-blue-400 rounded-full">Online · Cloud API</span>
+               <span className="font-semibold px-2 py-0.5 bg-accent/15 text-accent rounded-full">Online · Cloud API</span>
              ) : (
                <span className="font-semibold px-2 py-0.5 bg-muted rounded-full">Mode: {activeMode}</span>
              )}

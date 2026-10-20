@@ -123,24 +123,24 @@ export function PersonalizationSettings({
     <div className="space-y-6">
       {/* Base Style and Tone */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Base Style & Tone
         </h3>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Set the style and tone of how the AI responds to you. This doesn&apos;t
           impact capabilities.
         </p>
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">Style</Label>
+          <Label className="text-sm text-foreground">Style</Label>
           <Select
             value={form.base_style_tone}
             onValueChange={(v) => update("base_style_tone", v)}
           >
-            <SelectTrigger className="w-[180px] bg-slate-900 border-slate-700">
+            <SelectTrigger className="w-[180px] bg-card border-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectContent className="bg-card border-input">
               {STYLES.map((s) => (
                 <SelectItem key={s.value} value={s.value}>
                   {s.label}
@@ -153,10 +153,10 @@ export function PersonalizationSettings({
 
       {/* Characteristics */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Characteristics
         </h3>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Choose additional customizations on top of your base style and tone.
         </p>
         <div className="flex flex-wrap gap-2">
@@ -173,20 +173,20 @@ export function PersonalizationSettings({
 
       {/* Response Format */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Response Format
         </h3>
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">Headers & Lists</Label>
+          <Label className="text-sm text-foreground">Headers & Lists</Label>
           <Select
             value={form.headers_lists_mode}
             onValueChange={(v) => update("headers_lists_mode", v)}
           >
-            <SelectTrigger className="w-[160px] bg-slate-900 border-slate-700">
+            <SelectTrigger className="w-[160px] bg-card border-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectContent className="bg-card border-input">
               {HEADERS_LISTS.map((h) => (
                 <SelectItem key={h.value} value={h.value}>
                   {h.label}
@@ -197,15 +197,15 @@ export function PersonalizationSettings({
         </div>
 
         <div className="flex items-center justify-between">
-          <Label className="text-sm text-slate-300">Response Length</Label>
+          <Label className="text-sm text-foreground">Response Length</Label>
           <Select
             value={form.response_length}
             onValueChange={(v) => update("response_length", v)}
           >
-            <SelectTrigger className="w-[160px] bg-slate-900 border-slate-700">
+            <SelectTrigger className="w-[160px] bg-card border-input">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectContent className="bg-card border-input">
               {RESPONSE_LENGTHS.map((r) => (
                 <SelectItem key={r.value} value={r.value}>
                   {r.label}
@@ -218,14 +218,14 @@ export function PersonalizationSettings({
 
       {/* About You */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           About You
         </h3>
 
         <div className="space-y-2">
-          <Label className="text-sm text-slate-300">Preferred Name</Label>
+          <Label className="text-sm text-foreground">Preferred Name</Label>
           <Input
-            className="bg-slate-900 border-slate-700"
+            className="bg-card border-input"
             placeholder="How should the AI address you?"
             value={form.preferred_name}
             onChange={(e) => update("preferred_name", e.target.value)}
@@ -233,9 +233,9 @@ export function PersonalizationSettings({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm text-slate-300">Profession</Label>
+          <Label className="text-sm text-foreground">Profession</Label>
           <Input
-            className="bg-slate-900 border-slate-700"
+            className="bg-card border-input"
             placeholder="e.g. Software Engineer, Student, Doctor"
             value={form.profession}
             onChange={(e) => update("profession", e.target.value)}
@@ -243,10 +243,10 @@ export function PersonalizationSettings({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm text-slate-300">Interests</Label>
+          <Label className="text-sm text-foreground">Interests</Label>
           <div className="flex gap-2">
             <Input
-              className="bg-slate-900 border-slate-700 flex-1"
+              className="bg-card border-input flex-1"
               placeholder="Add an interest"
               value={interestInput}
               onChange={(e) => setInterestInput(e.target.value)}
@@ -256,7 +256,7 @@ export function PersonalizationSettings({
               variant="secondary"
               size="sm"
               onClick={addInterest}
-              className="bg-slate-800"
+              className="bg-muted"
             >
               Add
             </Button>
@@ -265,7 +265,7 @@ export function PersonalizationSettings({
             {form.interests.map((interest: string) => (
               <span
                 key={interest}
-                className="px-3 py-1 rounded-full bg-slate-800 text-slate-300 text-xs cursor-pointer hover:bg-red-900/30 hover:text-red-400 transition-colors"
+                className="px-3 py-1 rounded-full bg-muted text-foreground text-xs cursor-pointer hover:bg-destructive/15 hover:text-destructive transition-colors"
                 onClick={() => removeInterest(interest)}
               >
                 {interest} ×
@@ -275,11 +275,11 @@ export function PersonalizationSettings({
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm text-slate-300">
+          <Label className="text-sm text-foreground">
             Context About You
           </Label>
           <Textarea
-            className="bg-slate-900 border-slate-700 min-h-[80px]"
+            className="bg-card border-input min-h-[80px]"
             placeholder="Any other context the AI should know about you..."
             value={form.user_context}
             onChange={(e) => update("user_context", e.target.value)}
@@ -289,15 +289,15 @@ export function PersonalizationSettings({
 
       {/* Custom Instructions */}
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+        <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Custom Instructions
         </h3>
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-muted-foreground">
           Provide specific instructions that will be included in every
           conversation.
         </p>
         <Textarea
-          className="bg-slate-900 border-slate-700 min-h-[120px] font-mono text-sm"
+          className="bg-card border-input min-h-[120px] font-mono text-sm"
           placeholder="e.g. Always provide code examples in Python. Avoid using jargon unless I ask for it."
           value={form.custom_instructions}
           onChange={(e) => update("custom_instructions", e.target.value)}
@@ -306,7 +306,7 @@ export function PersonalizationSettings({
 
       <Button
         onClick={() => onSave(form)}
-        className="w-full bg-blue-600 hover:bg-blue-700"
+        className="w-full bg-primary hover:bg-primary/90"
       >
         <Save className="h-4 w-4 mr-2" />
         Save Personalization

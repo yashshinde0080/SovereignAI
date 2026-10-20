@@ -1,15 +1,67 @@
 """System API Endpoints"""
-import psutil
-from fastapi import APIRouter, Request
+import time
 
+import psutil
+from fastapi import APIRouter, HTTPException, Request
+
+from app.lib.server_lifecycle import request_shutdown
+from app.security.middleware import ALLOWED_ORIGINS
 from app.schemas.system import (
     HardwareProfile,
     SystemStatus,
     ResourceUsage
 )
 
+# Loopback client addresses. 127.0.0.1 covers 127.0.0.0/8 in practice (the
+# shell always uses 127.0.0.1) and ::1 the IPv6 form.
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost"}
+
 
 router = APIRouter()
+
+# Previous disk counters, for turning psutil's cumulative byte totals into a
+# throughput. psutil.disk_io_counters() counts since boot, so the raw value is
+# "total MB" — reporting it as MB/s made the dashboard show ~48000 MB/s.
+_prev_disk_io = None
+
+
+def _disk_rates_mb_s() -> tuple[float, float]:
+    """Read/write throughput in MB/s since the previous call (0 on a cold call)."""
+    global _prev_disk_io
+    io = psutil.disk_io_counters()
+    if io is None:
+        return 0.0, 0.0
+
+    now = time.monotonic()
+    read_mb_s = write_mb_s = 0.0
+    if _prev_disk_io is not None:
+        prev_at, prev_read, prev_write = _prev_disk_io
+        elapsed = now - prev_at
+        if elapsed > 0:
+            read_mb_s = max(0, io.read_bytes - prev_read) / (1024 ** 2) / elapsed
+            write_mb_s = max(0, io.write_bytes - prev_write) / (1024 ** 2) / elapsed
+    _prev_disk_io = (now, io.read_bytes, io.write_bytes)
+    return round(read_mb_s, 2), round(write_mb_s, 2)
+
+
+@router.post("/shutdown")
+async def shutdown(request: Request):
+    """Stop the server gracefully (used by the desktop shell when it quits).
+
+    The server then closes the databases and background tasks before exiting;
+    a hard kill (taskkill) skips all of that and is what leaves SQLite locked.
+    Loopback-only: with the API bound to the LAN, a remote caller must not be
+    able to stop someone else's server. Returns before the process has exited —
+    the caller polls for it.
+    """
+    origin = request.headers.get("origin")
+    if origin and origin not in ALLOWED_ORIGINS:
+        raise HTTPException(status_code=403, detail="Cross-site shutdown requests are refused")
+    client = request.client.host if request.client else ""
+    if client not in _LOOPBACK_HOSTS:
+        raise HTTPException(status_code=403, detail="Shutdown is only allowed from localhost")
+    request_shutdown()
+    return {"status": "shutting down"}
 
 
 @router.get("/hardware", response_model=HardwareProfile)
@@ -58,15 +110,14 @@ async def get_resources(request: Request):
     """Get current resource usage"""
     memory = psutil.virtual_memory()
     cpu_percent = psutil.cpu_percent(interval=None)
-    
-    disk_io = psutil.disk_io_counters()
-    
+    disk_read_mb_s, disk_write_mb_s = _disk_rates_mb_s()
+
     return ResourceUsage(
         cpu_percent=cpu_percent,
         ram_percent=memory.percent,
         ram_used_gb=round(memory.used / (1024**3), 2),
-        disk_read_mb_s=round(disk_io.read_bytes / (1024**2), 2) if disk_io else 0,
-        disk_write_mb_s=round(disk_io.write_bytes / (1024**2), 2) if disk_io else 0
+        disk_read_mb_s=disk_read_mb_s,
+        disk_write_mb_s=disk_write_mb_s
     )
 
 

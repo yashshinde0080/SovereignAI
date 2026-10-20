@@ -20,6 +20,10 @@ interface MessageListProps {
   tokenSpeed?: number | null;
   /** Show the tok/s badge at all (general.show_token_speed, default on). */
   showTokenSpeed?: boolean;
+  /** Selected agent identity for the empty state. */
+  agentName?: string;
+  agentRole?: string;
+  agentWelcome?: string;
 }
 
 const CodeBlock = ({ inline, className, children }: { inline?: boolean; className?: string; children?: React.ReactNode }) => {
@@ -253,6 +257,9 @@ export function MessageList({
   modelName,
   tokenSpeed,
   showTokenSpeed = true,
+  agentName,
+  agentRole,
+  agentWelcome,
 }: MessageListProps) {
   const [viewSource, setViewSource] = useState<RagSource | null>(null);
 
@@ -267,22 +274,56 @@ export function MessageList({
         >
           <Bot className="h-12 w-12 text-primary" />
         </motion.div>
-        <motion.h3
-          initial={{ y: 8, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.1, duration: 0.3 }}
-          className="text-lg font-semibold text-foreground mb-1"
-        >
-          How can I help you today?
-        </motion.h3>
-        <motion.p
-          initial={{ y: 8, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.15, duration: 0.3 }}
-          className="text-sm mb-6"
-        >
-          Ask anything — or try a quick start below.
-        </motion.p>
+        {/* Active agent identity: who is about to answer, and its own opener. */}
+        {agentName ? (
+          <>
+            {agentRole && (
+              <motion.span
+                initial={{ y: 8, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.05, duration: 0.25 }}
+                className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent"
+              >
+                {agentRole}
+              </motion.span>
+            )}
+            <motion.h3
+              initial={{ y: 8, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1, duration: 0.3 }}
+              className="text-lg font-semibold text-foreground mb-1"
+            >
+              {agentName}
+            </motion.h3>
+            <motion.p
+              initial={{ y: 8, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.15, duration: 0.3 }}
+              className="max-w-md text-sm mb-6"
+            >
+              {agentWelcome || `Ask anything — ${agentName} will answer with its saved instructions.`}
+            </motion.p>
+          </>
+        ) : (
+          <>
+            <motion.h3
+              initial={{ y: 8, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1, duration: 0.3 }}
+              className="text-lg font-semibold text-foreground mb-1"
+            >
+              How can I help you today?
+            </motion.h3>
+            <motion.p
+              initial={{ y: 8, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.15, duration: 0.3 }}
+              className="text-sm mb-6"
+            >
+              Ask anything — or try a quick start below.
+            </motion.p>
+          </>
+        )}
         <motion.div
           initial={{ y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

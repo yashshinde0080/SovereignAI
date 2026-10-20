@@ -1022,6 +1022,262 @@ cloud_app = typer.Typer(
 app.add_typer(cloud_app, name="cloud")
 
 
+# ── RAG diagnostics ──
+
+rag_app = typer.Typer(
+    name="rag",
+    help="RAG storage, embedding, index and retriever diagnostics",
+    add_completion=False,
+    no_args_is_help=True,
+)
+app.add_typer(rag_app, name="rag")
+
+
+def _settings_db_path() -> Path:
+    return Path(__file__).resolve().parents[3] / "workspace" / "database" / "sovereign_settings.db"
+
+
+def _read_settings_section(section: str) -> dict:
+    """Best-effort read of one settings blob; never raises."""
+    path = _settings_db_path()
+    if not path.exists():
+        return {}
+    try:
+        conn = sqlite3.connect(str(path))
+        try:
+            row = conn.execute(
+                "SELECT data FROM settings WHERE section = ?", (section,)
+            ).fetchone()
+            return json.loads(row[0]) if row else {}
+        finally:
+            conn.close()
+    except Exception:
+        return {}
+
+
+@rag_app.command(name="doctor")
+def rag_doctor(
+    query: str = typer.Option(
+        "what is this document about", "--query", "-q",
+        help="Query for the retriever smoke test",
+    ),
+    skip_model: bool = typer.Option(
+        False, "--skip-model",
+        help="Skip the checks that load the embedding model (slow on a cold cache)",
+    ),
+):
+    """Verify the RAG path: storage, embedding model, vector index, retriever, generation provider.
+
+    Runs in-process — the server does not need to be running. Each section
+    reports independently, so one broken stage still shows the state of the rest.
+    """
+    # The CLI is launched as `cd backend/app && python -m cli.main` (see
+    # sovereign.bat), so only backend/app is on sys.path. The `app` package
+    # lives one level up; add the backend root so `app.*` imports resolve.
+    backend_root = str(Path(__file__).resolve().parents[2])
+    if backend_root not in sys.path:
+        sys.path.insert(0, backend_root)
+
+    from app.vectorstore.config import VectorStoreConfig
+
+    cfg = VectorStoreConfig()
+    rows: list[tuple[str, str, str]] = []
+
+    def record(check: str, ok: bool, detail: str):
+        rows.append((check, "ok" if ok else "FAIL", detail))
+
+    # ── 1. Storage directory ──────────────────────────────────────────────
+    index_dir = Path(cfg.index_path)
+    writable, write_err = True, ""
+    try:
+        index_dir.mkdir(parents=True, exist_ok=True)
+        probe = index_dir / ".rag_doctor_probe"
+        probe.write_text("x", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        writable, write_err = False, str(exc)
+
+    def size_of(name: str) -> str:
+        p = index_dir / name
+        return f"{p.stat().st_size / 1024:.0f} KB" if p.exists() else "missing"
+
+    record(
+        "storage",
+        writable,
+        f"{index_dir} (writable={writable}{'; ' + write_err if write_err else ''}); "
+        f"{cfg.index_file}={size_of(cfg.index_file)}, {cfg.metadata_db}={size_of(cfg.metadata_db)}",
+    )
+
+    # ── 2. Metadata / index counts, orphans, chunk health ───────────────
+    index_vectors = chunks = embeddings = orphans = 0
+    median_len = 0
+    short_pct = 0.0
+    faiss_desc = "not loaded"
+    index_dim = None
+    try:
+        import faiss
+        if (index_dir / cfg.index_file).exists():
+            ix = faiss.read_index(str(index_dir / cfg.index_file))
+            index_vectors, index_dim = ix.ntotal, ix.d
+            faiss_desc = f"{type(ix).__name__} ntotal={ix.ntotal} d={ix.d} trained={ix.is_trained}"
+    except Exception as exc:
+        faiss_desc = f"unreadable: {exc}"
+
+    if (index_dir / cfg.metadata_db).exists():
+        try:
+            conn = sqlite3.connect(f"file:{index_dir / cfg.metadata_db}?mode=ro", uri=True)
+            try:
+                chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+                embeddings = conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0]
+                orphans = conn.execute(
+                    "SELECT COUNT(*) FROM chunks ch LEFT JOIN embeddings e "
+                    "ON e.chunk_id = ch.chunk_id WHERE e.chunk_id IS NULL"
+                ).fetchone()[0]
+                if chunks:
+                    median_len = conn.execute(
+                        "SELECT length(content) FROM chunks ORDER BY length(content) "
+                        "LIMIT 1 OFFSET ?", (chunks // 2,)
+                    ).fetchone()[0]
+                    short_pct = 100.0 * conn.execute(
+                        "SELECT COUNT(*) FROM chunks WHERE length(content) < 40"
+                    ).fetchone()[0] / chunks
+            finally:
+                conn.close()
+        except Exception as exc:
+            record("metadata", False, f"unreadable: {exc}")
+
+    in_sync = index_vectors == embeddings and chunks == embeddings
+    record(
+        "index-vs-metadata",
+        in_sync,
+        f"faiss={index_vectors} embeddings={embeddings} chunks={chunks} orphans={orphans} "
+        f"in_sync={in_sync} | {faiss_desc}",
+    )
+    if chunks:
+        # A one-character chunk stride used to fill the index with two-word
+        # fragments; a median well under the configured window is that signature.
+        healthy = median_len >= cfg.chunk_size // 4 and short_pct < 20
+        record(
+            "chunking",
+            healthy,
+            f"median={median_len} chars, {short_pct:.0f}% under 40 chars "
+            f"(chunk_size={cfg.chunk_size})"
+            + ("" if healthy else " -> re-ingest the source document; a rebuild "
+                               "re-embeds the stored fragments and cannot re-chunk"),
+        )
+
+    # ── 3. Embedding model ────────────────────────────────────────────────
+    from app.config import settings as app_settings
+    # The HF hub cache names snapshots models--<org>--<name>; match on the id
+    # suffix so a bare model name works too.
+    slug = cfg.embedding_model.replace("/", "--")
+    cached = any(
+        p.is_dir() and p.name.endswith(slug)
+        for p in app_settings.models_dir.glob("models--*")
+    )
+    record(
+        "embedding-model",
+        cached,
+        f"{cfg.embedding_model} (cached={cached} in {app_settings.models_dir})"
+        + ("" if cached else " -> offline loads will fail; fetch it while online"),
+    )
+    embedder_dim = None
+    if not skip_model and cached:
+        try:
+            with console.status("[dim]loading the embedding model (first run can take a minute)…"):
+                from app.vectorstore.embedding_pipeline import EmbeddingPipeline
+                pipe = EmbeddingPipeline(cfg)
+                pipe.load_model()
+                embedder_dim = pipe.dimension
+                pipe.unload_model()
+            same = index_dim is None or index_dim == embedder_dim
+            record(
+                "embedding-dimension",
+                same,
+                f"model produces {embedder_dim}-d, index is {index_dim}-d"
+                + ("" if same else " -> POST /v1/rag/rebuild to re-embed at the new width"),
+            )
+        except Exception as exc:
+            record("embedding-dimension", False, f"could not load the model: {exc}")
+    elif skip_model:
+        record("embedding-dimension", True, "skipped (--skip-model)")
+
+    # ── 4. Retriever smoke test ───────────────────────────────────────────
+    if index_vectors == 0:
+        record("retriever", True, "no documents indexed yet — upload one to exercise retrieval")
+    elif skip_model:
+        record("retriever", True, "skipped (--skip-model)")
+    else:
+        vs = None
+        try:
+            from app.vectorstore.manager import VectorStoreManager
+            vs = VectorStoreManager(config=cfg)
+            vs.initialize()
+            hits = vs.search(query, top_k=3)
+            labelled = all(h.metadata.get("filename") for h in hits)
+            record(
+                "retriever",
+                bool(hits) and labelled,
+                f"{len(hits)} hit(s) for a {len(query)}-char query; "
+                + (", ".join(
+                    f"{h.metadata.get('filename', '?')}#{h.chunk_index} {h.score:.3f}" for h in hits
+                ) or "nothing cleared the score floor")
+                + ("" if labelled else "; hits are missing source filenames"),
+            )
+        except Exception as exc:
+            record("retriever", False, f"search failed: {exc}")
+        finally:
+            if vs is not None:
+                # close the metadata connection only: shutdown() re-saves the
+                # index, and a diagnostic must not rewrite the operator's data.
+                try:
+                    vs.metadata_store.close()
+                except Exception:
+                    pass
+
+    # ── 5. Generation provider ────────────────────────────────────────────
+    general = _read_settings_section("general")
+    security = _read_settings_section("security")
+    startup_model = general.get("startup_model") or "(none configured)"
+    default_mode = general.get("default_mode", "auto")
+    cloud_count = 0
+    try:
+        path = _settings_db_path()
+        if path.exists():
+            conn = sqlite3.connect(str(path))
+            try:
+                cloud_count = conn.execute("SELECT COUNT(*) FROM cloud_providers").fetchone()[0]
+            finally:
+                conn.close()
+    except Exception:
+        pass
+    record(
+        "generation-provider",
+        True,
+        f"startup model={startup_model} mode={default_mode}; "
+        f"{cloud_count} cloud provider(s) configured, "
+        f"bind_localhost_only={security.get('bind_localhost_only', True)}",
+    )
+
+    table = Table(title="RAG doctor", box=box.ROUNDED)
+    table.add_column("check", style="cyan", no_wrap=True)
+    table.add_column("status", justify="center", no_wrap=True)
+    table.add_column("detail", overflow="fold")
+    for check, status, detail in rows:
+        style = "green" if status == "ok" else "red"
+        table.add_row(check, f"[{style}]{status}[/{style}]", detail)
+    console.print(table)
+
+    failed = [c for c, s, _ in rows if s == "FAIL"]
+    if failed:
+        console.print(_error_box(
+            f"{len(failed)} check(s) failed: {', '.join(failed)}",
+            "See the detail column above. RAG keeps serving what it can.",
+        ))
+        raise typer.Exit(code=1)
+    console.print("[green]✓[/green] RAG path is healthy")
+
+
 @cloud_app.command(name="add")
 def cloud_add(
     name: str = typer.Option("", "--name", "-n", help="Display name (defaults to provider type)"),

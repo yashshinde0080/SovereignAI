@@ -11,25 +11,38 @@ import { Cpu, MemoryStick, HardDrive, Gpu, Activity } from 'lucide-react';
 import { api } from '@/lib/api';
 
 
+/** Render a detected value, or a non-numeric label when there is none.
+   Unknown counts come back as null (or 0 from a provider that knows nothing);
+   showing "0 GB" / "0 cores" for those stated a fact the app did not have. */
+function known(value: number | null | undefined, unit: string, digits = 1): string {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? `${value.toFixed(digits)} ${unit}`
+    : 'Unavailable';
+}
+
+/** Disk type is a string that may legitimately come back as "Unknown". */
+function diskLabel(diskType: string | null | undefined): string {
+  return !diskType || diskType.toLowerCase() === 'unknown' ? 'Not detected' : diskType;
+}
+
 export default function SystemPage() {
   const { hardware, setHardware, systemStatus, setSystemStatus } = useStore();
   const { metrics, history, connected } = useMetrics();
 
   useEffect(() => {
     const fetchSystemData = async () => {
-      console.log('Fetching system data...');
-      try {
-        const [hw, status] = await Promise.all([
-          api.getHardware(),
-          api.getSystemStatus()
-        ]);
-        console.log('Hardware:', hw);
-        console.log('Status:', status);
-        setHardware(hw);
-        setSystemStatus(status);
-      } catch (e) {
-        console.error('Failed to fetch system data:', e);
-      }
+      // allSettled, not all: one failing endpoint must not blank the page. A
+      // single rejected request used to leave every hardware card on its
+      // fallback while the WebSocket metrics kept ticking, so the dashboard
+      // read "Unknown / 0 GB / None" next to live CPU and RAM figures.
+      const [hw, status] = await Promise.allSettled([
+        api.getHardware(),
+        api.getSystemStatus()
+      ]);
+      if (hw.status === 'fulfilled') setHardware(hw.value);
+      else console.error('Failed to fetch hardware profile:', hw.reason);
+      if (status.status === 'fulfilled') setSystemStatus(status.value);
+      else console.error('Failed to fetch system status:', status.reason);
     };
     fetchSystemData();
   }, [setHardware, setSystemStatus]);
@@ -48,36 +61,44 @@ export default function SystemPage() {
         <HardwareCard
           title="CPU"
           icon={Cpu}
-          value={hardware?.cpu_name || 'Unknown'}
+          value={hardware?.cpu_name || 'Not detected'}
           details={[
-            `${hardware?.cpu_cores || 0} cores / ${hardware?.cpu_threads || 0} threads`,
-            `AVX2: ${hardware?.has_avx2 ? '✓' : '✗'} | AVX512: ${hardware?.has_avx512 ? '✓' : '✗'}`
+            hardware ? `${hardware.cpu_cores} cores / ${hardware.cpu_threads} threads` : 'Unavailable',
+            hardware
+              ? `AVX2: ${hardware.has_avx2 ? '✓' : '✗'} | AVX512: ${hardware.has_avx512 ? '✓' : '✗'}`
+              : 'Instruction sets unavailable'
           ]}
         />
         <HardwareCard
           title="Memory"
           icon={MemoryStick}
-          value={`${hardware?.ram_total_gb?.toFixed(1) || 0} GB`}
+          value={known(hardware?.ram_total_gb, 'GB')}
           details={[
-            `Available: ${systemStatus?.ram_available_gb?.toFixed(1) || 0} GB`,
-            `Used: ${systemStatus?.ram_used_gb?.toFixed(1) || 0} GB`
+            `Available: ${known(systemStatus?.ram_available_gb, 'GB')}`,
+            `Used: ${known(systemStatus?.ram_used_gb, 'GB')}`
           ]}
         />
         <HardwareCard
           title="Storage"
           icon={HardDrive}
-          value={hardware?.disk_type || 'Unknown'}
+          value={diskLabel(hardware?.disk_type)}
           details={[
-            `Speed: ${hardware?.disk_speed_mb_s?.toFixed(0) || 0} MB/s`,
-            `Free: ${systemStatus?.disk_free_gb?.toFixed(0) || 0} GB`
+            `Speed: ${known(hardware?.disk_speed_mb_s, 'MB/s', 0)}`,
+            // Free space comes from the live status call, not the profile: the
+            // profile is captured once at startup.
+            `Free: ${known(systemStatus?.disk_free_gb, 'GB', 0)}`
           ]}
         />
         <HardwareCard
           title="GPU"
           icon={Gpu}
-          value={hardware?.gpu_name || 'None'}
+          value={hardware?.gpu_name || 'Not detected'}
           details={[
-            hardware?.gpu_vram_gb ? `VRAM: ${hardware.gpu_vram_gb} GB` : 'No GPU detected'
+            !hardware?.gpu_name
+              ? 'No GPU detected'
+              : hardware?.gpu_vram_gb
+                ? `VRAM: ${hardware.gpu_vram_gb} GB`
+                : 'VRAM: Unavailable'
           ]}
         />
       </div>

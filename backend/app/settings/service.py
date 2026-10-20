@@ -1,5 +1,4 @@
 import bcrypt
-import json
 import logging
 from typing import Optional
 from .database import SettingsDatabase
@@ -121,8 +120,17 @@ class SettingsService:
         security = self.get_security()
         if not security.get("require_password"):
             return True
-        stored_hash = security.get("password_hash", "").encode()
-        return bcrypt.checkpw(password.encode(), stored_hash)
+        # password_hash is Optional[str]: PUT /settings/security can enable
+        # require_password without ever setting one. Absent / empty / malformed
+        # hashes fail closed (no valid password) instead of raising, which used
+        # to surface as an HTTP 500 from /settings/security/verify-password.
+        stored_hash = security.get("password_hash") or ""
+        if not stored_hash:
+            return False
+        try:
+            return bcrypt.checkpw(password.encode(), stored_hash.encode())
+        except ValueError:
+            return False
 
     # ── Parental Controls ──
 
@@ -186,10 +194,21 @@ class SettingsService:
     def get_active_agent(self) -> Optional[dict]:
         return self.db.get_active_agent()
 
+    def agent_name_taken(self, name: str, exclude_id: Optional[str] = None) -> bool:
+        return self.db.agent_name_taken(name, exclude_id)
+
     def get_system_prompt(self) -> str:
         """Build the full system prompt from personalization + active agent."""
+        return self.build_system_prompt(self.get_active_agent())
+
+    def build_system_prompt(self, active_agent: Optional[dict]) -> str:
+        """Personalization + one specific agent's role instructions.
+
+        ``active_agent`` is resolved per request (the chat agent selector)
+        rather than read from the global is_active flag, so two conversations
+        with different agents never share a system prompt.
+        """
         personalization = self.get_personalization()
-        active_agent = self.get_active_agent()
 
         # Parental controls: ignore user custom instructions & persona fields
         # while the lock is on (kids can't re-persona the assistant).
@@ -254,8 +273,14 @@ class SettingsService:
 
         # Active agent
         if active_agent and active_agent.get("enabled"):
-            parts.append(f"\n--- Agent Role: {active_agent['name']} ---")
+            title = active_agent.get("job_title") or ""
+            header = f"\n--- Agent Role: {active_agent['name']}"
+            header += f" ({title}) ---" if title else " ---"
+            parts.append(header)
             parts.append(active_agent.get("system_instruction", ""))
+            responsibilities = active_agent.get("responsibilities") or ""
+            if responsibilities:
+                parts.append(f"Responsibilities and objectives:\n{responsibilities}")
 
         return "\n".join(parts)
 

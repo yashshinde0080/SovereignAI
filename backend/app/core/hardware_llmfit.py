@@ -23,23 +23,36 @@ def detect_via_llmfit() -> Dict[str, Any]:
         from llmfit.hardware import probe_hardware
 
         hw = probe_hardware()
+
+        def field(name: str, fallback):
+            # `or`, not just the getattr default: llmfit sets several of these to
+            # None on a machine it cannot classify, and an attribute that exists
+            # but is None would otherwise reach HardwareProfile and make
+            # /v1/system/hardware raise a ValidationError.
+            return getattr(hw, name, None) or fallback
+
+        features = (getattr(hw, "cpu_features", "") or "").lower()
         profile = {
-            "cpu_name": getattr(hw, "cpu_name", platform.processor() or "Unknown CPU"),
-            "cpu_cores": getattr(hw, "cpu_cores", psutil.cpu_count(logical=False) or 1),
-            "cpu_threads": getattr(hw, "cpu_threads", psutil.cpu_count(logical=True) or 1),
-            "has_avx2": "avx2" in (getattr(hw, "cpu_features", "") or "").lower(),
-            "has_avx512": "avx512" in (getattr(hw, "cpu_features", "") or "").lower(),
-            "ram_total_gb": getattr(hw, "ram_total_gb", round(psutil.virtual_memory().total / (1024**3), 2)),
-            "gpu_name": getattr(hw, "gpu_name", None),
-            "gpu_vram_gb": getattr(hw, "gpu_vram_gb", None),
-            "disk_type": "SSD" if (getattr(hw, "disk_speed_mb_s", 0) or 0) > 300 else "HDD",
-            "disk_speed_mb_s": getattr(hw, "disk_speed_mb_s", 100.0),
+            "cpu_name": field("cpu_name", platform.processor() or "Unknown CPU"),
+            "cpu_cores": field("cpu_cores", psutil.cpu_count(logical=False) or 1),
+            "cpu_threads": field("cpu_threads", psutil.cpu_count(logical=True) or 1),
+            "has_avx2": "avx2" in features,
+            "has_avx512": "avx512" in features,
+            "ram_total_gb": field("ram_total_gb", round(psutil.virtual_memory().total / (1024**3), 2)),
+            "gpu_name": field("gpu_name", None),
+            "gpu_vram_gb": field("gpu_vram_gb", None),
+            # Never inferred from speed: a fast disk is not proof of an SSD, and
+            # DiskDetector's own probe is the thing that actually knows.
+            "disk_type": field("disk_type", "Unknown"),
+            "disk_speed_mb_s": field("disk_speed_mb_s", 0.0),
             "available_backends": getattr(hw, "available_backends", []),
             "_source": "llmfit",
         }
         return profile
-    except ImportError:
-        # llmfit not installed -- return empty shell; caller can fall back
+    except ImportError as exc:
+        # Expected on most installs: the PyPI `llmfit` package is a CLI wrapper
+        # with no `hardware` module. The legacy detector below covers it.
+        logger.debug("llmfit probe unavailable (%s); falling back to HardwareDetector", exc)
         return {"_source": "unavailable"}
     except Exception as exc:
         logger.warning("llmfit probe failed: %s", exc)

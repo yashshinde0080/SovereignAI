@@ -17,8 +17,7 @@ import type {
   TaskResult,
   WorkspaceSnapshot,
 } from '@/types';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+import { API_BASE } from '@/lib/apiBase';
 
 // API token set in Security settings — enforced by the backend whenever the
 // API is bound beyond localhost. Held in localStorage so every request (incl.
@@ -261,6 +260,11 @@ class ApiClient {
 
   async deleteAgent(agentId: string) {
     return this.request(`/v1/settings/agents/${agentId}`, { method: 'DELETE' });
+  }
+
+  /** Copy an agent's saved configuration under a generated new id/name. */
+  async duplicateAgent(agentId: string) {
+    return this.request(`/v1/settings/agents/${agentId}/duplicate`, { method: 'POST' });
   }
 
   async activateAgent(agentId: string) {

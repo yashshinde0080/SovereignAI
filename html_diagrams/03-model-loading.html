@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Loading Flow — SovereignAI Edge</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Oxanium:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f4f4f9;
+      --color-ink:     #191a2b;
+      --color-muted:   #4a5578;
+      --color-accent:  #3C3489;
+      --font-sans:  'Oxanium', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif', serif;
+      --font-mono:  'Source Code Pro', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Flowchart · SovereignAI Edge</p>
+    <h1>Model Loading Flow</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="03-model-loading-title 03-model-loading-desc">
+        <title id="03-model-loading-title">Model load request decision flow</title>
+        <desc id="03-model-loading-desc">A load request is resolved through registry lookup, split-model and disk-space decisions, then handed to the engine factory which instantiates FullRAM, LayerStream, or fails with insufficient memory.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4a5578"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3C3489"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#12704f"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f4f4f9"/>
+
+        <!-- connectors first -->
+        <line x1="480" y1="104" x2="480" y2="124" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="480" y1="172" x2="480" y2="188" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 584,220 H 644 Q 652,220 652,228 V 244" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 652,292 V 300 Q 652,308 644,308 H 528 Q 520,308 520,316 V 324" fill="none" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <line x1="480" y1="252" x2="480" y2="268" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 584,292 H 608 Q 616,292 616,300 V 372 Q 616,380 608,380 H 532" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="480" y1="316" x2="480" y2="332" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 480,380 V 392 Q 480,400 472,400 H 436 Q 428,400 428,408 V 440 Q 428,448 420,448 H 248 Q 240,448 240,456 V 464" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 480,444 V 420 Q 480,412 488,412 H 704 Q 712,412 712,420 V 464" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="480" y1="492" x2="480" y2="512" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 584,468 H 784 Q 792,468 792,452 V 428" fill="none" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <path d="M 448,516 H 404 Q 396,516 396,508 V 496" fill="none" stroke="#3C3489" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <path d="M 512,516 H 564 Q 572,516 572,508 V 496" fill="none" stroke="#3C3489" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+
+        <!-- arrow labels -->
+        <rect x="492" y="206" width="24" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="504" y="215" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">NO</text>
+        <rect x="620" y="252" width="64" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="652" y="261" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">AWAIT SCAN</text>
+        <rect x="624" y="344" width="32" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="640" y="353" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">YES</text>
+        <rect x="356" y="402" width="64" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="388" y="411" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">AUTO→LS</text>
+        <rect x="560" y="390" width="88" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="604" y="399" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">FULLRAM→BASE</text>
+        <rect x="488" y="430" width="24" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="500" y="439" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">NO</text>
+
+        <!-- nodes -->
+        <!-- start oval -->
+        <rect x="344" y="52" width="272" height="52" rx="20" fill="#f4f4f9"/>
+        <rect x="344" y="52" width="272" height="52" rx="20" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <text x="480" y="74" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Load Request</text>
+        <text x="480" y="90" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">POST /v1/models/load</text>
+
+        <!-- lookup step -->
+        <rect x="340" y="124" width="280" height="48" rx="6" fill="#f4f4f9"/>
+        <rect x="340" y="124" width="280" height="48" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="480" y="144" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Registry + Fuzzy Match</text>
+        <text x="480" y="160" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">_load_lock acquired</text>
+
+        <!-- found diamond -->
+        <path d="M 480,188 L 584,220 L 480,252 L 376,220 Z" fill="#f4f4f9" stroke="#191a2b" stroke-width="1"/>
+        <text x="480" y="224" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">FOUND?</text>
+
+        <!-- await scan -->
+        <rect x="584" y="244" width="136" height="48" rx="6" fill="#f4f4f9"/>
+        <rect x="584" y="244" width="136" height="48" rx="6" fill="rgba(25,26,43,0.02)" stroke="rgba(25,26,43,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="652" y="264" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Await Scan</text>
+        <text x="652" y="280" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">background task</text>
+
+        <!-- split diamond -->
+        <path d="M 480,268 L 584,300 L 480,332 L 376,300 Z" fill="#f4f4f9" stroke="#191a2b" stroke-width="1"/>
+        <text x="480" y="304" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">SPLIT?</text>
+
+        <!-- disk diamond -->
+        <path d="M 480,332 L 584,380 L 480,428 L 376,380 Z" fill="#f4f4f9" stroke="#191a2b" stroke-width="1"/>
+        <text x="480" y="376" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">DISK OK?</text>
+        <text x="480" y="392" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">layerstream only</text>
+
+        <!-- engine factory (focal) -->
+        <rect x="336" y="448" width="288" height="48" rx="6" fill="#f4f4f9"/>
+        <rect x="336" y="448" width="288" height="48" rx="6" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1.2"/>
+        <text x="480" y="468" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">EngineFactory</text>
+        <text x="480" y="484" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">suggest_mode() · TaskResolver</text>
+
+        <!-- FullRAM outcome -->
+        <rect x="260" y="516" width="136" height="44" rx="6" fill="#f4f4f9"/>
+        <rect x="260" y="516" width="136" height="44" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="328" y="534" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">FullRAM</text>
+        <text x="328" y="550" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">engine.load()</text>
+
+        <!-- LayerStream outcome -->
+        <rect x="564" y="516" width="136" height="44" rx="6" fill="#f4f4f9"/>
+        <rect x="564" y="516" width="136" height="44" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="632" y="534" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">LayerStream</text>
+        <text x="632" y="550" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">engine.load()</text>
+
+        <!-- insufficient outcome -->
+        <rect x="744" y="388" width="96" height="40" rx="6" fill="#f4f4f9"/>
+        <rect x="744" y="388" width="96" height="40" rx="6" fill="rgba(25,26,43,0.02)" stroke="rgba(25,26,43,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="792" y="404" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Error</text>
+        <text x="792" y="420" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">insufficient</text>
+
+        <!-- callout -->
+        <text x="72" y="452" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">Non-generative tasks never</text>
+        <text x="72" y="470" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">take LayerStream — they</text>
+        <text x="72" y="488" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">force FullRAM.</text>
+
+        <!-- legend -->
+        <line x1="30" y1="560" x2="930" y2="560" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <text x="30" y="584" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
+        <rect x="104" y="576" width="18" height="10" rx="5" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <text x="128" y="585" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">START / END</text>
+        <rect x="228" y="576" width="18" height="10" rx="2" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="252" y="585" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">STEP</text>
+        <path d="M 306,581 L 316,576 L 326,581 L 316,586 Z" fill="#f4f4f9" stroke="#191a2b" stroke-width="1"/>
+        <text x="332" y="585" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">DECISION</text>
+        <rect x="408" y="576" width="18" height="10" rx="2" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1"/>
+        <text x="432" y="585" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">FOCAL DECISION</text>
+        <line x1="540" y1="581" x2="568" y2="581" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <text x="574" y="585" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">RETRY / FAILURE</text>
+        <text x="700" y="585" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">ONE ACTIVE LOAD AT A TIME (_load_lock)</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

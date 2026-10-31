@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Layer-by-Layer Execution — SovereignAI Edge</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Oxanium:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f4f4f9;
+      --color-ink:     #191a2b;
+      --color-muted:   #4a5578;
+      --color-accent:  #3C3489;
+      --font-sans:  'Oxanium', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif', serif;
+      --font-mono:  'Source Code Pro', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · SovereignAI Edge</p>
+    <h1>Layer-by-Layer Execution</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="05-layer-by-layer-title 05-layer-by-layer-desc">
+        <title id="05-layer-by-layer-title">LayerStream per-token forward pass with one layer resident on the device</title>
+        <desc id="05-layer-by-layer-desc">Disk weights flow through the host LayerWeightLoader into the compute spine embed, layer i, norm+lm_head, logits, sampler; only one transformer layer is on the device at a time, prefetched one ahead and offloaded behind, with the KV cache read and written by layer i.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4a5578"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3C3489"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#12704f"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f4f4f9"/>
+
+        <!-- device zone boundary (drawn first) -->
+        <rect x="222" y="262" width="212" height="132" rx="8" fill="rgba(25,26,43,0.02)" stroke="rgba(60,52,137,0.50)" stroke-width="1" stroke-dasharray="4,4"/>
+        <text x="234" y="278" fill="#5a6580" font-size="8" font-weight="500" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.14em">COMPUTE DEVICE · 1 LAYER RESIDENT</text>
+
+        <!-- connectors (drawn before nodes) -->
+        <line x1="150" y1="166" x2="150" y2="300" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="325" y1="166" x2="325" y2="300" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="345" y1="300" x2="345" y2="166" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <line x1="200" y1="328" x2="240" y2="328" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="410" y1="328" x2="450" y2="328" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="580" y1="328" x2="620" y2="328" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="720" y1="328" x2="760" y2="328" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="305" y1="356" x2="305" y2="440" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+
+        <!-- arrow labels (masked) -->
+        <g>
+          <rect x="110" y="222" width="80" height="14" fill="#f4f4f9"/>
+          <text x="150" y="232" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">EMBED · PINNED</text>
+        </g>
+        <g>
+          <rect x="256" y="196" width="62" height="14" fill="#f4f4f9"/>
+          <text x="318" y="206" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="end" letter-spacing="0.08em">DEQUANT i</text>
+        </g>
+        <g>
+          <rect x="352" y="248" width="70" height="14" fill="#f4f4f9"/>
+          <text x="358" y="258" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="start" letter-spacing="0.08em">OFFLOAD i</text>
+        </g>
+
+        <!-- DISK store -->
+        <rect x="90" y="110" width="120" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="90" y="110" width="120" height="56" rx="6" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <rect x="98" y="118" width="34" height="12" rx="2" fill="rgba(25,26,43,0.10)"/>
+        <text x="115" y="127" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">DISK</text>
+        <text x="150" y="146" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">offload_cache</text>
+        <text x="150" y="159" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">layer_0 … layer_N</text>
+
+        <!-- LOADER (host) -->
+        <rect x="240" y="110" width="170" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="240" y="110" width="170" height="56" rx="6" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <rect x="248" y="118" width="34" height="12" rx="2" fill="rgba(25,26,43,0.10)"/>
+        <text x="265" y="127" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">HOST</text>
+        <text x="325" y="146" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">LayerWeightLoader</text>
+        <text x="325" y="159" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">prefetch=3 · LRU budget</text>
+
+        <!-- EMBED -->
+        <rect x="90" y="300" width="110" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="90" y="300" width="110" height="56" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="145" y="326" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Embed</text>
+        <text x="145" y="340" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">token + position</text>
+
+        <!-- LAYER i (focal) -->
+        <rect x="240" y="300" width="170" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="240" y="300" width="170" height="56" rx="6" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1.4"/>
+        <text x="325" y="326" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Layer i · forward</text>
+        <text x="325" y="340" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">attention + KV</text>
+
+        <!-- NORM + LM_HEAD -->
+        <rect x="450" y="300" width="130" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="450" y="300" width="130" height="56" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="515" y="326" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Norm · lm_head</text>
+        <text x="515" y="340" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">pinned</text>
+
+        <!-- LOGITS -->
+        <rect x="620" y="300" width="100" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="620" y="300" width="100" height="56" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="670" y="326" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Logits</text>
+        <text x="670" y="340" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">last pos</text>
+
+        <!-- SAMPLER -->
+        <rect x="760" y="300" width="130" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="760" y="300" width="130" height="56" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="825" y="326" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Sampler</text>
+        <text x="825" y="340" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">top-k · top-p</text>
+
+        <!-- KV CACHE store -->
+        <rect x="240" y="440" width="170" height="50" rx="6" fill="#f4f4f9"/>
+        <rect x="240" y="440" width="170" height="50" rx="6" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <text x="325" y="463" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">KV / StatefulCache</text>
+        <text x="325" y="478" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">attention state</text>
+
+        <!-- callout -->
+        <text x="650" y="120" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">One layer resident at a time.</text>
+        <text x="650" y="138" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">Prefetch i+1 ahead, offload</text>
+        <text x="650" y="156" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">i behind — I/O is ~9% of wall.</text>
+
+        <text x="620" y="470" fill="#5a6580" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">prefill: full causal mask · decode: +past_length cols</text>
+
+        <!-- legend -->
+        <line x1="40" y1="536" x2="920" y2="536" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <rect x="40" y="548" width="16" height="10" rx="2" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1"/>
+        <text x="62" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">RESIDENT LAYER</text>
+        <rect x="168" y="548" width="16" height="10" rx="2" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <text x="190" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">HOST CACHE</text>
+        <rect x="288" y="548" width="16" height="10" rx="2" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <text x="310" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">DISK / STATE</text>
+        <line x1="404" y1="553" x2="436" y2="553" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="442" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">WEIGHT / TOKEN FLOW</text>
+        <line x1="588" y1="553" x2="620" y2="553" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <text x="626" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">OFFLOAD (PASSIVE)</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Downloading — SovereignAI Edge</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Oxanium:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f4f4f9;
+      --color-ink:     #191a2b;
+      --color-muted:   #4a5578;
+      --color-accent:  #3C3489;
+      --font-sans:  'Oxanium', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif', serif;
+      --font-mono:  'Source Code Pro', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Sequence · SovereignAI Edge</p>
+    <h1>Model Downloading</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="07-model-downloading-title 07-model-downloading-desc">
+        <title id="07-model-downloading-title">Client → ModelManager → HuggingFaceProvider → HF Hub download sequence</title>
+        <desc id="07-model-downloading-desc">A download request passes from the client to ModelManager, which resolves model info and streams quantized files from the HuggingFace hub through the provider, resuming partial downloads and writing metadata back to the registry.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4a5578"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3C3489"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#12704f"/></marker>
+          <marker id="arrow-open" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto"><polyline points="0 0, 9 3.5, 0 7" fill="none" stroke="#4a5578" stroke-width="1"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f4f4f9"/>
+
+        <!-- lifelines -->
+        <line x1="120" y1="132" x2="120" y2="512" stroke="rgba(25,26,43,0.20)" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="380" y1="132" x2="380" y2="512" stroke="rgba(25,26,43,0.20)" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="640" y1="132" x2="640" y2="512" stroke="rgba(25,26,43,0.20)" stroke-width="1" stroke-dasharray="4,4"/>
+        <line x1="860" y1="132" x2="860" y2="512" stroke="rgba(25,26,43,0.20)" stroke-width="1" stroke-dasharray="4,4"/>
+
+        <!-- actor headers -->
+        <rect x="70" y="96" width="100" height="36" rx="6" fill="#f4f4f9"/>
+        <rect x="70" y="96" width="100" height="36" rx="6" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <text x="120" y="113" fill="#191a2b" font-size="11" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Client</text>
+        <text x="120" y="125" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">UI / CLI</text>
+
+        <rect x="315" y="96" width="130" height="36" rx="6" fill="#f4f4f9"/>
+        <rect x="315" y="96" width="130" height="36" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="380" y="113" fill="#191a2b" font-size="11" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">ModelManager</text>
+        <text x="380" y="125" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">download_model</text>
+
+        <rect x="565" y="96" width="150" height="36" rx="6" fill="#f4f4f9"/>
+        <rect x="565" y="96" width="150" height="36" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="640" y="113" fill="#191a2b" font-size="11" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">HuggingFaceProvider</text>
+        <text x="640" y="125" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">huggingface.py</text>
+
+        <rect x="795" y="96" width="130" height="36" rx="6" fill="#f4f4f9"/>
+        <rect x="795" y="96" width="130" height="36" rx="6" fill="rgba(25,26,43,0.03)" stroke="rgba(25,26,43,0.30)" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="860" y="113" fill="#191a2b" font-size="11" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">HF Hub</text>
+        <text x="860" y="125" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">external · gguf</text>
+
+        <!-- activation bars -->
+        <rect x="377" y="150" width="6" height="182" fill="rgba(25,26,43,0.06)" stroke="#4a5578" stroke-width="0.8"/>
+        <rect x="637" y="188" width="6" height="240" fill="rgba(25,26,43,0.06)" stroke="#4a5578" stroke-width="0.8"/>
+
+        <!-- opt RESUME frame -->
+        <rect x="600" y="300" width="300" height="92" rx="6" fill="none" stroke="rgba(25,26,43,0.30)" stroke-width="1"/>
+        <path d="M600,300 h52 l12,14 h-64 z" fill="rgba(25,26,43,0.06)" stroke="rgba(25,26,43,0.30)" stroke-width="1"/>
+        <text x="606" y="311" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.08em">OPT · RESUME</text>
+
+        <!-- messages -->
+        <line x1="123" y1="158" x2="374" y2="158" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <g><rect x="176" y="144" width="150" height="12" fill="#f4f4f9"/><text x="248" y="153" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">POST /V1/MODELS/DOWNLOAD</text></g>
+
+        <line x1="383" y1="196" x2="634" y2="196" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <g><rect x="440" y="182" width="140" height="12" fill="#f4f4f9"/><text x="510" y="191" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">GET_MODEL_INFO</text></g>
+
+        <line x1="643" y1="232" x2="857" y2="232" stroke="#12704f" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <g><rect x="676" y="218" width="148" height="12" fill="#f4f4f9"/><text x="750" y="227" fill="#12704f" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">RESOLVE · LIST FILES</text></g>
+
+        <line x1="857" y1="266" x2="646" y2="266" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <g><rect x="690" y="252" width="120" height="12" fill="#f4f4f9"/><text x="750" y="261" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">REPO · QUANTS</text></g>
+
+        <line x1="634" y1="316" x2="857" y2="316" stroke="#12704f" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <g><rect x="684" y="302" width="130" height="12" fill="#f4f4f9"/><text x="749" y="311" fill="#12704f" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">HTTP GET · RANGE</text></g>
+
+        <line x1="857" y1="376" x2="646" y2="376" stroke="#12704f" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow-link)"/>
+        <g><rect x="690" y="362" width="120" height="12" fill="#f4f4f9"/><text x="750" y="371" fill="#12704f" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">8MB CHUNKS · ×8</text></g>
+
+        <!-- DOWNLOAD request MM->provider -->
+        <line x1="383" y1="416" x2="634" y2="416" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <g><rect x="420" y="402" width="180" height="12" fill="#f4f4f9"/><text x="510" y="411" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">DOWNLOAD(Q4_K_M) · META</text></g>
+
+        <!-- self message verify -->
+        <path d="M643,452 h44 v20 h-40" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <g><rect x="660" y="460" width="150" height="12" fill="#f4f4f9"/><text x="735" y="469" fill="#4a5578" font-size="8.5" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">SHA256 · RENAME .PART</text></g>
+
+        <!-- metadata.json + registry note -->
+        <rect x="330" y="482" width="140" height="30" rx="6" fill="#f4f4f9"/>
+        <rect x="330" y="482" width="140" height="30" rx="6" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <text x="400" y="501" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">registry.add_model()</text>
+        <line x1="640" y1="497" x2="470" y2="497" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- callout -->
+        <text x="60" y="290" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">Resume-safe: a .part file</text>
+        <text x="60" y="308" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">continues via Range GET,</text>
+        <text x="60" y="326" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">verified by SHA256.</text>
+
+        <!-- legend -->
+        <line x1="40" y1="536" x2="920" y2="536" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <line x1="40" y1="553" x2="72" y2="553" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="78" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">CALL</text>
+        <line x1="140" y1="553" x2="172" y2="553" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <text x="178" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">RETURN</text>
+        <line x1="258" y1="553" x2="290" y2="553" stroke="#12704f" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="296" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">EXTERNAL HTTP</text>
+        <rect x="410" y="549" width="20" height="9" fill="rgba(25,26,43,0.06)" stroke="#4a5578" stroke-width="0.8"/>
+        <text x="436" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.10em">ACTIVATION</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

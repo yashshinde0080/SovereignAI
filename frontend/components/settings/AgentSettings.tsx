@@ -158,7 +158,10 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
       }
       try {
         const res = await api.listCloudModels();
-        for (const m of res.models || []) options.push({ value: m.id, label: `${m.name} (cloud)` });
+        for (const m of res.models || []) {
+          // "<provider_id>/<model_id>" — what load_model/cloud resolves.
+          options.push({ value: `${m.provider_id}/${m.id}`, label: `${m.name} (cloud)` });
+        }
       } catch {
         // cloud providers not configured
       }

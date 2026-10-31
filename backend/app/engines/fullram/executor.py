@@ -8,7 +8,10 @@ from typing import Dict, Any, AsyncGenerator, Optional
 logger = logging.getLogger(__name__)
 
 import torch
-from transformers import AutoProcessor, AutoTokenizer, TextIteratorStreamer, AutoImageProcessor
+from transformers import (
+    AutoProcessor, AutoTokenizer,
+    TextIteratorStreamer, AutoImageProcessor, GenerationConfig,
+)
 from threading import Thread
 import psutil
 
@@ -125,6 +128,24 @@ class FullRAMEngine(BaseEngine):
                      self.tokenizer = AutoTokenizer.from_pretrained(tok_dir, **tok_kwargs)
                      if not self.tokenizer.pad_token:
                          self.tokenizer.pad_token = self.tokenizer.eos_token
+                     # GGUF tokenizers often carry a bogus EOS id (or none), so
+                     # generation never stops — the "hii ... hii ..." loop. Force
+                     # a real stop set: tokenizer eos + the ChatML end marker.
+                     try:
+                         _ids = []
+                         if self.tokenizer.eos_token_id is not None:
+                             _ids.append(int(self.tokenizer.eos_token_id))
+                         _imend = self.tokenizer.convert_tokens_to_ids(
+                             "<" + "|im_end" + "|>")
+                         if isinstance(_imend, int) and _imend >= 0:
+                             _ids.append(_imend)
+                         if _ids:
+                             _cfg = GenerationConfig.from_model_config(self.model.config)
+                             _cfg.eos_token_id = sorted(set(_ids))
+                             _cfg.pad_token_id = self.tokenizer.pad_token_id
+                             self.model.generation_config = _cfg
+                     except Exception as ge:
+                         logger.debug("generation_config eos fixup skipped: %s", ge)
                 except Exception as e:
                      logger.warning("Failed loading tokenizer from repo natively: %s", e)
                      # Model loaded but tokenizer didn't — generate() will fail
@@ -330,15 +351,22 @@ class FullRAMEngine(BaseEngine):
              max_tokens = kwargs.get("max_tokens", 512)
              temperature = kwargs.get("temperature", 0.7)
              top_p = kwargs.get("top_p", 0.9)
-             
+
              gen_kwargs = {
                  "max_new_tokens": max_tokens,
                  "temperature": temperature if temperature > 0 else 1.0,
                  "do_sample": temperature > 0,
-                 "top_p": top_p
+                 "top_p": top_p,
+                 "repetition_penalty": kwargs.get("repetition_penalty", 1.1)
              }
              if self.tokenizer and self.tokenizer.eos_token_id is not None:
-                  gen_kwargs["pad_token_id"] = self.tokenizer.eos_token_id
+                 # Load-time generation_config may hold a wider stop set
+                 # (tokenizer eos + im_end); only fall back to the bare
+                 # tokenizer eos when it has none.
+                 gc_eos = getattr(getattr(self.model, "generation_config", None), "eos_token_id", None)
+                 if not gc_eos:
+                     gen_kwargs["eos_token_id"] = self.tokenizer.eos_token_id
+                 gen_kwargs["pad_token_id"] = self.tokenizer.eos_token_id
              processed_inputs["generation_kwargs"] = gen_kwargs
 
         # 2. Route Execution via TaskRouter for unified logic
@@ -459,22 +487,43 @@ class FullRAMEngine(BaseEngine):
             "max_new_tokens": max_tokens,
             "temperature": temperature if temperature > 0 else 1.0,
             "do_sample": temperature > 0,
-            "top_p": top_p
+            "top_p": top_p,
+            "repetition_penalty": kwargs.get("repetition_penalty", 1.1)
         }
 
-        
         if self.tokenizer and self.tokenizer.eos_token_id is not None:
-             gen_kwargs["pad_token_id"] = self.tokenizer.eos_token_id
+            # See generate(): preserve the load-time stop set when present.
+            gc_eos = getattr(getattr(self.model, "generation_config", None), "eos_token_id", None)
+            if not gc_eos:
+                gen_kwargs["eos_token_id"] = self.tokenizer.eos_token_id
+            gen_kwargs["pad_token_id"] = self.tokenizer.eos_token_id
 
-        # 3. Run generation in thread
-        thread = Thread(target=self.model.generate, kwargs=gen_kwargs)
+        # 3. Run generation in a thread that ALWAYS closes the streamer.
+        # An unclosed TextIteratorStreamer blocked the token loop forever on
+        # any generate() error — the SSE never reached [DONE] and the UI sat
+        # on "Stop"/typing dots.
+        gen_error = []
+
+        def _run():
+            try:
+                self.model.generate(**gen_kwargs)
+            except Exception as e:
+                gen_error.append(e)
+                streamer.end()
+
+        thread = Thread(target=_run, daemon=True)
         thread.start()
 
         # 4. Yield tokens
         for new_text in streamer:
             yield {"token": new_text, "finish_reason": None}
-            
-        yield {"token": "", "finish_reason": "stop"}
+
+        thread.join(timeout=5)
+        if gen_error:
+            logger.error("FullRAM streamed generation failed: %s", gen_error[0])
+            yield {"token": "", "finish_reason": "error"}
+        else:
+            yield {"token": "", "finish_reason": "stop"}
 
     def get_memory_usage(self) -> Dict[str, Any]:
         process = psutil.Process()

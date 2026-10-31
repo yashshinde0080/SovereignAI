@@ -334,16 +334,77 @@ class ModelManager:
             
         return None
     
+    async def _resolve_cloud_model_id(self, model_id: str) -> str:
+        """Normalize a cloud reference to ``<provider_id>/<model_id>``.
+
+        Provider-qualified ids resolve locally (no network). A bare
+        provider-side id (e.g. ``oc/big-pickle``, ``nvidia/nemotron-...``) is
+        matched against each enabled provider's live model list, because only
+        the provider — not the id's own prefix — knows whether it offers it.
+        """
+        from app.engines.cloud import registry as cloud_registry, providers
+
+        registry = cloud_registry.CloudProviderRegistry()
+        prefix, sep, rest = model_id.partition("/")
+        if sep and rest and registry.get_provider(prefix) is not None:
+            return model_id
+
+        enabled = registry.get_enabled_providers()
+        if not enabled:
+            raise ValueError(
+                "No cloud providers configured. Add one in Settings → Cloud, "
+                f"then load '<provider_id>/<model_id>' (got: {model_id})."
+            )
+
+        import aiohttp
+
+        matches: List[str] = []
+        unreachable: List[str] = []
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+            for provider in enabled:
+                try:
+                    offered = {m.get("id") for m in await providers.fetch_models(provider, session)}
+                except Exception as e:  # one provider down must not block the others
+                    unreachable.append(provider["name"])
+                    logger.warning("LOAD: %s model list unavailable: %s", provider["name"], e)
+                    continue
+                if model_id in offered:
+                    matches.append(f"{provider['id']}/{model_id}")
+
+        if len(matches) == 1:
+            logger.info("LOAD: Resolved cloud model %s to %s", model_id, matches[0])
+            return matches[0]
+        if matches:
+            raise ValueError(
+                f"Cloud model '{model_id}' is offered by more than one provider "
+                f"({', '.join(matches)}); load it with its provider-qualified id."
+            )
+        raise ValueError(
+            f"Cloud model '{model_id}' not found in any configured provider"
+            + (f" ({len(unreachable)} unreachable: {', '.join(unreachable)})" if unreachable else "")
+            + ". Check the model is still offered, or pick one from the online model list."
+        )
+
     async def load_model(self, model_id: str, mode: str = "auto") -> Dict[str, Any]:
         """Unified load logic with hardware check"""
 
         logger.info("LOAD: Request for model %s (mode=%s)", model_id, mode)
+
+        # A provider-qualified id is unambiguously a cloud model, whatever mode
+        # the caller asked for — otherwise it would 404 against the local
+        # registry. Local registry check is local, no network.
+        if mode == "auto" and "/" in model_id:
+            from app.engines.cloud import registry as cloud_registry
+
+            if cloud_registry.CloudProviderRegistry().get_provider(model_id.split("/", 1)[0]):
+                mode = "cloud"
 
         # Cloud models live in the provider registry, not on disk — skip the
         # local registry/scan entirely and let the factory resolve the provider.
         if mode == "cloud":
             if not self.app:
                 raise RuntimeError("ModelManager not linked to FastAPI application state")
+            model_id = await self._resolve_cloud_model_id(model_id)
             async with self._load_lock:
                 return await self._load_model_locked(
                     model_id, "cloud", {"id": model_id, "path": model_id}, model_id, []

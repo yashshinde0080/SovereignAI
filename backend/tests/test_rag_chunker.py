@@ -117,9 +117,18 @@ def test_overlong_segment_advances_by_a_stride_not_one_character():
 
     starts = [c.start_char for c in chunks]
     assert starts == sorted(starts)
-    # Each window advances by at least the stride (chunk_size - overlap).
+    # Each window advances by ~the stride (chunk_size - overlap); _force_split
+    # trims the window end back to a word boundary, so allow that slack.
     stride = 512 - 64 * 3
-    assert all(b - a >= stride for a, b in zip(starts, starts[1:])), starts
+    assert all(b - a >= stride - 64 for a, b in zip(starts, starts[1:])), starts
+
+
+def test_pdf_page_markers_survive_chunking(chunker):
+    """[Page N] markers from PDF extraction must stay in chunk content."""
+    text = "[Page 1]\nThe boiler runs at 3 bar. It needs water.\n\n[Page 2]\nThe turbine spins at 3000 rpm. Oil keeps it cool."
+    chunks = chunker.chunk_text(text, "d1")
+    joined = " ".join(c.content for c in chunks)
+    assert "[Page 1]" in joined and "[Page 2]" in joined
 
 
 def test_chunk_ids_sequential_after_split(chunker):

@@ -19,6 +19,12 @@
       "skillPath": "skills/code-review/SKILL.md",
       "computedHash": "e5957fb21402cc25f6628ee2f70b4a205c0573de9821f0367f7a6e178291b1b3"
     },
+    "diagram-design": {
+      "source": "cathrynlavery/diagram-design",
+      "sourceType": "github",
+      "skillPath": "skills/diagram-design/SKILL.md",
+      "computedHash": "23a05e848a7bf4498f374607aedc8422a9d65ba252ffe201f278b5c8e4990a74"
+    },
     "impeccable": {
       "source": "pbakaus/impeccable",
       "sourceType": "github",

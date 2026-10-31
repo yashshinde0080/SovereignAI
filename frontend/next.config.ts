@@ -5,6 +5,9 @@ const nextConfig = {
     unoptimized: true,
   },
   trailingSlash: true,
+  experimental: {
+    agentUpgrade: 'security',
+  },
 };
 
 module.exports = nextConfig;

@@ -1,3 +1,12 @@
+## [2026-10-31] docs+feat | Reports, HTML architecture diagrams, model/agent UI polish, vectorstore + RAG + chat hardening
+- Docs: new `.diagram-design/` dir, `CODE_REVIEW_REPORT.md` (+173), `project_report.md` (+645), `skills-lock.json` update
+- Docs: new `html_diagrams/` with 11 architecture HTML diagrams (architecture overview, DB system, chat API flow, model loading, engine system, layer-by-layer, weight splitting, model downloading, settings system, hardware-memory) + `BUILD_BRIEF.md` (+70)
+- Docs: `Diagrams/sovereignai-architecture.html` (+241)
+- Frontend: `CloudModelList.tsx` (+50/-11), `ModelTable.tsx` (cosmetic), `AgentSettings.tsx` (+3), `frontend/types/index.ts` (+2)
+- Backend: `chat.py` (+70), `rag.py` (+24), `fullram/executor.py` (+71), `model_manager.py` (+61), vectorstore additions (`store.py` +62, `retriever.py` +34, `embedding_pipeline.py` +4, `config.py` +2), `pdf_ingestion.py` (+7)
+- Backend tests: new `test_cloud_model_id.py` (+100), `test_rag_retrieval.py` (+32), updated `test_rag_chunker.py` (+13)
+- Commits: a3a433d8, e0438d6c, fec65335, 80180433, 0902d2c6
+
 ## [2026-10-20]
 - No git commits; working tree clean
 

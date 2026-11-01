@@ -14,10 +14,10 @@
       "computedHash": "1c665af094b2a307a8ab149a4b6ee73097dac24a4fa533821d7cc2e7ede7b9cf"
     },
     "code-review": {
-      "source": "coderabbitai/skills",
+      "source": "mattpocock/skills",
       "sourceType": "github",
-      "skillPath": "skills/code-review/SKILL.md",
-      "computedHash": "e5957fb21402cc25f6628ee2f70b4a205c0573de9821f0367f7a6e178291b1b3"
+      "skillPath": "skills/engineering/code-review/SKILL.md",
+      "computedHash": "c2745e2be960b82b9fddd82cf45265f42431e7b045c403f297b25f0f311e9210"
     },
     "diagram-design": {
       "source": "cathrynlavery/diagram-design",
@@ -42,6 +42,12 @@
       "sourceType": "github",
       "skillPath": "skills/personal/obsidian-vault/SKILL.md",
       "computedHash": "5c08eda96fd76a71793c0a8cb91bef41d518586654a14af4f2edf8f8fd0f96a7"
+    },
+    "tdd": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/tdd/SKILL.md",
+      "computedHash": "daf55026f456af104a72fa43247f7bcec89e5127316dc5b1b8d675d6a9d8ce94"
     }
   }
 }

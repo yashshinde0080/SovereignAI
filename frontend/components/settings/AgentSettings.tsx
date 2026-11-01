@@ -79,6 +79,10 @@ interface AgentForm {
   is_active: boolean;
 }
 
+// Radix forbids an empty-string SelectItem value, so "no preference" needs a
+// sentinel; the backend stores an empty preferred_model for it.
+const NONE_MODEL = '__none';
+
 const EMPTY_FORM: AgentForm = {
   id: '',
   name: '',
@@ -139,7 +143,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
   const [form, setForm] = useState<AgentForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [modelOptions, setModelOptions] = useState<{ value: string; label: string }[]>([
-    { value: '', label: 'Use the loaded model' },
+    { value: NONE_MODEL, label: 'Use the loaded model' },
   ]);
   const { toast } = useToast();
 
@@ -149,7 +153,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const options = [{ value: '', label: 'Use the loaded model' }];
+      const options = [{ value: NONE_MODEL, label: 'Use the loaded model' }];
       try {
         const res = await api.listModels();
         for (const m of res.models || []) options.push({ value: m.name, label: m.name });
@@ -332,7 +336,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
 
   const agentFormDialog = (isEdit: boolean, open: boolean, onClose: () => void) => (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-h-[85vh] max-w-[680px] overflow-y-auto bg-background text-foreground">
+      <DialogContent className="max-h-[85vh] max-w-[min(680px,95vw)] sm:max-w-[min(680px,95vw)] overflow-y-auto overscroll-contain bg-background text-foreground">
         <DialogHeader className="pr-8">
           <DialogTitle>{isEdit ? 'Edit Agent' : 'Create New Agent'}</DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
@@ -446,15 +450,17 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
           <div className="space-y-2">
             <Label className="text-sm text-foreground">Preferred Model</Label>
             <Select
-              value={form.preferred_model}
-              onValueChange={(v) => updateForm('preferred_model', v)}
+            value={form.preferred_model || NONE_MODEL}
+            onValueChange={(v) =>
+            updateForm('preferred_model', v === NONE_MODEL ? '' : v)
+            }
             >
               <SelectTrigger className="w-full bg-card border-input">
                 <SelectValue placeholder="Use the loaded model" />
               </SelectTrigger>
               <SelectContent>
                 {modelChoices.map((m) => (
-                  <SelectItem key={m.value || '__none'} value={m.value}>
+                  <SelectItem key={m.value} value={m.value}>
                     {m.label}
                   </SelectItem>
                 ))}
@@ -517,7 +523,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
             </div>
             <div className="space-y-2">
               {AGENT_TOOLS.map((tool) => (
-                <div key={tool.id} className="flex items-center justify-between gap-3">
+                <div key={tool.id} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm text-foreground">{tool.label}</span>
@@ -545,7 +551,7 @@ export function AgentSettings({ agents, onRefresh }: AgentSettingsProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-md border border-border bg-muted/40 px-3 py-2">
             <div>
               <Label className="text-sm text-foreground">Enabled</Label>
               <p className="text-xs text-muted-foreground">

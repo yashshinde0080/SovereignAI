@@ -39,7 +39,7 @@ export function ProjectSettings({ data, onSave }: ProjectSettingsProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 [&>div+div]:border-t [&>div+div]:border-border/60 [&>div+div]:pt-7">
       {/* Project Info */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">

@@ -47,7 +47,7 @@ export function DataControlsSettings({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 [&>div+div]:border-t [&>div+div]:border-border/60 [&>div+div]:pt-7">
       {/* Storage */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
@@ -74,7 +74,7 @@ export function DataControlsSettings({
             desc: "Delete all session data when app closes",
           },
         ].map(({ key, label, desc }) => (
-          <div key={key} className="flex items-center justify-between">
+          <div key={key} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
             <div>
               <Label className="text-sm text-foreground">{label}</Label>
               <p className="text-xs text-muted-foreground">{desc}</p>
@@ -86,7 +86,7 @@ export function DataControlsSettings({
           </div>
         ))}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Data Retention</Label>
             <p className="text-xs text-muted-foreground">
@@ -97,7 +97,7 @@ export function DataControlsSettings({
             value={form.data_retention}
             onValueChange={(v) => update("data_retention", v)}
           >
-            <SelectTrigger className="w-[160px] bg-card border-input">
+            <SelectTrigger className="w-[160px] shrink-0 bg-card border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-input">
@@ -118,7 +118,7 @@ export function DataControlsSettings({
           Privacy
         </h3>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">
               Allow model training
@@ -133,7 +133,7 @@ export function DataControlsSettings({
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Log API requests</Label>
             <p className="text-xs text-muted-foreground">
@@ -153,13 +153,13 @@ export function DataControlsSettings({
           Export
         </h3>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">Export Format</Label>
           <Select
             value={form.export_format}
             onValueChange={(v) => update("export_format", v)}
           >
-            <SelectTrigger className="w-[160px] bg-card border-input">
+            <SelectTrigger className="w-[160px] shrink-0 bg-card border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-input">

@@ -1,3 +1,11 @@
+## [2026-11-01] docs+fix+style | Settings dialog width fix + settings/scroll UX polish + skill sources
+- Docs: appended the 2026-10-31 entry to `Info_docs/log.md`; `skills-lock.json` — `code-review` skill source swapped coderabbitai/skills → mattpocock/skills, new `tdd` skill added (a24004bc)
+- Frontend fix: `SettingsDialog`/`AgentSettings` `DialogContent` widths now also set the `sm:` variant (`sm:max-w-[900px]`, `sm:max-w-[min(680px,95vw)]`) — Tailwind v4 emits arbitrary max-w before the named scale, so the dialog default `sm:max-w-lg` (512px) won the cascade and silently clipped content; guarded by new `frontend/lib/dialogWidth.test.ts` (+29, twMerge regression check) (0fde8667, 9f9a8f72)
+- Frontend settings: `SettingsDialog.tsx` + 8 settings components (+87/-81) — every setting row `flex-wrap` with `gap-x-6 gap-y-3` (controls no longer squish at narrow widths), `shrink-0` on SelectTriggers, group panels get dividers (`[&>div+div]:border-t`), nav items focus-visible rings + bigger tap targets, section swap wrapped in `key={activeSection}` + `.settings-section-enter` fade, AgentSettings preferred-model SelectItem key fix (0fde8667)
+- Frontend scroll: `ui/scroll-area.tsx` — viewport `overscroll-contain` + `scroll-smooth` + `[&>div]:block!`, bars slimmed w-2.5→w-2, thumb restyled `bg-muted-foreground/30` with hover brighten (dcb191e8)
+- Frontend style: `globals.css` (+45/-1) — global thin scrollbars for native scrollers (`scrollbar-width: thin` + webkit pseudo rules), `settings-section-in` keyframes, `prefers-reduced-motion` disables animation + smooth scroll; EOF newline restored (38f02321)
+- Commits: a24004bc, 0fde8667, dcb191e8, 9f9a8f72, 38f02321
+
 ## [2026-10-31] docs+feat | Reports, HTML architecture diagrams, model/agent UI polish, vectorstore + RAG + chat hardening
 - Docs: new `.diagram-design/` dir, `CODE_REVIEW_REPORT.md` (+173), `project_report.md` (+645), `skills-lock.json` update
 - Docs: new `html_diagrams/` with 11 architecture HTML diagrams (architecture overview, DB system, chat API flow, model loading, engine system, layer-by-layer, weight splitting, model downloading, settings system, hardware-memory) + `BUILD_BRIEF.md` (+70)

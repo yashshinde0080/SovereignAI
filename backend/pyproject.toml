@@ -1,6 +1,6 @@
 [project]
 name = "backend"
-version = "1.0.0"
+version = "1.0.1"
 description = "SovereignAI - Privacy-First Local AI Engine"
 authors = [
     { name = "SovereignAI Team", email = "contact@sovereignai.com" }

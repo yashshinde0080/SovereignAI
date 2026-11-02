@@ -90,8 +90,9 @@ def test_health_advertises_identity_for_the_launcher():
 
 
 class _Request:
-    def __init__(self, host):
+    def __init__(self, host, headers=None):
         self.client = type("C", (), {"host": host})()
+        self.headers = headers or {}
 
 
 async def test_shutdown_endpoint_handles_loopback_and_refuses_others():
@@ -104,6 +105,12 @@ async def test_shutdown_endpoint_handles_loopback_and_refuses_others():
         lifecycle._exit_requested.clear()
         with pytest.raises(HTTPException) as exc:
             await shutdown_endpoint(_Request("192.168.1.50"))
+        assert exc.value.status_code == 403
+        assert lifecycle.shutdown_requested() is False
+
+        lifecycle._exit_requested.clear()
+        with pytest.raises(HTTPException) as exc:
+            await shutdown_endpoint(_Request("127.0.0.1", {"origin": "http://evil.example"}))
         assert exc.value.status_code == 403
         assert lifecycle.shutdown_requested() is False
     finally:

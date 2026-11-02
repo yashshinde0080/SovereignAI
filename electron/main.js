@@ -80,6 +80,30 @@ function workspaceDir() {
   return roots.workspaceDir;
 }
 
+// A packaged GUI app has no console: without this mirror, main-process startup
+// logs (including the reason a clean-machine launch failed) are lost entirely.
+const startupLogFile = (() => {
+  try {
+    const dir = path.join(roots.workspaceDir, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    return path.join(dir, 'electron.log');
+  } catch {
+    return null;
+  }
+})();
+if (startupLogFile) {
+  for (const level of ['log', 'warn', 'error']) {
+    const orig = console[level].bind(console);
+    console[level] = (...args) => {
+      try {
+        fs.appendFileSync(startupLogFile, `[${new Date().toISOString()}] ${args.map(String).join(' ')}\n`);
+      } catch {}
+      orig(...args);
+    };
+  }
+  console.log(`--- SovereignAI ${isDev ? '(dev)' : ''} startup, electron ${process.versions.electron}`);
+}
+
 // Read a boolean general setting straight from the settings DB files, before
 // the backend boots (auto_start_backend) or without waiting for it
 // (minimize_to_tray). Zero-dep: values are stored as plain JSON text in the
@@ -304,7 +328,15 @@ async function loadFrontend() {
   if (isDev && process.env.USE_DEV_SERVER === 'true') {
     await mainWindow.loadURL(`http://localhost:${FRONTEND_PORT}`);
   } else {
-    await mainWindow.loadURL('app://-/');
+    try {
+      await mainWindow.loadURL('app://-/');
+    } catch (err) {
+      // Transient first-read failures happen (AV real-time scans locking freshly
+      // extracted files); one retry covers them, a second failure is real.
+      console.error('UI load failed, retrying once:', err.message);
+      await sleep(1500);
+      await mainWindow.loadURL('app://-/');
+    }
   }
   if (isDev) mainWindow.webContents.openDevTools();
 }
@@ -481,7 +513,12 @@ app.whenReady().then(async () => {
 
     bootBackendAndUi(endpoint).catch((err) => {
       console.error('Backend/UI boot failed:', err);
-      dialog.showErrorBox('Startup Error', `Failed to start backend: ${err.message}`);
+      dialog.showErrorBox(
+        'Startup Error',
+        `Startup failed: ${err.message}\n\n` +
+        `The UI and the local engine are separate steps — check which one the ` +
+        `log blames before retrying.\n\nLog:\n${path.join(workspaceDir(), 'logs', 'electron.log')}`
+      );
     });
 
     app.on('activate', () => {

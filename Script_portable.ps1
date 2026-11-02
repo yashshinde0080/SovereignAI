@@ -143,6 +143,7 @@ try {
         Write-Log BUILD "Compiling frontend + backend + Electron (build_windows.ps1)..."
         $buildOk = $true
         $buildErr = ''
+        $script:BuildFailed = $false
         Push-Location $Root
         $prev = $ErrorActionPreference
         $ErrorActionPreference = 'Continue' # native stderr must not terminate; exit code is the contract
@@ -151,7 +152,7 @@ try {
             if ($null -ne $LASTEXITCODE -and $LASTEXITCODE -ne 0) {
                 $buildOk = $false; $buildErr = "build_windows.ps1 exited with code $LASTEXITCODE"
             }
-            if ($buildOk -and -not (Select-String -LiteralPath $buildLog -SimpleMatch 'BUILD STATUS: SUCCESS' -Quiet)) {
+            if ($buildOk -and (Test-Path -LiteralPath $buildLog) -and -not (Select-String -LiteralPath $buildLog -SimpleMatch 'BUILD STATUS: SUCCESS' -Quiet)) {
                 $buildOk = $false; $buildErr = 'build_windows.ps1 reported BUILD STATUS: FAILED'
             }
         } catch {

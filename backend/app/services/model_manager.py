@@ -3,6 +3,7 @@ import os
 import json
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -26,6 +27,32 @@ def _model_size_bytes(model: Dict[str, Any]) -> int:
             pass
     return 0
 
+
+def _unsupported_arch_error(exc: Exception) -> Optional[RuntimeError]:
+    """Checkpoint arch the installed transformers can't read → actionable error.
+
+    ``transformers`` raises a plain ValueError for an unknown ``model_type``;
+    the API maps a RuntimeError containing "not supported" to 422, so re-wrap
+    it here — every load path (/models/load, chat, mode switch, startup model,
+    agent preference) goes through this one place. Returns None for any other
+    failure so callers keep raising unchanged.
+    """
+    msg = str(exc)
+    if "does not recognize this architecture" not in msg:
+        return None
+    found = re.search(r"model type `([^`]+)`", msg)
+    model_type = found.group(1) if found else "unknown"
+    from transformers import __version__ as transformers_version
+    return RuntimeError(
+        f"Model type '{model_type}' is not supported by the installed "
+        f"transformers ({transformers_version}); this checkpoint cannot run "
+        "here. Load a supported text CausalLM (Qwen2/Qwen2.5, Llama, Mistral) "
+        "or a GGUF build of it instead."
+    )
+    # ponytail: string-matched because transformers has no stable exception
+    # class for this; upgrade path = resolve model_type against
+    # transformers' CONFIG_MAPPING during scan and mark the model unsupported
+    # in the registry so the UI never offers it.
 
 def _fuzzy_match_model(models: List[Dict[str, Any]], model_id: str) -> Optional[Dict[str, Any]]:
     """Resolve a model id that wasn't found in the registry directly.
@@ -334,16 +361,77 @@ class ModelManager:
             
         return None
     
+    async def _resolve_cloud_model_id(self, model_id: str) -> str:
+        """Normalize a cloud reference to ``<provider_id>/<model_id>``.
+
+        Provider-qualified ids resolve locally (no network). A bare
+        provider-side id (e.g. ``oc/big-pickle``, ``nvidia/nemotron-...``) is
+        matched against each enabled provider's live model list, because only
+        the provider — not the id's own prefix — knows whether it offers it.
+        """
+        from app.engines.cloud import registry as cloud_registry, providers
+
+        registry = cloud_registry.CloudProviderRegistry()
+        prefix, sep, rest = model_id.partition("/")
+        if sep and rest and registry.get_provider(prefix) is not None:
+            return model_id
+
+        enabled = registry.get_enabled_providers()
+        if not enabled:
+            raise ValueError(
+                "No cloud providers configured. Add one in Settings → Cloud, "
+                f"then load '<provider_id>/<model_id>' (got: {model_id})."
+            )
+
+        import aiohttp
+
+        matches: List[str] = []
+        unreachable: List[str] = []
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
+            for provider in enabled:
+                try:
+                    offered = {m.get("id") for m in await providers.fetch_models(provider, session)}
+                except Exception as e:  # one provider down must not block the others
+                    unreachable.append(provider["name"])
+                    logger.warning("LOAD: %s model list unavailable: %s", provider["name"], e)
+                    continue
+                if model_id in offered:
+                    matches.append(f"{provider['id']}/{model_id}")
+
+        if len(matches) == 1:
+            logger.info("LOAD: Resolved cloud model %s to %s", model_id, matches[0])
+            return matches[0]
+        if matches:
+            raise ValueError(
+                f"Cloud model '{model_id}' is offered by more than one provider "
+                f"({', '.join(matches)}); load it with its provider-qualified id."
+            )
+        raise ValueError(
+            f"Cloud model '{model_id}' not found in any configured provider"
+            + (f" ({len(unreachable)} unreachable: {', '.join(unreachable)})" if unreachable else "")
+            + ". Check the model is still offered, or pick one from the online model list."
+        )
+
     async def load_model(self, model_id: str, mode: str = "auto") -> Dict[str, Any]:
         """Unified load logic with hardware check"""
 
         logger.info("LOAD: Request for model %s (mode=%s)", model_id, mode)
+
+        # A provider-qualified id is unambiguously a cloud model, whatever mode
+        # the caller asked for — otherwise it would 404 against the local
+        # registry. Local registry check is local, no network.
+        if mode == "auto" and "/" in model_id:
+            from app.engines.cloud import registry as cloud_registry
+
+            if cloud_registry.CloudProviderRegistry().get_provider(model_id.split("/", 1)[0]):
+                mode = "cloud"
 
         # Cloud models live in the provider registry, not on disk — skip the
         # local registry/scan entirely and let the factory resolve the provider.
         if mode == "cloud":
             if not self.app:
                 raise RuntimeError("ModelManager not linked to FastAPI application state")
+            model_id = await self._resolve_cloud_model_id(model_id)
             async with self._load_lock:
                 return await self._load_model_locked(
                     model_id, "cloud", {"id": model_id, "path": model_id}, model_id, []
@@ -469,13 +557,13 @@ class ModelManager:
         )
         try:
             await engine.load()
-        except Exception:
+        except Exception as e:
             await engine.unload()
             # Restore the previous engine so the user doesn't lose their model.
             self.app.state.active_engine = prev_engine
             self.app.state.active_model = prev_model
             self.app.state.active_mode = prev_mode
-            raise
+            raise _unsupported_arch_error(e) or e
 
         # New engine loaded — unload the old one.
         if prev_engine is not None:

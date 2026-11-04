@@ -5,6 +5,7 @@ Handles score thresholds, document filtering, and context construction.
 """
 
 import logging
+import re
 from typing import List
 
 import numpy as np
@@ -105,13 +106,21 @@ class Retriever:
                     chunk_data["document_id"] != query.filter_document_id):
                 continue
 
+            # Surface inline [Page N] markers as structured metadata so API
+            # consumers can cite pages without parsing content.
+            metadata = chunk_data["metadata"]
+            pages = sorted(set(re.findall(r"\[Page (\d+)\]",
+                                          chunk_data["content"])), key=int)
+            if pages:
+                metadata = {**metadata, "pages": pages}
+
             results.append(SearchResult(
                 chunk_id=chunk_data["chunk_id"],
                 document_id=chunk_data["document_id"],
                 content=chunk_data["content"],
                 score=score,
                 chunk_index=chunk_data["chunk_index"],
-                metadata=chunk_data["metadata"]
+                metadata=metadata
             ))
 
         # Sort by score descending
@@ -122,6 +131,29 @@ class Retriever:
         # (vectors are L2-normalized), candidate vectors via FAISS
         # reconstruct — no extra deps.
         results = self._mmr_rerank(results, top_k, query_vector[0])
+
+        # Hybrid: an exact-term channel tops up to top_k with chunks the
+        # vector side missed entirely. Skipped when the caller set an
+        # explicit score_threshold — there, "only confident semantic matches"
+        # is the contract and keyword rows would violate it.
+        if not query.score_threshold and len(results) < top_k:
+            seen = {r.chunk_id for r in results}
+            for kd in self.metadata_store.keyword_search(
+                    query.query_text, limit=top_k,
+                    document_id=query.filter_document_id):
+                if len(results) >= top_k:
+                    break
+                if kd["chunk_id"] in seen:
+                    continue
+                seen.add(kd["chunk_id"])
+                results.append(SearchResult(
+                    chunk_id=kd["chunk_id"],
+                    document_id=kd["document_id"],
+                    content=kd["content"],
+                    score=0.0,  # keyword hit, not a semantic match — ranked last
+                    chunk_index=kd["chunk_index"],
+                    metadata=kd["metadata"],
+                ))
 
         # The query is user content: log its shape, never its text. A digest
         # would still be a weak leak on a low-entropy query, so it is length

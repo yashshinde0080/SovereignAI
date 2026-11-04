@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Play, Cloud, RefreshCw, Settings, MessageSquare } from "lucide-react";
+import { Loader2, Play, Square, Cloud, RefreshCw, Settings, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useStore } from "@/store";
@@ -22,7 +22,7 @@ export function CloudModelList({ refreshKey = 0 }: CloudModelListProps) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { systemStatus, setSettingsOpen } = useStore();
-  const { loadingId, loadModel } = useModels();
+  const { loading: switching, loadingId, loadModel, unloadModel } = useModels();
   const { toast } = useToast();
 
   // First load shows the spinner; provider-change refreshes (refreshKey) stay
@@ -89,9 +89,12 @@ export function CloudModelList({ refreshKey = 0 }: CloudModelListProps) {
         </div>
       ) : (
         <div className="space-y-2">
-          {models.map((m) => (
+          {models.map((m) => {
+            // Backend expects "<provider_id>/<model_id>", not the raw provider-side id.
+            const cloudId = `${m.provider_id}/${m.id}`;
+            return (
             <div
-              key={m.id}
+              key={cloudId}
               className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-card hover:bg-accent/40 transition-colors"
             >
               <Cloud className="h-4 w-4 text-accent shrink-0" />
@@ -101,7 +104,7 @@ export function CloudModelList({ refreshKey = 0 }: CloudModelListProps) {
                   <Badge variant="outline" className="text-[10px] shrink-0">
                     {m.provider_type}
                   </Badge>
-                  {systemStatus?.current_model === m.id && (
+                  {systemStatus?.current_model === cloudId && (
                     <Badge className="text-[10px] bg-emerald-500/15 text-emerald-500 border-emerald-500/30 shrink-0">
                       In use
                     </Badge>
@@ -112,20 +115,36 @@ export function CloudModelList({ refreshKey = 0 }: CloudModelListProps) {
                   {!m.supports_streaming && " · no streaming"}
                 </div>
               </div>
-              {systemStatus?.current_model === m.id ? (
-                <Link href="/">
-                  <Button size="sm" variant="outline" className="gap-1 shrink-0">
-                    <MessageSquare className="h-4 w-4" />
-                    <span className="hidden sm:inline">Chat</span>
+              {systemStatus?.current_model === cloudId ? (
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link href="/">
+                    <Button size="sm" variant="outline" className="gap-1">
+                      <MessageSquare className="h-4 w-4" />
+                      <span className="hidden sm:inline">Chat</span>
+                    </Button>
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => unloadModel()}
+                    disabled={switching && loadingId === cloudId}
+                    title="Unload this online model"
+                  >
+                    {switching && loadingId === cloudId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Square className="h-4 w-4" fill="currentColor" />
+                    )}
                   </Button>
-                </Link>
+                </div>
               ) : (
                 <Button
                   size="sm"
-                  onClick={() => loadModel(m.id, "cloud")}
-                  disabled={loadingId !== null}
+                  onClick={() => loadModel(cloudId, "cloud")}
+                  disabled={switching && loadingId !== null}
+                  title={systemStatus?.current_model ? "Switch to this model" : "Load model"}
                 >
-                  {loadingId === m.id ? (
+                  {loadingId === cloudId ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Play className="h-4 w-4" />
@@ -134,7 +153,8 @@ export function CloudModelList({ refreshKey = 0 }: CloudModelListProps) {
                 </Button>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,4 +1,6 @@
 @echo off
-cd /d D:\SovereignAI\backend
+cd /d "%~dp0backend"
 call .venv\Scripts\activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+REM --reload-dir app keeps WatchFiles off .venv/.python: importing torch on
+REM model load touched site-packages and reloaded the server mid-request.
+uvicorn app.main:app --reload --reload-dir app --host 0.0.0.0 --port 8000

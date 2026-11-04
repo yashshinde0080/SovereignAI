@@ -122,6 +122,38 @@ def test_source_label_includes_chunk_index(vs_parts):
     assert "[Source: manual.pdf#0]" in ctx.context_text
 
 
+def test_hybrid_keyword_channel_rescues_vector_miss(vs_parts):
+    """'torque' vs tokenized 'torque,' → zero cosine overlap, floor drops it;
+    the exact-term LIKE channel must still surface the chunk."""
+    cfg, index, store, retriever = vs_parts
+    _seed(index, store, {"d1": ("spec.txt", [
+        "the gearbox housing is cast aluminum",
+        "Rated torque, checked: 250Nm continuous duty",
+    ])})
+    results = retriever.search(SearchQuery(
+        query_text="torque frobnicate xyzzy", top_k=5))
+    assert any("250Nm" in r.content for r in results)
+
+
+def test_explicit_threshold_disables_keyword_topup(vs_parts):
+    cfg, index, store, retriever = vs_parts
+    _seed(index, store, {"d1": ("spec.txt", [
+        "Rated torque, checked: 250Nm continuous duty",
+    ])})
+    results = retriever.search(SearchQuery(
+        query_text="torque frobnicate xyzzy", top_k=5, score_threshold=0.2))
+    assert results == []
+
+
+def test_page_markers_become_citation_metadata(vs_parts):
+    cfg, index, store, retriever = vs_parts
+    _seed(index, store, {"d1": ("manual.pdf", [
+        "[Page 3] Battery capacity is 60Ah per cell block",
+    ])})
+    results = retriever.search(SearchQuery(query_text="battery capacity cell"))
+    assert results[0].metadata["pages"] == ["3"]
+
+
 def test_rag_context_respects_token_budget(vs_parts):
     cfg, index, store, retriever = vs_parts
     _seed(index, store, {"d1": ("big.txt", [f"chunk {i} " + "filler words " * 100 for i in range(5)])})

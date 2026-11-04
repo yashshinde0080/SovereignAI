@@ -57,6 +57,10 @@ class EmbeddingPipeline:
                 device="cpu",
                 local_files_only=True,
             )
+            # Default cap for MiniLM is 256 word-pieces; 1200-char chunks run
+            # ~300-400 tokens and lost their tails to silent truncation.
+            # 512 is the model's architectural ceiling.
+            self._model.max_seq_length = 512
             # Verify dimension
             test_embedding = self._model.encode(["test"])
             actual_dim = test_embedding.shape[1]

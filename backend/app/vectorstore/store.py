@@ -5,6 +5,7 @@ Maps FAISS index positions to chunk/document metadata.
 """
 
 import os
+import re
 import sqlite3
 import json
 import hashlib
@@ -15,6 +16,15 @@ from typing import Optional, List, Dict, Any
 from app.schemas.vector_schemas import TextChunk, EmbeddingRecord
 
 logger = logging.getLogger("sovereign.vectorstore.store")
+
+# Terms too common to discriminate a keyword match
+_STOPWORDS = frozenset({
+    "the", "and", "for", "are", "was", "were", "with", "that", "this",
+    "have", "has", "had", "not", "but", "you", "your", "they", "their",
+    "what", "when", "where", "which", "who", "why", "how", "does", "do",
+    "did", "can", "could", "would", "should", "will", "about", "into",
+    "from", "then", "than", "them", "its", "his", "her", "our",
+})
 
 
 class VectorMetadataStore:
@@ -345,6 +355,58 @@ class VectorMetadataStore:
                 "created_at": row["created_at"]
             })
         return grouped
+
+    def keyword_search(self, query_text: str, limit: int = 10,
+                       document_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Exact-term channel for hybrid retrieval: chunks ranked by how many
+        distinct query terms they contain. Rescues chunks a cosine floor or a
+        poor embedding would otherwise hide (part numbers, names, code).
+
+        Returns dicts shaped like get_chunks_by_vector_indices entries.
+        ponytail: full-table LIKE scan — fine to ~10k chunks; add an FTS5
+        table if corpora grow past that."""
+        terms = list(dict.fromkeys(
+            t for t in re.findall(r"[a-z0-9]{3,}", (query_text or "").lower())
+            if t not in _STOPWORDS
+        ))[:8]
+        if not terms:
+            return []
+
+        hits_expr = " + ".join("(lower(content) LIKE ?)" for _ in terms)
+        params: List[Any] = [f"%{t}%" for t in terms]
+        where = ""
+        if document_id:
+            where = "WHERE document_id = ?"
+            params.append(document_id)
+        params.append(limit)
+
+        cursor = self._conn.execute(
+            f"""
+            SELECT * FROM (
+                SELECT chunk_id, document_id, content, chunk_index,
+                       start_char, end_char, token_count, metadata_json,
+                       ({hits_expr}) AS hits
+                FROM chunks {where}
+            )
+            WHERE hits > 0
+            ORDER BY hits DESC, chunk_id
+            LIMIT ?
+            """,
+            tuple(params),
+        )
+        out = []
+        for row in cursor.fetchall():
+            out.append({
+                "chunk_id": row["chunk_id"],
+                "document_id": row["document_id"],
+                "content": row["content"],
+                "chunk_index": row["chunk_index"],
+                "start_char": row["start_char"],
+                "end_char": row["end_char"],
+                "token_count": row["token_count"],
+                "metadata": json.loads(row["metadata_json"]),
+            })
+        return out
 
     def delete_document_data(self, document_id: str):
         """

@@ -119,8 +119,8 @@ export function ModelTable({ models, currentModel, onLoad, onUnload, onDelete, l
                       size="sm"
                       variant="default"
                       onClick={() => onLoad(model.id)}
-                      disabled={(loading && loadingId !== null) || !!currentModel} // disable if another is loading or loaded
-                      title="Load Model"
+                      disabled={loading && loadingId !== null} // only block while a load is in flight; the backend swaps+unloads the previous engine atomically
+                      title={currentModel ? "Switch to this model" : "Load Model"}
                     >
                       {loading && loadingId === model.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />

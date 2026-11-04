@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     
     # Application
     app_name: str = "SovereignAI Edge"
-    app_version: str = "1.0.0"
+    app_version: str = "1.0.2"
     debug: bool = False
     
     # Server

@@ -316,20 +316,20 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[900px] h-[85vh] max-h-[720px] p-0 bg-background border-border text-foreground overflow-hidden">
+      <DialogContent className="flex gap-0 w-[95vw] max-w-[900px] sm:max-w-[900px] h-[85vh] max-h-[720px] p-0 bg-background border-border text-foreground overflow-hidden">
         {/* Narrow windows stack the nav above the content instead of squeezing
             it into a sliver of a row — nothing gets clipped, both panes scroll. */}
         <div className="flex flex-col sm:flex-row h-full w-full min-h-0">
           {/* Sidebar */}
-          <div className="w-full sm:w-[220px] shrink-0 max-h-[38%] sm:max-h-none border-b sm:border-b-0 sm:border-r border-border flex flex-col min-h-0">
-            <DialogHeader className="p-4 pb-2">
+          <div className="w-full sm:w-[248px] shrink-0 max-h-[40%] sm:max-h-none border-b sm:border-b-0 sm:border-r border-border flex flex-col min-h-0">
+            <DialogHeader className="px-5 pt-5 pb-2">
               <DialogTitle className="text-lg font-semibold flex items-center gap-2">
                 <Settings className="h-5 w-5 text-accent" />
                 Settings
               </DialogTitle>
             </DialogHeader>
             <Separator className="bg-muted" />
-            <div className="px-3 py-2">
+            <div className="px-4 py-3">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -352,7 +352,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                 )}
               </div>
             </div>
-            <ScrollArea className="flex-1 py-2">
+            <ScrollArea className="flex-1 min-h-0 py-2">
               {query.trim() ? (
                 <div className="flex flex-col gap-1 px-2 pb-2">
                   {results.length === 0 ? (
@@ -364,7 +364,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                       <button
                         key={`${field.section}.${field.label}`}
                         onClick={() => jumpTo(field)}
-                        className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60"
+                        className="flex flex-col items-start gap-0.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                       >
                         <span className="text-sm text-foreground">
                           {field.label}
@@ -377,7 +377,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                   )}
                 </div>
               ) : (
-              <nav className="flex flex-col gap-3 px-2">
+              <nav className="flex flex-col gap-4 px-3">
                 {NAV_GROUPS.map((group) => (
                   <div key={group.label} className="flex flex-col gap-1">
                     <p className="px-3 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -388,7 +388,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                         key={key}
                         onClick={() => selectSection(key)}
                         className={cn(
-                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left w-full",
+                          "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
                           activeSection === key
                             ? "bg-muted text-foreground"
                             : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -404,7 +404,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
               )}
             </ScrollArea>
             <Separator className="bg-muted" />
-            <div className="p-3">
+            <div className="p-3 shrink-0">
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -443,23 +443,23 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
 
           {/* Content */}
           <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            <div className="px-6 py-4 pr-12 border-b border-border shrink-0">
+            <div className="px-6 py-5 pr-14 border-b border-border shrink-0">
               <h2 className="text-lg font-semibold">
                 {activeMeta?.label}
               </h2>
               {activeMeta?.description && (
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-[13px] leading-relaxed text-muted-foreground mt-1">
                   {activeMeta.description}
                 </p>
               )}
             </div>
-            <ScrollArea className="flex-1 px-6 py-4" viewportRef={viewportRef}>
+            <ScrollArea className="flex-1 min-h-0 px-6 py-6" viewportRef={viewportRef}>
               {loading ? (
-                <div className="flex items-center justify-center h-full text-muted-foreground">
+                <div className="flex min-h-[40vh] items-center justify-center text-muted-foreground">
                   Loading settings...
                 </div>
               ) : (
-                <>
+                <div key={activeSection} className="settings-section-enter">
                   {activeSection === "general" && (
                     <GeneralSettings
                       data={settings.general ?? EMPTY}
@@ -506,7 +506,7 @@ export function SettingsDialog({ open, onOpenChange, initialSection }: SettingsD
                     />
                   )}
                   {activeSection === "cloud" && <CloudProvidersSettings />}
-                </>
+                </div>
               )}
             </ScrollArea>
           </div>

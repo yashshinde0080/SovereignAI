@@ -179,7 +179,10 @@ class FullRAMEngine(BaseEngine):
         except Exception as e:
             self.loaded = False
             msg = str(e)
-            if "not supported yet" in msg:
+            # llama.cpp is GGUF's native runtime: if the transformers GGUF
+            # bridge can't read it (unknown arch such as qwen35, IQ2_BN, ...)
+            # hand the file to llama.cpp / ik_llama.cpp instead of failing.
+            if self.model_path.endswith(".gguf") or "not supported yet" in msg:
                 # Check if this is an ik_llama.cpp-only model (IQ2_BN, etc.)
                 basename = os.path.basename(self.model_path).lower()
                 is_ik_only = any(tag in basename for tag in ("iq2_bn", "iq2_bnr4", "iq2_bn_r4"))

@@ -3,6 +3,7 @@ import os
 import json
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -26,6 +27,32 @@ def _model_size_bytes(model: Dict[str, Any]) -> int:
             pass
     return 0
 
+
+def _unsupported_arch_error(exc: Exception) -> Optional[RuntimeError]:
+    """Checkpoint arch the installed transformers can't read → actionable error.
+
+    ``transformers`` raises a plain ValueError for an unknown ``model_type``;
+    the API maps a RuntimeError containing "not supported" to 422, so re-wrap
+    it here — every load path (/models/load, chat, mode switch, startup model,
+    agent preference) goes through this one place. Returns None for any other
+    failure so callers keep raising unchanged.
+    """
+    msg = str(exc)
+    if "does not recognize this architecture" not in msg:
+        return None
+    found = re.search(r"model type `([^`]+)`", msg)
+    model_type = found.group(1) if found else "unknown"
+    from transformers import __version__ as transformers_version
+    return RuntimeError(
+        f"Model type '{model_type}' is not supported by the installed "
+        f"transformers ({transformers_version}); this checkpoint cannot run "
+        "here. Load a supported text CausalLM (Qwen2/Qwen2.5, Llama, Mistral) "
+        "or a GGUF build of it instead."
+    )
+    # ponytail: string-matched because transformers has no stable exception
+    # class for this; upgrade path = resolve model_type against
+    # transformers' CONFIG_MAPPING during scan and mark the model unsupported
+    # in the registry so the UI never offers it.
 
 def _fuzzy_match_model(models: List[Dict[str, Any]], model_id: str) -> Optional[Dict[str, Any]]:
     """Resolve a model id that wasn't found in the registry directly.
@@ -530,13 +557,13 @@ class ModelManager:
         )
         try:
             await engine.load()
-        except Exception:
+        except Exception as e:
             await engine.unload()
             # Restore the previous engine so the user doesn't lose their model.
             self.app.state.active_engine = prev_engine
             self.app.state.active_model = prev_model
             self.app.state.active_mode = prev_mode
-            raise
+            raise _unsupported_arch_error(e) or e
 
         # New engine loaded — unload the old one.
         if prev_engine is not None:

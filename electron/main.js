@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -78,6 +78,30 @@ if (process.env.SOVEREIGN_DISABLE_GPU === '1' || !cacheReady) {
 
 function workspaceDir() {
   return roots.workspaceDir;
+}
+
+// A packaged GUI app has no console: without this mirror, main-process startup
+// logs (including the reason a clean-machine launch failed) are lost entirely.
+const startupLogFile = (() => {
+  try {
+    const dir = path.join(roots.workspaceDir, 'logs');
+    fs.mkdirSync(dir, { recursive: true });
+    return path.join(dir, 'electron.log');
+  } catch {
+    return null;
+  }
+})();
+if (startupLogFile) {
+  for (const level of ['log', 'warn', 'error']) {
+    const orig = console[level].bind(console);
+    console[level] = (...args) => {
+      try {
+        fs.appendFileSync(startupLogFile, `[${new Date().toISOString()}] ${args.map(String).join(' ')}\n`);
+      } catch {}
+      orig(...args);
+    };
+  }
+  console.log(`--- SovereignAI ${isDev ? '(dev)' : ''} startup, electron ${process.versions.electron}`);
 }
 
 // Read a boolean general setting straight from the settings DB files, before
@@ -304,6 +328,8 @@ async function loadFrontend() {
   if (isDev && process.env.USE_DEV_SERVER === 'true') {
     await mainWindow.loadURL(`http://localhost:${FRONTEND_PORT}`);
   } else {
+    // The app:// handler answers with the exact file + Win32 reason on failure
+    // (console line and in-window), so no delay-retry is needed here.
     await mainWindow.loadURL('app://-/');
   }
   if (isDev) mainWindow.webContents.openDevTools();
@@ -347,6 +373,9 @@ async function prepareBackend(endpoint) {
 
 async function bootBackendAndUi(endpoint) {
   const healthy = await prepareBackend(endpoint);
+  console.log(
+    `Backend health: ${healthy ? 'OK on ' + apiBaseFor(backendPort) : 'NOT healthy (spawn failed, died, or no answer within ' + Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000) + 's)'}`
+  );
 
   // Load the UI either way: it retries /status and reconnects metricsWs, so a
   // late backend self-heals instead of leaving a dead window.
@@ -440,18 +469,39 @@ app.whenReady().then(async () => {
     console.log('Starting SovereignAI...');
     console.log(`Data root: ${roots.dataRoot}${roots.portableRoot ? ' (portable)' : ''}`);
 
-    // Custom protocol for the Next.js static export
+    // Custom protocol for the Next.js static export. Files are read with fs,
+    // not net.fetch(file:): a Chromium file-stack rejection surfaces as an
+    // opaque ERR_FAILED on loadURL, while a readFileSync error names the path
+    // and the Win32 reason — which is what made clean-machine reports
+    // undiagnosable. A failed read renders the reason in the window instead.
+    const MIME = {
+      '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+      '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml',
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif', '.ico': 'image/x-icon', '.txt': 'text/plain',
+      '.woff': 'font/woff', '.woff2': 'font/woff2', '.ttf': 'font/ttf',
+      '.map': 'text/plain', '.webp': 'image/webp',
+    };
     protocol.handle('app', (request) => {
-      const decodedPath = decodeURI(new URL(request.url).pathname);
       const basePath = frontendDir();
-      let filePath = path.join(basePath, decodedPath);
+      let decodedPath;
+      try {
+        decodedPath = decodeURI(new URL(request.url).pathname);
+      } catch {
+        decodedPath = '/';
+      }
+      let filePath = path.normalize(path.join(basePath, decodedPath));
+      const rel = path.relative(basePath, filePath);
+      if (rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) {
+        console.error('app:// traversal refused:', request.url);
+        return new Response('forbidden', { status: 403 });
+      }
 
       try {
         if (decodedPath === '/' || decodedPath === '') {
           filePath = path.join(basePath, 'index.html');
         } else if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-          const indexPath = path.join(filePath, 'index.html');
-          if (fs.existsSync(indexPath)) filePath = indexPath;
+          filePath = path.join(filePath, 'index.html');
         } else if (!fs.existsSync(filePath)) {
           if (fs.existsSync(path.join(filePath, 'index.html'))) {
             filePath = path.join(filePath, 'index.html');
@@ -462,12 +512,29 @@ app.whenReady().then(async () => {
           }
         }
       } catch (err) {
+        console.error(`app:// resolve error for ${request.url}: ${err.message}`);
         filePath = path.join(basePath, 'index.html');
       }
 
-      const { pathToFileURL } = require('url');
-      return net.fetch(pathToFileURL(filePath).href);
+      try {
+        const body = fs.readFileSync(filePath);
+        return new Response(body, {
+          headers: { 'content-type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream' },
+        });
+      } catch (err) {
+        console.error(`app:// read FAILED ${request.url} -> ${filePath}: ${err.code || err.message}`);
+        return new Response(
+          `SovereignAI UI could not read:\n${filePath}\n\n${err.code || err.message}\n\n` +
+          `The UI files did not arrive intact at this location. Reinstall from the ` +
+          `official installer, or re-extract the portable ZIP with 7-Zip/Explorer into ` +
+          `a short path (not a read-only or network drive).`,
+          { status: 500, headers: { 'content-type': 'text/plain; charset=utf-8' } }
+        );
+      }
     });
+    console.log(
+      `app:// -> ${frontendDir()} (index.html ${fs.existsSync(path.join(frontendDir(), 'index.html')) ? 'found' : 'MISSING'})`
+    );
 
     // Port resolution first: the window needs it, and it decides whether a
     // backend is spawned at all.
@@ -481,7 +548,12 @@ app.whenReady().then(async () => {
 
     bootBackendAndUi(endpoint).catch((err) => {
       console.error('Backend/UI boot failed:', err);
-      dialog.showErrorBox('Startup Error', `Failed to start backend: ${err.message}`);
+      dialog.showErrorBox(
+        'Startup Error',
+        `Startup failed: ${err.message}\n\n` +
+        `The UI and the local engine are separate steps — check which one the ` +
+        `log blames before retrying.\n\nLog:\n${path.join(workspaceDir(), 'logs', 'electron.log')}`
+      );
     });
 
     app.on('activate', () => {

@@ -79,20 +79,20 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
   const maxTokens = Number(form.max_tokens ?? 512);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 [&>div+div]:border-t [&>div+div]:border-border/60 [&>div+div]:pt-7">
       {/* Generation — saved defaults for every chat request (request overrides win) */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Generation
         </h3>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Temperature</Label>
             <p className="text-xs text-muted-foreground">{temperature.toFixed(1)} — lower is focused, higher is creative</p>
           </div>
           <Slider
-            className="w-[160px]"
+            className="w-[160px] shrink-0"
             min={0}
             max={2}
             step={0.1}
@@ -101,13 +101,13 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Top P</Label>
             <p className="text-xs text-muted-foreground">{topP.toFixed(2)}</p>
           </div>
           <Slider
-            className="w-[160px]"
+            className="w-[160px] shrink-0"
             min={0}
             max={1}
             step={0.05}
@@ -116,14 +116,14 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Max Tokens</Label>
             <p className="text-xs text-muted-foreground">Default reply length cap</p>
           </div>
           <Input
             type="number"
-            className="w-[160px] bg-card border-input"
+            className="w-[160px] shrink-0 bg-card border-input"
             min={1}
             max={32768}
             value={maxTokens}
@@ -140,10 +140,10 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           Appearance
         </h3>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">Theme</Label>
           <Select value={form.theme} onValueChange={(v) => update("theme", v)}>
-            <SelectTrigger className="w-[160px] bg-card border-input">
+            <SelectTrigger className="w-[160px] shrink-0 bg-card border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-input">
@@ -154,13 +154,13 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           </Select>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">Language</Label>
           <Select
             value={form.language}
             onValueChange={(v) => update("language", v)}
           >
-            <SelectTrigger className="w-[160px] bg-card border-input">
+            <SelectTrigger className="w-[160px] shrink-0 bg-card border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-input">
@@ -178,13 +178,13 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           </Select>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Font Size</Label>
             <p className="text-xs text-muted-foreground">{form.font_size}px</p>
           </div>
           <Slider
-            className="w-[160px]"
+            className="w-[160px] shrink-0"
             min={10}
             max={24}
             step={1}
@@ -200,13 +200,13 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           Runtime
         </h3>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">Default Mode</Label>
           <Select
             value={form.default_mode}
             onValueChange={(v) => update("default_mode", v)}
           >
-            <SelectTrigger className="w-[160px] bg-card border-input">
+            <SelectTrigger className="w-[160px] shrink-0 bg-card border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-input">
@@ -218,7 +218,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           </Select>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Max Context Length</Label>
             <p className="text-xs text-muted-foreground">
@@ -227,7 +227,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           </div>
           <Input
             type="number"
-            className="w-[160px] bg-card border-input"
+            className="w-[160px] shrink-0 bg-card border-input"
             min={512}
             max={131072}
             step={512}
@@ -238,10 +238,10 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">Startup Model</Label>
           <Input
-            className="w-[220px] bg-card border-input"
+            className="w-[220px] shrink-0 bg-card border-input"
             placeholder="e.g. llama3:8b"
             value={form.startup_model || ""}
             onChange={(e) => update("startup_model", e.target.value)}
@@ -302,7 +302,7 @@ export function GeneralSettings({ data, onSave }: GeneralSettingsProps) {
             desc: "Automatically save chat history",
           },
         ].map(({ key, label, desc }) => (
-          <div key={key} className="flex items-center justify-between">
+          <div key={key} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
             <div>
               <Label className="text-sm text-foreground">{label}</Label>
               <p className="text-xs text-muted-foreground">{desc}</p>

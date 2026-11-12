@@ -85,7 +85,7 @@ export function AgentCard({
         agent.is_active ? 'bg-accent/10 border-accent/40' : 'bg-card hover:border-accent/30'
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <div
             className={cn(

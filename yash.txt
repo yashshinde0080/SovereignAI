@@ -1,0 +1,8 @@
+Yash Shinde — SovereignAI Edge
+Started: 2026-11-04T21:22:58+05:30 IST
+
+Location: D:\SovereignAI | Timezone: Asia/Calcutta (IST)
+
+PROJECT: SovereignAI Edge — portable offline AI compute platform running LLMs locally on consumer hardware or USB drives, with optional cloud API mode for online inference.
+
+DUAL INFERENC

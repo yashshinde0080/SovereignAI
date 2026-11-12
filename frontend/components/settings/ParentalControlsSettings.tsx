@@ -109,10 +109,10 @@ export function ParentalControlsSettings({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 [&>div+div]:border-t [&>div+div]:border-border/60 [&>div+div]:pt-7">
       {/* Master Toggle */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 rounded-lg bg-card border border-border">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 p-4 rounded-lg bg-card border border-border">
           <div className="flex items-center gap-3">
             <ShieldAlert className="h-5 w-5 text-amber-500" />
             <div>
@@ -139,7 +139,7 @@ export function ParentalControlsSettings({
               PIN Protection
             </h3>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <div>
                 <Label className="text-sm text-foreground">
                   Require PIN for settings
@@ -181,7 +181,7 @@ export function ParentalControlsSettings({
               Content Filtering
             </h3>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <Label className="text-sm text-foreground">
                 Content filter level
               </Label>
@@ -189,7 +189,7 @@ export function ParentalControlsSettings({
                 value={form.content_filter_level}
                 onValueChange={(v) => update("content_filter_level", v)}
               >
-                <SelectTrigger className="w-[160px] bg-card border-input">
+                <SelectTrigger className="w-[160px] shrink-0 bg-card border-input">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-card border-input">
@@ -202,7 +202,7 @@ export function ParentalControlsSettings({
               </Select>
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <div>
                 <Label className="text-sm text-foreground">
                   Block explicit content
@@ -257,7 +257,7 @@ export function ParentalControlsSettings({
               Restrictions
             </h3>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <div>
                 <Label className="text-sm text-foreground">
                   Max session duration
@@ -269,7 +269,7 @@ export function ParentalControlsSettings({
                 </p>
               </div>
               <Slider
-                className="w-[160px]"
+                className="w-[160px] shrink-0"
                 min={0}
                 max={480}
                 step={15}
@@ -280,7 +280,7 @@ export function ParentalControlsSettings({
               />
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <div>
                 <Label className="text-sm text-foreground">
                   Disable custom instructions
@@ -298,7 +298,7 @@ export function ParentalControlsSettings({
             </div>
 
             {/* The following div is replaced as per user instruction */}
-            <div key="activity_log" className="flex items-center justify-between">
+            <div key="activity_log" className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
               <div>
                 <Label className="text-sm text-foreground">Activity log</Label>
                 <p className="text-xs text-muted-foreground">Log all conversations for review</p>

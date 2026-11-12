@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Database System — SovereignAI Edge</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Oxanium:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f4f4f9;
+      --color-ink:     #191a2b;
+      --color-muted:   #4a5578;
+      --color-accent:  #3C3489;
+      --font-sans:  'Oxanium', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif', serif;
+      --font-mono:  'Source Code Pro', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Data Model · SovereignAI Edge</p>
+    <h1>Database System</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="01-database-system-title 01-database-system-desc">
+        <title id="01-database-system-title">Two SQLite databases and their core tables</title>
+        <desc id="01-database-system-desc">sovereign.db holds models, sessions, documents and benchmark tables via DatabaseManager; sovereign_settings.db holds settings sections and agents via SettingsDatabase, with a shared audit log.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4a5578"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3C3489"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#12704f"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f4f4f9"/>
+
+        <!-- zones -->
+        <rect x="40" y="40" width="592" height="440" rx="8" fill="rgba(25,26,43,0.02)" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <rect x="56" y="44" width="288" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="200" y="53" fill="#5a6580" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">SOVEREIGN.DB · DATABASEMANAGER</text>
+
+        <rect x="648" y="40" width="272" height="272" rx="8" fill="rgba(25,26,43,0.02)" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <rect x="664" y="44" width="244" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="786" y="53" fill="#5a6580" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">SOVEREIGN_SETTINGS.DB · SETTINGSDATABASE</text>
+
+        <!-- connectors -->
+        <line x1="472" y1="304" x2="520" y2="304" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="720" y1="184" x2="720" y2="196" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 704,208 V 288 Q 704,296 696,296 H 420 Q 412,296 412,304 V 388 Q 412,396 420,396 H 464" fill="none" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+
+        <!-- cardinality + relationship labels -->
+        <rect x="466" y="280" width="12" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="472" y="289" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">1</text>
+        <rect x="508" y="280" width="12" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="514" y="289" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">N</text>
+        <rect x="472" y="284" width="52" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="498" y="293" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">LOGS RUN</text>
+        <rect x="724" y="176" width="18" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="733" y="185" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">0..1</text>
+        <rect x="724" y="204" width="18" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="733" y="213" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">0..1</text>
+        <rect x="730" y="184" width="56" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="758" y="193" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">BUILDS</text>
+        <rect x="536" y="274" width="72" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="572" y="283" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">TRACKS EDITS</text>
+
+        <!-- sovereign.db tables -->
+        <!-- models (focal) -->
+        <rect x="72" y="112" width="184" height="96" rx="6" fill="#f4f4f9"/>
+        <rect x="72" y="112" width="184" height="96" rx="6" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1.2"/>
+        <rect x="80" y="118" width="28" height="12" rx="2" fill="transparent" stroke="rgba(60,52,137,0.40)" stroke-width="0.8"/>
+        <text x="94" y="127" fill="#3C3489" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="116" y="127" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">models</text>
+        <text x="80" y="146" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">#id · name · family</text>
+        <text x="80" y="160" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">quant · size_label</text>
+        <text x="80" y="174" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">file_path · checksum</text>
+        <text x="80" y="188" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">status · engines_supported</text>
+
+        <!-- documents -->
+        <rect x="280" y="112" width="160" height="80" rx="6" fill="#f4f4f9"/>
+        <rect x="280" y="112" width="160" height="80" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="288" y="118" width="28" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="302" y="127" fill="#4a5578" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="324" y="127" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">documents</text>
+        <text x="288" y="146" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">#id · filename</text>
+        <text x="288" y="160" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">chunks · embeddings</text>
+        <text x="288" y="174" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">status</text>
+
+        <!-- plugins -->
+        <rect x="464" y="112" width="152" height="80" rx="6" fill="#f4f4f9"/>
+        <rect x="464" y="112" width="152" height="80" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="472" y="118" width="28" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="486" y="127" fill="#4a5578" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="508" y="127" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">plugins</text>
+        <text x="472" y="146" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">#id · entry_point</text>
+        <text x="472" y="160" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">permissions</text>
+        <text x="472" y="174" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">signature</text>
+
+        <!-- benchmark_results -->
+        <rect x="320" y="264" width="152" height="80" rx="6" fill="#f4f4f9"/>
+        <rect x="320" y="264" width="152" height="80" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="328" y="270" width="28" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="342" y="279" fill="#4a5578" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="364" y="279" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">benchmark</text>
+        <text x="328" y="298" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">#id · tokens/sec</text>
+        <text x="328" y="312" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">first_token_latency</text>
+        <text x="328" y="326" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">peak_ram</text>
+
+        <!-- sessions -->
+        <rect x="520" y="264" width="140" height="80" rx="6" fill="#f4f4f9"/>
+        <rect x="520" y="264" width="140" height="80" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="528" y="270" width="28" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="542" y="279" fill="#4a5578" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="564" y="279" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">sessions</text>
+        <text x="528" y="298" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">#id · model_name</text>
+        <text x="528" y="312" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">engine_mode · tokens</text>
+        <text x="528" y="326" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">peak_ram</text>
+
+        <!-- hardware_profiles -->
+        <rect x="72" y="264" width="200" height="80" rx="6" fill="#f4f4f9"/>
+        <rect x="72" y="264" width="200" height="80" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="80" y="270" width="28" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="94" y="279" fill="#4a5578" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="116" y="279" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">hardware_profiles</text>
+        <text x="80" y="298" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">#id · cpu / ram / gpu</text>
+        <text x="80" y="312" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">disk caps · avx flags</text>
+
+        <!-- audit_log -->
+        <rect x="472" y="368" width="144" height="72" rx="6" fill="#f4f4f9"/>
+        <rect x="472" y="368" width="144" height="72" rx="6" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <rect x="480" y="374" width="28" height="12" rx="2" fill="transparent" stroke="rgba(74,85,120,0.40)" stroke-width="0.8"/>
+        <text x="494" y="383" fill="#4a5578" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="516" y="383" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">audit_log</text>
+        <text x="480" y="402" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">event_type · severity</text>
+        <text x="480" y="416" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">source · message</text>
+
+        <text x="72" y="452" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">also: schema_version · migrations v1–v3 · WAL · mmap 256MB</text>
+
+        <!-- settings db tables -->
+        <rect x="664" y="112" width="176" height="72" rx="6" fill="#f4f4f9"/>
+        <rect x="664" y="112" width="176" height="72" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="672" y="118" width="28" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="686" y="127" fill="#4a5578" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="708" y="127" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">settings</text>
+        <text x="672" y="146" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">#section · data json</text>
+        <text x="672" y="160" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">general · security ·</text>
+        <text x="672" y="174" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">personalization …</text>
+
+        <rect x="664" y="196" width="176" height="72" rx="6" fill="#f4f4f9"/>
+        <rect x="664" y="196" width="176" height="72" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="672" y="202" width="28" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="686" y="211" fill="#4a5578" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">TBL</text>
+        <text x="708" y="211" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif">agents</text>
+        <text x="672" y="230" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">#id · name · role</text>
+        <text x="672" y="244" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">system_instruction</text>
+        <text x="672" y="258" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">is_active · temp</text>
+
+        <text x="664" y="288" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">UPSERT + audit trail</text>
+
+        <!-- callout -->
+        <text x="72" y="500" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">Two DBs, one rule: WAL mode, thread-local connections, synchronous=NORMAL.</text>
+
+        <!-- legend -->
+        <line x1="30" y1="536" x2="930" y2="536" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <text x="30" y="556" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
+        <rect x="104" y="548" width="16" height="10" rx="2" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="126" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">TABLE</text>
+        <rect x="192" y="548" width="16" height="10" rx="2" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1"/>
+        <text x="214" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">FOCAL · MODELS</text>
+        <line x1="330" y1="553" x2="362" y2="553" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="368" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">RELATIONSHIP 1→N</text>
+        <line x1="500" y1="553" x2="532" y2="553" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <text x="538" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">CROSS-DB WRITE</text>
+        <text x="660" y="557" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace"># PK · → FK</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

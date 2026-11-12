@@ -53,8 +53,11 @@ class PDFIngestionPlugin(PluginInterface):
         reader = self.pypdf.PdfReader(pdf_file)
         
         text_parts = []
-        for page in reader.pages:
-            text_parts.append(page.extract_text())
+        # [Page N] markers stay inline through chunking, so retrieved excerpts
+        # carry their page for citation. extract_text() returns None on
+        # blank/image-only pages.
+        for n, page in enumerate(reader.pages, 1):
+            text_parts.append(f"[Page {n}]\n{page.extract_text() or ''}")
         
         return "\n\n".join(text_parts)
     

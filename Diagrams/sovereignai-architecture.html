@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SovereignAI Edge — Platform Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Oxanium:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f4f4f9;
+      --color-paper-2: #e9eaf2;
+      --color-ink:     #191a2b;
+      --color-muted:   #4a5578;
+      --color-soft:    #5a6580;
+      --color-accent:  #3C3489;
+      --color-link:    #12704f;
+      --font-sans:     'Oxanium', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Source Code Pro', ui-monospace, monospace;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · SovereignAI Edge</p>
+    <h1>One gateway, three inference engines, zero cloud dependency</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 660" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="sovereignai-architecture-title sovereignai-architecture-desc">
+        <title id="sovereignai-architecture-title">SovereignAI Edge platform architecture</title>
+        <desc id="sovereignai-architecture-desc">Three local clients call a single FastAPI gateway on loopback; the gateway routes model loading through a model manager to one of three interchangeable engines — FullRAM, LayerStream, or CloudAPI — with FAISS powering RAG context and a shared workspace directory holding every runtime file, while only the CloudAPI engine reaches external provider APIs.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4a5578"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3C3489"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#12704f"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f4f4f9"/>
+
+        <!-- Zones (bg layer) -->
+        <rect x="28" y="60" width="868" height="512" rx="8" fill="rgba(25,26,43,0.02)" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <rect x="44" y="64" width="172" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="130" y="73" fill="#5a6580" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">LOCAL HOST · 127.0.0.1</text>
+
+        <rect x="904" y="100" width="40" height="368" rx="8" fill="rgba(25,26,43,0.02)" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <rect x="912" y="104" width="24" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="924" y="113" fill="#5a6580" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.14em">NET</text>
+
+        <!-- Connectors (drawn before nodes) -->
+        <!-- clients → gateway -->
+        <line x1="168" y1="116" x2="304" y2="116" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="168" y1="172" x2="304" y2="172" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="168" y1="228" x2="304" y2="228" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <!-- gateway → model manager (focal path) -->
+        <line x1="496" y1="172" x2="536" y2="172" stroke="#3C3489" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+        <!-- gateway → model manager (load) -->
+        <path d="M 404,236 V 264 Q 404,272 396,272 H 376 Q 368,272 368,280 V 288" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <!-- model manager → engines -->
+        <path d="M 456,296 H 532 Q 540,296 540,288 V 136 Q 540,128 548,128 H 568" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="456" y1="320" x2="568" y2="320" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 456,344 H 532 Q 540,344 540,352 V 396 Q 540,404 548,404 H 568" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <!-- gateway → FAISS (RAG) -->
+        <path d="M 464,236 H 548 Q 556,236 556,244 V 428 Q 556,436 564,436 H 688" fill="none" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <!-- workspace → FAISS (persist; bridged over the RAG lane) -->
+        <path d="M 176,492 H 540 a 8,8 0 0,1 16,0 H 680" fill="none" stroke="#4a5578" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <!-- CloudAPI → providers -->
+        <line x1="704" y1="404" x2="904" y2="404" stroke="#12704f" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+
+        <!-- Arrow labels -->
+        <rect x="196" y="92" width="80" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="236" y="101" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">REST /v1/*</text>
+        <rect x="498" y="150" width="36" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="516" y="159" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">SSE</text>
+        <rect x="380" y="242" width="48" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="404" y="251" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">LOAD</text>
+        <rect x="544" y="304" width="24" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="556" y="313" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">RAG</text>
+        <rect x="352" y="468" width="64" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="384" y="477" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">PERSIST</text>
+        <rect x="776" y="382" width="72" height="12" rx="2" fill="#f4f4f9"/>
+        <text x="812" y="391" fill="#5a6580" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.06em">API CALL</text>
+
+        <!-- Nodes -->
+        <!-- React Web -->
+        <rect x="44" y="88" width="124" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="44" y="88" width="124" height="56" rx="6" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <rect x="52" y="94" width="40" height="12" rx="2" fill="transparent" stroke="rgba(90,101,128,0.40)" stroke-width="0.8"/>
+        <text x="72" y="103" fill="rgba(90,101,128,0.8)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+        <text x="106" y="122" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">React Web</text>
+        <text x="106" y="138" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">next 16</text>
+
+        <!-- Electron -->
+        <rect x="44" y="144" width="124" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="44" y="144" width="124" height="56" rx="6" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <rect x="52" y="150" width="40" height="12" rx="2" fill="transparent" stroke="rgba(90,101,128,0.40)" stroke-width="0.8"/>
+        <text x="72" y="159" fill="rgba(90,101,128,0.8)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+        <text x="106" y="178" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Electron</text>
+        <text x="106" y="194" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">desktop</text>
+
+        <!-- CLI -->
+        <rect x="44" y="200" width="124" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="44" y="200" width="124" height="56" rx="6" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <rect x="52" y="206" width="40" height="12" rx="2" fill="transparent" stroke="rgba(90,101,128,0.40)" stroke-width="0.8"/>
+        <text x="72" y="215" fill="rgba(90,101,128,0.8)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">UI</text>
+        <text x="106" y="234" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">CLI</text>
+        <text x="106" y="250" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">typer</text>
+
+        <!-- FastAPI Gateway (focal) -->
+        <rect x="304" y="108" width="192" height="128" rx="6" fill="#f4f4f9"/>
+        <rect x="304" y="108" width="192" height="128" rx="6" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1.2"/>
+        <rect x="312" y="114" width="40" height="12" rx="2" fill="transparent" stroke="rgba(60,52,137,0.40)" stroke-width="0.8"/>
+        <text x="332" y="123" fill="rgba(60,52,137,0.85)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">API</text>
+        <text x="400" y="178" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">FastAPI Gateway</text>
+        <text x="400" y="194" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">uvicorn :8000</text>
+
+        <!-- Model Manager -->
+        <rect x="304" y="288" width="152" height="64" rx="6" fill="#f4f4f9"/>
+        <rect x="304" y="288" width="152" height="64" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="312" y="294" width="80" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="352" y="303" fill="rgba(25,26,43,0.8)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">SERVICE</text>
+        <text x="380" y="324" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Model Manager</text>
+        <text x="380" y="340" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">engine select</text>
+
+        <!-- FullRAM -->
+        <rect x="568" y="100" width="136" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="568" y="100" width="136" height="56" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="576" y="106" width="72" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="612" y="115" fill="rgba(25,26,43,0.8)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">ENGINE</text>
+        <text x="636" y="134" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">FullRAM</text>
+        <text x="636" y="150" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">transformers</text>
+
+        <!-- LayerStream -->
+        <rect x="568" y="292" width="136" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="568" y="292" width="136" height="56" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="576" y="298" width="72" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="612" y="307" fill="rgba(25,26,43,0.8)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">ENGINE</text>
+        <text x="636" y="326" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">LayerStream</text>
+        <text x="636" y="342" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">layer swap</text>
+
+        <!-- CloudAPI -->
+        <rect x="568" y="376" width="136" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="568" y="376" width="136" height="56" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <rect x="576" y="382" width="72" height="12" rx="2" fill="transparent" stroke="rgba(25,26,43,0.40)" stroke-width="0.8"/>
+        <text x="612" y="391" fill="rgba(25,26,43,0.8)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">ENGINE</text>
+        <text x="636" y="410" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">CloudAPI</text>
+        <text x="636" y="426" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">openai · claude</text>
+
+        <!-- FAISS -->
+        <rect x="688" y="436" width="160" height="64" rx="6" fill="#f4f4f9"/>
+        <rect x="688" y="436" width="160" height="64" rx="6" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <rect x="696" y="442" width="52" height="12" rx="2" fill="transparent" stroke="rgba(74,85,120,0.40)" stroke-width="0.8"/>
+        <text x="722" y="451" fill="rgba(74,85,120,0.85)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">STORE</text>
+        <text x="768" y="472" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">FAISS Index</text>
+        <text x="768" y="488" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">RAG · top_k=5</text>
+
+        <!-- Workspace -->
+        <rect x="48" y="464" width="128" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="48" y="464" width="128" height="56" rx="6" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <rect x="56" y="470" width="52" height="12" rx="2" fill="transparent" stroke="rgba(74,85,120,0.40)" stroke-width="0.8"/>
+        <text x="82" y="479" fill="rgba(74,85,120,0.85)" font-size="7" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle" letter-spacing="0.08em">STORE</text>
+        <text x="112" y="498" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Workspace</text>
+        <text x="112" y="514" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace" text-anchor="middle">./workspace/</text>
+
+        <!-- Providers (external) -->
+        <rect x="904" y="376" width="40" height="56" rx="6" fill="#f4f4f9"/>
+        <rect x="904" y="376" width="40" height="56" rx="6" fill="rgba(25,26,43,0.03)" stroke="rgba(25,26,43,0.30)" stroke-width="1"/>
+        <text x="924" y="408" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">APIs</text>
+
+        <!-- Legend strip -->
+        <line x1="30" y1="592" x2="930" y2="592" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <text x="30" y="616" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
+
+        <rect x="112" y="606" width="16" height="12" rx="3" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1"/>
+        <text x="136" y="615" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">GATEWAY</text>
+
+        <rect x="212" y="606" width="16" height="12" rx="3" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="236" y="615" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">ENGINE / SERVICE</text>
+
+        <rect x="364" y="606" width="16" height="12" rx="3" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <text x="388" y="615" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">STORE</text>
+
+        <rect x="448" y="606" width="16" height="12" rx="3" fill="rgba(25,26,43,0.03)" stroke="rgba(25,26,43,0.30)" stroke-width="1"/>
+        <text x="472" y="615" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">EXTERNAL</text>
+
+        <rect x="552" y="606" width="16" height="12" rx="3" fill="rgba(74,85,120,0.10)" stroke="#5a6580" stroke-width="1"/>
+        <text x="576" y="615" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">CLIENT</text>
+
+        <line x1="648" y1="612" x2="668" y2="612" stroke="#4a5578" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="676" y="615" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">REQUEST PATH</text>
+
+        <line x1="784" y1="612" x2="804" y2="612" stroke="#12704f" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="812" y="615" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">CLOUD CALL</text>
+
+        <line x1="892" y1="612" x2="912" y2="612" stroke="#4a5578" stroke-width="1" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+        <text x="920" y="615" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.06em">ASYNC</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

@@ -97,14 +97,14 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 [&>div+div]:border-t [&>div+div]:border-border/60 [&>div+div]:pt-7">
       {/* Authentication */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
           Authentication
         </h3>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Require password</Label>
             <p className="text-xs text-muted-foreground">
@@ -138,7 +138,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">
               Session timeout (minutes)
@@ -150,7 +150,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
             </p>
           </div>
           <Slider
-            className="w-[160px]"
+            className="w-[160px] shrink-0"
             min={0}
             max={120}
             step={5}
@@ -166,7 +166,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
           Network
         </h3>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">
               Bind to localhost only
@@ -210,11 +210,11 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">API Port</Label>
           <Input
             type="number"
-            className="w-[120px] bg-card border-input"
+            className="w-[120px] shrink-0 bg-card border-input"
             min={1024}
             max={65535}
             value={form.api_port}
@@ -224,7 +224,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
           />
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">Enable CORS</Label>
             <p className="text-xs text-muted-foreground">
@@ -295,7 +295,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
             desc: "Block user-installed plugins from loading (recommended)",
           },
         ].map(({ key, label, desc }) => (
-          <div key={key} className="flex items-center justify-between">
+          <div key={key} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
             <div>
               <Label className="text-sm text-foreground">{label}</Label>
               <p className="text-xs text-muted-foreground">{desc}</p>
@@ -307,7 +307,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
           </div>
         ))}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div>
             <Label className="text-sm text-foreground">
               Max concurrent requests
@@ -317,7 +317,7 @@ export function SecuritySettings({ data, onSave }: SecuritySettingsProps) {
             </p>
           </div>
           <Slider
-            className="w-[160px]"
+            className="w-[160px] shrink-0"
             min={1}
             max={32}
             step={1}

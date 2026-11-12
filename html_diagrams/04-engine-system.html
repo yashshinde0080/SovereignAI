@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Engine System — SovereignAI Edge</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Oxanium:wght@400;500;600&family=Source+Code+Pro:wght@400;500;600&family=Noto+Serif:ital@0;1&family=Noto+Sans+KR:wght@400;500;600&family=Noto+Serif+KR:wght@400&family=Noto+Sans+TC:wght@400;500;600&family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f4f4f9;
+      --color-ink:     #191a2b;
+      --color-muted:   #4a5578;
+      --color-accent:  #3C3489;
+      --font-sans:  'Oxanium', system-ui, sans-serif;
+      --font-serif: 'Instrument Serif', 'Noto Serif', serif;
+      --font-mono:  'Source Code Pro', ui-monospace, monospace;
+    }
+    body { font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1200px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow { font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem; }
+    h1 { font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; color: var(--color-ink); margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">UML Class · SovereignAI Edge</p>
+    <h1>Engine System</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="04-engine-system-title 04-engine-system-desc">
+        <title id="04-engine-system-title">BaseEngine interface and its two implementations</title>
+        <desc id="04-engine-system-desc">FullRAMEngine and LayerStreamEngine implement the abstract BaseEngine; ModelManager creates them through EngineFactory, and LayerStreamEngine owns a weight loader and KV cache.</desc>
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#4a5578"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3C3489"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#12704f"/></marker>
+          <marker id="gen-tri" markerWidth="14" markerHeight="12" refX="13" refY="6" orient="auto-start-reverse"><polygon points="0 0, 14 6, 0 12" fill="#f4f4f9" stroke="#191a2b" stroke-width="1"/></marker>
+          <marker id="comp-diamond" markerWidth="14" markerHeight="8" refX="13" refY="4" orient="auto-start-reverse"><polygon points="0 4, 7 0, 14 4, 7 8" fill="#191a2b"/></marker>
+          <marker id="agg-diamond" markerWidth="14" markerHeight="8" refX="13" refY="4" orient="auto-start-reverse"><polygon points="0 4, 7 0, 14 4, 7 8" fill="#f4f4f9" stroke="#191a2b" stroke-width="1"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f4f4f9"/>
+
+        <!-- relationships (before boxes) -->
+        <line x1="150" y1="152" x2="150" y2="184" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M 280,200 H 472 Q 480,200 480,192 V 180" fill="none" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <line x1="480" y1="200" x2="480" y2="236" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M 432,348 V 384 Q 432,392 424,392 H 264 Q 256,392 256,400 V 428" fill="none" stroke="#191a2b" stroke-width="1.2" marker-end="url(#gen-tri)"/>
+        <path d="M 528,348 V 384 Q 528,392 536,392 H 744 Q 752,392 752,400 V 428" fill="none" stroke="#191a2b" stroke-width="1.2" marker-end="url(#gen-tri)"/>
+        <line x1="230" y1="428" x2="230" y2="348" stroke="#191a2b" stroke-width="1.2" marker-start="url(#gen-tri)"/>
+        <line x1="780" y1="428" x2="780" y2="348" stroke="#191a2b" stroke-width="1.2" marker-start="url(#gen-tri)"/>
+        <line x1="688" y1="496" x2="688" y2="532" stroke="#191a2b" stroke-width="1.2" marker-start="url(#comp-diamond)"/>
+        <line x1="816" y1="496" x2="856" y2="496" stroke="#191a2b" stroke-width="1.2" marker-start="url(#agg-diamond)"/>
+
+        <!-- ModelManager -->
+        <rect x="64" y="64" width="172" height="88" rx="6" fill="#f4f4f9"/>
+        <rect x="64" y="64" width="172" height="88" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="150" y="84" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">ModelManager</text>
+        <line x1="64" y1="92" x2="236" y2="92" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="72" y="106" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- _load_lock: Lock</text>
+        <text x="72" y="118" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- app: FastAPI</text>
+        <line x1="64" y1="124" x2="236" y2="124" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="72" y="138" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ load_model()</text>
+        <text x="72" y="150" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ _load_model_locked()</text>
+
+        <!-- EngineFactory -->
+        <rect x="64" y="184" width="172" height="64" rx="6" fill="#f4f4f9"/>
+        <rect x="64" y="184" width="172" height="64" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="150" y="204" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">EngineFactory</text>
+        <line x1="64" y1="212" x2="236" y2="212" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="72" y="226" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ create_engine(path,</text>
+        <text x="72" y="238" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">mode, metadata)</text>
+
+        <!-- BaseEngine (focal) -->
+        <rect x="360" y="64" width="240" height="136" rx="6" fill="#f4f4f9"/>
+        <rect x="360" y="64" width="240" height="136" rx="6" fill="rgba(60,52,137,0.08)" stroke="#3C3489" stroke-width="1.2"/>
+        <text x="480" y="82" fill="#3C3489" font-size="8" font-style="italic" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">«abstract»</text>
+        <text x="480" y="98" fill="#191a2b" font-size="12" font-weight="600" font-style="italic" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">BaseEngine</text>
+        <line x1="360" y1="106" x2="600" y2="106" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="368" y="120" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- loaded: bool</text>
+        <text x="368" y="132" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- model_id: str</text>
+        <line x1="360" y1="138" x2="600" y2="138" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="368" y="152" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ load() / unload()</text>
+        <text x="368" y="164" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ generate(inp) -> Dict</text>
+        <text x="368" y="176" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ generate_stream(inp)</text>
+        <text x="368" y="188" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ get_memory_usage()</text>
+
+        <!-- FullRAMEngine -->
+        <rect x="128" y="428" width="204" height="136" rx="6" fill="#f4f4f9"/>
+        <rect x="128" y="428" width="204" height="136" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="230" y="448" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">FullRAMEngine</text>
+        <line x1="128" y1="456" x2="332" y2="456" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="136" y="470" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- model: PreTrainedModel</text>
+        <text x="136" y="482" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- streamer: TextIterator…</text>
+        <line x1="128" y1="488" x2="332" y2="488" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="136" y="502" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ load() from_pretrained</text>
+        <text x="136" y="514" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ generate() to_thread</text>
+        <text x="136" y="526" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ generate_stream() thread</text>
+        <text x="136" y="538" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- llama_cpp fallback</text>
+        <text x="136" y="552" fill="#5a6580" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">mode: fullram · gguf_file=</text>
+
+        <!-- LayerStreamEngine -->
+        <rect x="624" y="428" width="252" height="136" rx="6" fill="#f4f4f9"/>
+        <rect x="624" y="428" width="252" height="136" rx="6" fill="#ffffff" stroke="#191a2b" stroke-width="1"/>
+        <text x="750" y="448" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">LayerStreamEngine</text>
+        <line x1="624" y1="456" x2="876" y2="456" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="632" y="470" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- executor: LayerExecutor</text>
+        <text x="632" y="482" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- weights_dir: Path</text>
+        <line x1="624" y1="488" x2="876" y2="488" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="632" y="502" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ load() split if missing</text>
+        <text x="632" y="514" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ generate() prefill+decode</text>
+        <text x="632" y="526" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- _gen_loop: Thread</text>
+        <text x="632" y="538" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- _stream_delta() window</text>
+        <text x="632" y="552" fill="#5a6580" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">mode: layerstream · eager attn</text>
+
+        <!-- LayerWeightLoader -->
+        <rect x="600" y="532" width="176" height="60" rx="6" fill="#f4f4f9"/>
+        <rect x="600" y="532" width="176" height="60" rx="6" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <text x="688" y="550" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">LayerWeightLoader</text>
+        <line x1="600" y1="556" x2="776" y2="556" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="608" y="568" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- pool: ThreadPool(3)</text>
+        <text x="608" y="580" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">- lru: byte budget cache</text>
+
+        <!-- KVCacheManager -->
+        <rect x="856" y="460" width="64" height="88" rx="6" fill="#f4f4f9"/>
+        <rect x="856" y="460" width="64" height="88" rx="6" fill="rgba(25,26,43,0.05)" stroke="#4a5578" stroke-width="1"/>
+        <text x="888" y="478" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">KV</text>
+        <text x="888" y="492" fill="#191a2b" font-size="12" font-weight="600" font-family="'Oxanium', system-ui, sans-serif" text-anchor="middle">Cache</text>
+        <line x1="856" y1="498" x2="920" y2="498" stroke="rgba(25,26,43,0.12)" stroke-width="1"/>
+        <text x="862" y="512" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ k/v</text>
+        <text x="862" y="524" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">+ per</text>
+        <text x="862" y="536" fill="#4a5578" font-size="9" font-family="'Source Code Pro', ui-monospace, monospace">layer</text>
+
+        <!-- legend -->
+        <line x1="30" y1="560" x2="420" y2="560" stroke="rgba(25,26,43,0.10)" stroke-width="0.8"/>
+        <text x="30" y="580" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace" letter-spacing="0.14em">LEGEND</text>
+        <line x1="96" y1="576" x2="128" y2="576" stroke="#191a2b" stroke-width="1.2" marker-end="url(#gen-tri)"/>
+        <text x="136" y="580" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">INHERITS</text>
+        <line x1="208" y1="576" x2="240" y2="576" stroke="#4a5578" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <text x="248" y="580" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">DEPENDS</text>
+        <line x1="316" y1="576" x2="348" y2="576" stroke="#191a2b" stroke-width="1.2" marker-start="url(#comp-diamond)"/>
+        <text x="356" y="580" fill="#4a5578" font-size="8" font-family="'Source Code Pro', ui-monospace, monospace">COMPOSES</text>
+        <text x="456" y="452" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">Engines never pick their</text>
+        <text x="456" y="470" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">own mode — ModelManager</text>
+        <text x="456" y="488" fill="#5a6580" font-size="14" font-style="italic" font-family="'Instrument Serif', 'Noto Serif', serif">routes everything.</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

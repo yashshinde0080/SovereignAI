@@ -202,7 +202,8 @@ export interface CloudProvider {
 }
 
 export interface CloudModel {
-  /** "<provider_id>/<model_id>" e.g. "prov_abc123/gpt-4o" */
+  /** Provider-side model id (e.g. "gpt-4o"). Qualify as `${provider_id}/${id}`
+   *  before calling /v1/models/load or setting an agent's preferred model. */
   id: string;
   name: string;
   provider_id: string;

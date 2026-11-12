@@ -15,7 +15,7 @@ class VectorStoreConfig:
     metadata_db: str = "metadata.db"
     embedding_model: str = "all-MiniLM-L6-v2"
     embedding_dimension: int = 384
-    chunk_size: int = 512
+    chunk_size: int = 1200  # chars (~400 tokens). 512 made 5-chunk contexts ~850 tokens — too thin to synthesize answers from
     chunk_overlap: int = 64
     max_chunks_per_document: int = 10000
     nprobe: int = 10

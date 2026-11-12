@@ -120,7 +120,7 @@ export function PersonalizationSettings({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7 [&>div+div]:border-t [&>div+div]:border-border/60 [&>div+div]:pt-7">
       {/* Base Style and Tone */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">
@@ -131,13 +131,13 @@ export function PersonalizationSettings({
           impact capabilities.
         </p>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">Style</Label>
           <Select
             value={form.base_style_tone}
             onValueChange={(v) => update("base_style_tone", v)}
           >
-            <SelectTrigger className="w-[180px] bg-card border-input">
+            <SelectTrigger className="w-[180px] shrink-0 bg-card border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-input">
@@ -177,13 +177,13 @@ export function PersonalizationSettings({
           Response Format
         </h3>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">Headers & Lists</Label>
           <Select
             value={form.headers_lists_mode}
             onValueChange={(v) => update("headers_lists_mode", v)}
           >
-            <SelectTrigger className="w-[160px] bg-card border-input">
+            <SelectTrigger className="w-[160px] shrink-0 bg-card border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-input">
@@ -196,13 +196,13 @@ export function PersonalizationSettings({
           </Select>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <Label className="text-sm text-foreground">Response Length</Label>
           <Select
             value={form.response_length}
             onValueChange={(v) => update("response_length", v)}
           >
-            <SelectTrigger className="w-[160px] bg-card border-input">
+            <SelectTrigger className="w-[160px] shrink-0 bg-card border-input">
               <SelectValue />
             </SelectTrigger>
             <SelectContent className="bg-card border-input">
